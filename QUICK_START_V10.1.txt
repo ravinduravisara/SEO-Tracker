@@ -1,0 +1,29 @@
+Aviance SEO Pro Max v10.1 - Windows Quick Start
+
+1. Stop any old Aviance server
+   Ctrl+C
+
+2. Back up the old folder by renaming it, e.g.
+   aviance_pro -> aviance_pro_old
+
+3. Extract this ZIP into a NEW folder, for example
+   E:\e suppourt\aviance-tool-v101
+
+4. In PowerShell:
+   cd "E:\e suppourt\aviance-tool-v101"
+   .\run.ps1
+
+5. Open:
+   http://127.0.0.1:8000
+
+6. First test:
+   https://example.com/
+   Click Test Live Site, then Run Full A-Z Audit.
+
+7. Then test the real site.
+
+8. For JavaScript-heavy sites, install the optional browser renderer using:
+   .\INSTALL_RENDERER.ps1
+
+Do not type a path by itself. Use cd "PATH".
+Do not run global `python` if Windows does not recognize it; run.ps1 uses .venv\Scripts\python.exe.

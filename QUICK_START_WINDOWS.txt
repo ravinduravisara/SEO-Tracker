@@ -1,0 +1,20 @@
+AVIANCE SEO PRO MAX v9.1.0 — WINDOWS QUICK START
+
+1. Open PowerShell.
+2. Go to this folder:
+   cd "E:\e suppourt\aviance-tool-v910"
+3. Start:
+   .\run.ps1
+4. Open:
+   http://127.0.0.1:8000
+5. Enter any publicly reachable HTTP/HTTPS website URL.
+6. Test Live Site first.
+7. Run Full A-Z Audit.
+8. For JS-heavy sites use Auto crawl + JS fallback or Rendered browser audit.
+9. Optional: run .\INSTALL_RENDERER.ps1 if bundled Playwright Chromium is needed.
+10. Download reports from Report Center after the crawl finishes.
+
+Notes:
+- Respects robots.txt by default.
+- Does not bypass login, CAPTCHA, WAF challenges or other access controls.
+- Large sites are bounded by an internal 20,000-page safety ceiling, configurable with DEFAULT_MAX_PAGES.

@@ -1,0 +1,22 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: esupport-seo-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - APP_ENV=production
+      - HOST=0.0.0.0
+      - DATABASE_URL=sqlite:////app/data/seo_platform.db
+      - SECRET_KEY=${SECRET_KEY:-esupport-prod-secret-change-this-in-production}
+    volumes:
+      - app_data:/app/data
+      - app_uploads:/app/uploads
+
+volumes:
+  app_data:
+  app_uploads:

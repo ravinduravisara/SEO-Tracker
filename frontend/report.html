@@ -1,0 +1,2152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Official SEO Audit Report • eSupport SEO</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/assets/favicon-32x32.png?v=3">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/assets/favicon-16x16.png?v=3">
+    <link rel="shortcut icon" href="/favicon.ico?v=3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        :root {
+            --primary: #2563EB;
+            --primary-hover: #1D4ED8;
+            --primary-light: #EFF6FF;
+            --primary-glow: rgba(37, 99, 235, 0.35);
+            --cyan: #06B6D4;
+            --emerald: #10B981;
+            --emerald-glow: rgba(16, 185, 129, 0.3);
+            --amber: #F59E0B;
+            --rose: #EF4444;
+            --slate-900: #0F172A;
+            --slate-800: #1E293B;
+            --slate-700: #334155;
+            --slate-600: #475569;
+            --slate-400: #94A3B8;
+            --slate-200: #E2E8F0;
+            --card-bg: rgba(255, 255, 255, 0.94);
+            --card-border: rgba(226, 232, 240, 0.9);
+            --shadow-subtle: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+            --shadow-float: 0 20px 45px -12px rgba(15, 23, 42, 0.09), 0 0 0 1px rgba(226, 232, 240, 0.8);
+            --shadow-hover: 0 22px 50px -12px rgba(37, 99, 235, 0.16), 0 0 0 1px rgba(37, 99, 235, 0.25);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: 
+                radial-gradient(1200px 700px at 50% -120px, rgba(37, 99, 235, 0.12), transparent 70%),
+                radial-gradient(900px 600px at 92% 350px, rgba(6, 182, 212, 0.08), transparent 60%),
+                radial-gradient(900px 600px at 8% 850px, rgba(99, 102, 241, 0.07), transparent 60%),
+                #F8FAFC;
+            color: var(--slate-900);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Ambient subtle animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(24px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes heroGlowPulse {
+            0% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.65; }
+            50% { transform: translate(-50%, -50%) scale(1.08); opacity: 0.95; }
+            100% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.65; }
+        }
+
+        @keyframes pulseDot {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes pulseWhatsApp {
+            0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.55); }
+            70% { box-shadow: 0 0 0 18px rgba(37, 211, 102, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+        }
+
+        @keyframes shimmerLine {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .client-report-wrapper {
+            max-width: 1140px;
+            margin: 0 auto;
+            padding: 28px 24px 90px;
+        }
+
+        /* HEADER */
+        .public-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 24px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.05);
+            margin-bottom: 36px;
+            flex-wrap: wrap;
+            gap: 16px;
+            position: sticky;
+            top: 16px;
+            z-index: 100;
+            transition: all 0.3s ease;
+        }
+
+        .brand-badge {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .brand-icon-wrap {
+            position: relative;
+        }
+
+        .brand-title {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-weight: 800;
+            font-size: 21px;
+            color: var(--slate-900);
+            letter-spacing: -0.5px;
+            line-height: 1.15;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .brand-title-accent {
+            color: var(--primary);
+        }
+
+        .brand-subtitle {
+            font-size: 11.5px;
+            color: var(--slate-600);
+            font-weight: 500;
+        }
+
+        .live-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #ECFDF5;
+            color: #059669;
+            font-weight: 700;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid #A7F3D0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .live-pulse-dot {
+            width: 7px;
+            height: 7px;
+            background: #10B981;
+            border-radius: 50%;
+            animation: pulseDot 2s infinite ease-in-out;
+        }
+
+        .btn-header-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            padding: 9px 18px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 13px;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            cursor: pointer;
+        }
+
+        .btn-header-comprehensive {
+            background: var(--slate-900);
+            color: #FFFFFF;
+            border: 1px solid var(--slate-700);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+        }
+
+        .btn-header-comprehensive:hover {
+            background: #1E293B;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+        }
+
+        .btn-header-pdf {
+            background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+            color: #FFFFFF;
+            border: 1px solid #3B82F6;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.28);
+        }
+
+        .btn-header-pdf:hover {
+            background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 22px rgba(37, 99, 235, 0.38);
+        }
+
+        /* HERO SECTION */
+        .hero-section {
+            background: var(--card-bg);
+            backdrop-filter: blur(24px);
+            border: 1px solid var(--card-border);
+            border-radius: 28px;
+            padding: 52px 36px 44px;
+            text-align: center;
+            box-shadow: var(--shadow-float);
+            margin-bottom: 44px;
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        .hero-glow-aura {
+            position: absolute;
+            top: 52%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 420px;
+            height: 420px;
+            background: radial-gradient(circle, rgba(37, 99, 235, 0.14) 0%, rgba(6, 182, 212, 0.08) 45%, transparent 70%);
+            filter: blur(50px);
+            pointer-events: none;
+            z-index: 0;
+            animation: heroGlowPulse 5s ease-in-out infinite;
+        }
+
+        .hero-content-wrap {
+            position: relative;
+            z-index: 1;
+        }
+
+        .audit-authority-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11.5px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--primary);
+            background: #EFF6FF;
+            border: 1px solid #BFDBFE;
+            padding: 5px 16px;
+            border-radius: 999px;
+            margin-bottom: 18px;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+        }
+
+        .hero-meta h1 {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 32px;
+            font-weight: 800;
+            margin: 0 0 10px 0;
+            color: var(--slate-900);
+            letter-spacing: -0.8px;
+            word-break: break-all;
+        }
+
+        .hero-meta .meta-date {
+            color: var(--slate-600);
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* SCORE RING CONTAINER */
+        .score-hero-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 28px auto 26px;
+        }
+
+        .score-ring-wrap {
+            position: relative;
+            width: 236px;
+            height: 236px;
+            filter: drop-shadow(0 12px 30px rgba(37, 99, 235, 0.16));
+        }
+
+        .score-ring-svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+        }
+
+        .score-ring-bg {
+            fill: none;
+            stroke: #EEF2F6;
+            stroke-width: 10;
+        }
+
+        .score-ring-fill {
+            fill: none;
+            stroke-width: 10;
+            stroke-linecap: round;
+            stroke-dasharray: 282.74;
+            stroke-dashoffset: 282.74;
+            transition: stroke-dashoffset 1.8s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.6s ease;
+            filter: drop-shadow(0 0 14px rgba(37, 99, 235, 0.35));
+        }
+
+        .score-center-text {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .score-number {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 64px;
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -2px;
+            color: var(--slate-900);
+        }
+
+        .score-number small {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--slate-400);
+            letter-spacing: 0;
+        }
+
+        .score-subcaption {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--slate-400);
+            margin-top: 6px;
+        }
+
+        .score-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 22px;
+            border-radius: 999px;
+            font-weight: 800;
+            font-size: 15px;
+            margin-top: 18px;
+            letter-spacing: 0.2px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+            transition: all 0.3s ease;
+        }
+
+        .hero-message-box {
+            max-width: 680px;
+            margin: 0 auto;
+        }
+
+        .hero-headline {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--slate-900);
+            margin: 0 0 10px 0;
+            letter-spacing: -0.4px;
+        }
+
+        .hero-desc {
+            font-size: 15px;
+            color: var(--slate-600);
+            margin: 0;
+            line-height: 1.6;
+        }
+
+        /* HERO KPI STRIP (3 balanced cards, NO speculative score) */
+        .hero-kpi-strip {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            max-width: 680px;
+            margin: 28px auto 0;
+        }
+
+        .hero-kpi-card {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 14px;
+            padding: 14px 16px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .hero-kpi-card:hover {
+            background: #FFFFFF;
+            transform: translateY(-2px);
+            border-color: #CBD5E1;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.04);
+        }
+
+        .hero-kpi-val {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--slate-900);
+            line-height: 1.1;
+            margin-bottom: 3px;
+        }
+
+        .hero-kpi-lbl {
+            font-size: 11.5px;
+            color: var(--slate-600);
+            font-weight: 600;
+        }
+
+        /* SECTION HEADERS */
+        .section-header {
+            margin-bottom: 24px;
+        }
+
+        .section-header h2 {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 24px;
+            font-weight: 800;
+            margin: 0 0 6px 0;
+            color: var(--slate-900);
+            letter-spacing: -0.5px;
+        }
+
+        .section-header p {
+            font-size: 14px;
+            color: var(--slate-600);
+            margin: 0;
+        }
+
+        /* CATEGORY CARDS GRID */
+        .category-grid-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 48px;
+        }
+
+        .category-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            padding: 24px 18px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: var(--shadow-subtle);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        .category-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: transparent;
+            transition: background 0.3s ease;
+        }
+
+        .category-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-hover);
+            border-color: rgba(37, 99, 235, 0.35);
+        }
+
+        .category-card:hover::before {
+            background: linear-gradient(90deg, #2563EB, #06B6D4);
+        }
+
+        .cat-mini-ring {
+            position: relative;
+            width: 88px;
+            height: 88px;
+            margin-bottom: 14px;
+        }
+
+        .cat-mini-svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+        }
+
+        .cat-mini-bg {
+            fill: none;
+            stroke: #F1F5F9;
+            stroke-width: 8;
+        }
+
+        .cat-mini-fill {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+            stroke-dasharray: 219.9;
+            stroke-dashoffset: 219.9;
+            transition: stroke-dashoffset 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .cat-mini-text {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--slate-900);
+        }
+
+        .cat-card-name {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-weight: 800;
+            font-size: 16px;
+            color: var(--slate-900);
+            margin-bottom: 4px;
+            line-height: 1.25;
+        }
+
+        .cat-card-weight {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--slate-400);
+            margin-bottom: 8px;
+        }
+
+        .cat-card-status {
+            font-size: 11.5px;
+            font-weight: 700;
+            padding: 3px 12px;
+            border-radius: 999px;
+            margin-bottom: 10px;
+            display: inline-block;
+        }
+
+        .cat-card-checks {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #059669;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .cat-card-desc {
+            font-size: 12.5px;
+            color: var(--slate-600);
+            line-height: 1.45;
+            margin: 0;
+        }
+
+        /* SUMMARY METRICS GRID */
+        .summary-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 14px;
+            margin-bottom: 48px;
+        }
+
+        .metric-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 20px 14px;
+            text-align: center;
+            transition: all 0.25s ease;
+            box-shadow: var(--shadow-subtle);
+        }
+
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 24px -6px rgba(0,0,0,0.06);
+            border-color: #CBD5E1;
+        }
+
+        .metric-value {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 26px;
+            font-weight: 900;
+            color: var(--slate-900);
+            line-height: 1.1;
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--slate-600);
+            line-height: 1.3;
+        }
+
+        /* TOP ISSUES SECTION */
+        .issues-container {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+
+        .client-issue-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            padding: 26px;
+            box-shadow: var(--shadow-subtle);
+            transition: all 0.25s ease;
+        }
+
+        .client-issue-card:hover {
+            border-color: #CBD5E1;
+            box-shadow: 0 12px 28px -8px rgba(0,0,0,0.06);
+        }
+
+        .issue-card-top {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .issue-severity-pill {
+            font-size: 11px;
+            font-weight: 800;
+            padding: 4px 12px;
+            border-radius: 999px;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+        }
+
+        .issue-severity-pill.danger {
+            background: #FEE2E2;
+            color: #DC2626;
+            border: 1px solid #FECACA;
+        }
+
+        .issue-severity-pill.warning {
+            background: #FEF3C7;
+            color: #D97706;
+            border: 1px solid #FDE68A;
+        }
+
+        .issue-severity-pill.info {
+            background: #EFF6FF;
+            color: #2563EB;
+            border: 1px solid #DBEAFE;
+        }
+
+        .issue-card-title {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--slate-900);
+            margin: 0;
+            letter-spacing: -0.3px;
+        }
+
+        .issue-explanation {
+            font-size: 14.5px;
+            color: var(--slate-700);
+            margin: 0 0 16px 0;
+            line-height: 1.5;
+        }
+
+        .issue-details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 14px;
+            padding: 18px;
+            margin-bottom: 14px;
+            font-size: 13.5px;
+        }
+
+        .issue-sub-title {
+            font-weight: 800;
+            color: var(--slate-900);
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .issue-sub-text {
+            color: var(--slate-600);
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .tech-accordion-btn {
+            background: none;
+            border: none;
+            padding: 0;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--primary);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.2s;
+        }
+
+        .tech-accordion-btn:hover {
+            color: var(--primary-hover);
+            text-decoration: underline;
+        }
+
+        .tech-accordion-content {
+            display: none;
+            margin-top: 14px;
+            padding: 16px;
+            background: var(--slate-900);
+            color: #F8FAFC;
+            border-radius: 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .tech-accordion-content.open {
+            display: block;
+        }
+
+        /* QUICK WINS */
+        .quick-wins-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+
+        .quick-win-item {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-left: 4px solid var(--emerald);
+            border-radius: 14px;
+            padding: 18px 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            font-size: 14px;
+            color: var(--slate-800);
+            font-weight: 600;
+            box-shadow: var(--shadow-subtle);
+            transition: all 0.25s ease;
+        }
+
+        .quick-win-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 24px -6px rgba(16, 185, 129, 0.14);
+            border-color: #A7F3D0;
+        }
+
+        .win-check {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #ECFDF5;
+            color: var(--emerald);
+            display: grid;
+            place-items: center;
+            font-size: 13px;
+            font-weight: 900;
+            flex-shrink: 0;
+            border: 1px solid #A7F3D0;
+        }
+
+        /* 3-PHASE ROADMAP SECTION */
+        .roadmap-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 48px;
+        }
+
+        .roadmap-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 26px 22px;
+            box-shadow: var(--shadow-subtle);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .roadmap-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .roadmap-card.phase-1 { border-top: 4px solid #2563EB; }
+        .roadmap-card.phase-2 { border-top: 4px solid #0284C7; }
+        .roadmap-card.phase-3 { border-top: 4px solid #10B981; }
+
+        .phase-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            margin-bottom: 12px;
+        }
+
+        .roadmap-card.phase-1 .phase-badge { background: #EFF6FF; color: #2563EB; }
+        .roadmap-card.phase-2 .phase-badge { background: #E0F2FE; color: #0284C7; }
+        .roadmap-card.phase-3 .phase-badge { background: #ECFDF5; color: #10B981; }
+
+        .phase-title {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--slate-900);
+            margin: 0 0 14px 0;
+        }
+
+        .phase-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 13px;
+            color: var(--slate-600);
+            line-height: 1.6;
+        }
+
+        .phase-list li {
+            position: relative;
+            padding-left: 18px;
+            margin-bottom: 8px;
+        }
+
+        .phase-list li::before {
+            content: '•';
+            position: absolute;
+            left: 4px;
+            color: var(--primary);
+            font-weight: 900;
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        /* INTEGRATIONS & TRUST */
+        .integrations-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+
+        .integration-item {
+            background: var(--card-bg);
+            border: 1px dashed #CBD5E1;
+            border-radius: 14px;
+            padding: 18px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .integration-item:hover {
+            border-color: var(--primary);
+            background: #FFFFFF;
+        }
+
+        .integration-name {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: var(--slate-900);
+            margin-bottom: 4px;
+        }
+
+        .integration-status {
+            font-size: 12px;
+            color: var(--slate-600);
+            font-weight: 600;
+        }
+
+        .methodology-box {
+            background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+            border: 1px solid #DBEAFE;
+            border-radius: 18px;
+            padding: 24px 28px;
+            margin-bottom: 48px;
+            font-size: 13.5px;
+            color: var(--slate-700);
+            line-height: 1.6;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .methodology-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: #DBEAFE;
+            color: var(--primary);
+            display: grid;
+            place-items: center;
+            flex-shrink: 0;
+        }
+
+        /* CTA BANNER */
+        .cta-banner {
+            background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #1E3A8A 100%);
+            border-radius: 28px;
+            padding: 56px 40px;
+            color: white;
+            text-align: center;
+            box-shadow: 0 20px 50px -10px rgba(15, 23, 42, 0.35);
+            margin-bottom: 48px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .cta-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 500px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(37, 99, 235, 0.35), transparent 70%);
+            pointer-events: none;
+        }
+
+        .cta-banner-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .cta-banner h2 {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 32px;
+            font-weight: 800;
+            margin: 0 0 12px 0;
+            letter-spacing: -0.5px;
+        }
+
+        .cta-banner p {
+            font-size: 16px;
+            color: #CBD5E1;
+            max-width: 620px;
+            margin: 0 auto 34px;
+            line-height: 1.6;
+        }
+
+        .cta-buttons-wrap {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn-cta-whatsapp {
+            background: #25D366;
+            color: white;
+            font-weight: 800;
+            font-size: 16px;
+            padding: 16px 32px;
+            border-radius: 14px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 8px 24px rgba(37, 211, 102, 0.35);
+            transition: all 0.25s ease;
+            animation: pulseWhatsApp 2.5s infinite;
+        }
+
+        .btn-cta-whatsapp:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 12px 30px rgba(37, 211, 102, 0.5);
+            filter: brightness(1.04);
+        }
+
+        .btn-cta-email {
+            background: rgba(255, 255, 255, 0.12);
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+            padding: 16px 32px;
+            border-radius: 14px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(10px);
+            transition: all 0.25s ease;
+        }
+
+        .btn-cta-email:hover {
+            background: rgba(255, 255, 255, 0.22);
+            transform: translateY(-3px);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        /* FLOATING WHATSAPP TRIGGER */
+        .floating-wa-btn {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #25D366;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+            font-size: 14px;
+            text-decoration: none;
+            box-shadow: 0 8px 25px rgba(37, 211, 102, 0.4);
+            z-index: 999;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: pulseWhatsApp 3s infinite;
+        }
+
+        .floating-wa-btn:hover {
+            transform: translateY(-4px) scale(1.03);
+            box-shadow: 0 12px 30px rgba(37, 211, 102, 0.55);
+        }
+
+        /* FOOTER & SOCIAL PRESENCE */
+        .public-footer {
+            text-align: center;
+            padding-top: 40px;
+            padding-bottom: 30px;
+            border-top: 1px solid #E2E8F0;
+            color: var(--slate-600);
+            font-size: 13px;
+        }
+
+        .footer-social-wrap {
+            margin: 22px auto 20px;
+            padding: 20px 24px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(226, 232, 240, 0.85);
+            border-radius: 20px;
+            backdrop-filter: blur(12px);
+            display: block;
+            max-width: 920px;
+            width: 100%;
+            box-sizing: border-box;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+        }
+
+        .footer-social-title {
+            font-size: 11.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--slate-600);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .footer-social-grid {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .social-pill-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 999px;
+            color: #334155;
+            text-decoration: none;
+            font-size: 12.5px;
+            font-weight: 600;
+            transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+        }
+
+        .social-pill-btn svg {
+            flex-shrink: 0;
+            transition: transform 0.22s ease;
+        }
+
+        .social-pill-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+        }
+
+        .social-pill-btn:hover svg {
+            transform: scale(1.1);
+        }
+
+        .social-pill-btn.pill-web:hover {
+            color: #2563EB;
+            border-color: #93C5FD;
+            background: #EFF6FF;
+        }
+
+        .social-pill-btn.pill-linkedin:hover {
+            color: #0A66C2;
+            border-color: #93C5FD;
+            background: #EFF6FF;
+        }
+
+        .social-pill-btn.pill-facebook:hover {
+            color: #1877F2;
+            border-color: #BFDBFE;
+            background: #EFF6FF;
+        }
+
+        .social-pill-btn.pill-instagram:hover {
+            color: #E4405F;
+            border-color: #FECDD3;
+            background: #FFF1F2;
+        }
+
+        .social-pill-btn.pill-youtube:hover {
+            color: #EF4444;
+            border-color: #FECACA;
+            background: #FEF2F2;
+        }
+
+        .social-pill-btn.pill-x:hover {
+            color: #0F172A;
+            border-color: #CBD5E1;
+            background: #F1F5F9;
+        }
+
+        .social-pill-btn.pill-behance:hover {
+            color: #0057FF;
+            border-color: #93C5FD;
+            background: #EFF6FF;
+        }
+
+        .footer-contacts {
+            display: flex;
+            justify-content: center;
+            gap: 28px;
+            margin: 14px 0 16px;
+            flex-wrap: wrap;
+        }
+
+        .footer-contacts a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .footer-contacts a:hover {
+            text-decoration: underline;
+        }
+
+        /* STATE SCREENS */
+        .state-screen {
+            max-width: 520px;
+            margin: 120px auto;
+            text-align: center;
+            background: white;
+            padding: 52px 36px;
+            border-radius: 24px;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.06);
+            animation: fadeInUp 0.5s ease both;
+        }
+
+        .state-screen h2 {
+            font-family: 'Outfit', 'Inter', sans-serif;
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--slate-900);
+            margin: 0 0 10px 0;
+        }
+
+        .state-screen p {
+            color: var(--slate-600);
+            font-size: 15px;
+            margin: 0 0 24px 0;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 1024px) {
+            .category-grid-container {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            .summary-metrics-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            .roadmap-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .client-report-wrapper {
+                padding: 16px 14px 60px;
+            }
+            .hero-section {
+                padding: 36px 18px 30px;
+            }
+            .hero-meta h1 {
+                font-size: 24px;
+            }
+            .category-grid-container {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 14px;
+            }
+            .summary-metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .hero-kpi-strip {
+                grid-template-columns: 1fr;
+            }
+            .integrations-bar {
+                grid-template-columns: 1fr;
+            }
+            .issue-details-grid {
+                grid-template-columns: 1fr;
+            }
+            .floating-wa-btn span.floating-wa-text {
+                display: none;
+            }
+            .floating-wa-btn {
+                padding: 14px;
+                border-radius: 50%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .category-grid-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- LOADING SCREEN -->
+<div id="loadingView" class="state-screen">
+    <div style="width:54px; height:54px; border:4px solid #E2E8F0; border-top-color:#2563EB; border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 20px;"></div>
+    <h2>Loading SEO Audit Report</h2>
+    <p>Retrieving verified crawl analytics &amp; search health metrics...</p>
+</div>
+
+<!-- DISABLED SCREEN -->
+<div id="disabledView" class="state-screen" style="display:none;">
+    <div style="width:58px; height:58px; background:#FEF2F2; color:#EF4444; border-radius:50%; display:grid; place-items:center; font-size:26px; font-weight:800; margin:0 auto 18px; border:1px solid #FECACA;">!</div>
+    <h2>Report Unavailable</h2>
+    <p id="disabledReasonText">This SEO report is no longer available.</p>
+</div>
+
+<!-- MAIN REPORT WRAPPER -->
+<div id="reportContainer" class="client-report-wrapper" style="display:none;">
+    <!-- HEADER -->
+    <header class="public-header">
+        <div class="brand-badge">
+            <div class="brand-icon-wrap">
+                <img src="/static/assets/esupport-logo.png" alt="eSupport Logo" style="height:44px; width:auto; object-fit:contain; border-radius:8px;">
+            </div>
+            <div>
+                <div class="brand-title">
+                    <span>eSupport</span> <span class="brand-title-accent">SEO</span>
+                    <span class="live-status-pill"><span class="live-pulse-dot"></span> Live Verified</span>
+                </div>
+                <div class="brand-subtitle">Professional Organic Search Audit &bull; High-Impact Remediation</div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <a id="btnViewComprehensive" href="#" target="_blank" class="btn-header-action btn-header-comprehensive">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                <span>30-Section Full Audit Report</span>
+            </a>
+            <a id="btnDownloadClientPdf" href="#" class="btn-header-action btn-header-pdf">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Download PDF Report</span>
+            </a>
+        </div>
+    </header>
+
+    <!-- HERO SECTION -->
+    <section class="hero-section">
+        <div class="hero-glow-aura"></div>
+        <div class="hero-content-wrap">
+            <div class="audit-authority-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 11 12 14 22 4"/></svg>
+                <span>Verified Technical Audit &bull; 2026 Engine Standards</span>
+            </div>
+
+            <div class="hero-meta">
+                <h1 id="heroTargetUrl">https://example.com</h1>
+                <div class="meta-date">
+                    <span>Audit Completed: <b id="heroAuditDate">-</b></span>
+                    <span id="heroClientCompany" style="display:none;">&bull; Prepared for <b id="heroCompanyName">-</b></span>
+                </div>
+            </div>
+
+            <!-- MAIN SCORE GAUGE -->
+            <div class="score-hero-container">
+                <div class="score-ring-wrap">
+                    <svg class="score-ring-svg" viewBox="0 0 100 100">
+                        <circle class="score-ring-bg" cx="50" cy="50" r="45"></circle>
+                        <circle id="mainScoreRing" class="score-ring-fill" cx="50" cy="50" r="45"></circle>
+                    </svg>
+                    <div class="score-center-text">
+                        <div class="score-number"><span id="mainScoreNum">0</span><small> / 100</small></div>
+                        <div class="score-subcaption">Overall SEO Score</div>
+                    </div>
+                </div>
+
+                <div id="mainScoreBadge" class="score-status-badge">Evaluating Health...</div>
+            </div>
+
+            <div class="hero-message-box">
+                <div id="heroHeadline" class="hero-headline">Evaluating SEO Performance...</div>
+                <p id="heroDescription" class="hero-desc">Analyzing verified crawl signals across technical structure, on-page optimization, content quality, and organic discovery.</p>
+            </div>
+
+            <!-- HERO KPI STRIP (Honest, factual 3 cards) -->
+            <div class="hero-kpi-strip">
+                <div class="hero-kpi-card">
+                    <div class="hero-kpi-val" id="kpiPagesAudited">1</div>
+                    <div class="hero-kpi-lbl">Pages Audited</div>
+                </div>
+                <div class="hero-kpi-card">
+                    <div class="hero-kpi-val" style="color:#EF4444;" id="kpiCritIssues">0</div>
+                    <div class="hero-kpi-lbl">Critical Blockers</div>
+                </div>
+                <div class="hero-kpi-card">
+                    <div class="hero-kpi-val" style="color:#F59E0B;" id="kpiWarnings">0</div>
+                    <div class="hero-kpi-lbl">Improvement Notices</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 12 CORE SEO CATEGORIES -->
+    <section>
+        <div class="section-header">
+            <h2>Core Organic Search Health Pillars</h2>
+            <p>Weighted 12-pillar organic search audit. Every metric reflects live crawl observations and verified algorithmic factors.</p>
+        </div>
+        <div id="integrityBox" style="font-size:12.5px; color:#475569; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:12px; padding:12px 18px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.02);"></div>
+        <div id="categoriesGrid" class="category-grid-container">
+            <!-- Dynamically populated with circular gauges -->
+        </div>
+        <div id="potentialBox" style="margin-top:18px;"></div>
+    </section>
+
+    <!-- SUMMARY METRICS -->
+    <section>
+        <div class="section-header">
+            <h2>Audit Summary Metrics</h2>
+            <p>Verified crawl observations across indexation depth and technical health.</p>
+        </div>
+        <div id="summaryMetricsGrid" class="summary-metrics-grid">
+            <!-- Dynamically populated -->
+        </div>
+    </section>
+
+    <!-- TOP SEO PROBLEMS -->
+    <section>
+        <div class="section-header">
+            <h2>Top Priority Action Items</h2>
+            <p>The highest-impact SEO issues discovered during the audit, prioritized by business and ranking consequence.</p>
+        </div>
+        <div id="issuesList" class="issues-container">
+            <!-- Dynamically populated -->
+        </div>
+    </section>
+
+    <!-- HIGH-VALUE QUICK WINS -->
+    <section id="quickWinsSection">
+        <div class="section-header">
+            <h2>High-Value Quick Wins (Fastest ROI)</h2>
+            <p>Targeted adjustments that deliver rapid search gains with minimal deployment overhead.</p>
+        </div>
+        <div id="quickWinsList" class="quick-wins-grid">
+            <!-- Dynamically populated -->
+        </div>
+    </section>
+
+    <!-- STRATEGIC OPTIMIZATION ROADMAP -->
+    <section style="margin-bottom: 48px;">
+        <div class="section-header">
+            <div style="display:inline-flex; align-items:center; gap:8px; font-size:11px; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:#2563EB; background:#EFF6FF; border:1px solid #DBEAFE; padding:4px 12px; border-radius:999px; margin-bottom:8px;">
+                STRATEGIC EXECUTION
+            </div>
+            <h2>3-Phase SEO Optimization Roadmap</h2>
+            <p>A proven, systematic execution framework designed to maximize organic visibility and long-term search dominance.</p>
+        </div>
+        <div class="roadmap-grid">
+            <div class="roadmap-card phase-1">
+                <div class="phase-badge">Phase 1 &bull; Foundation</div>
+                <h3 class="phase-title">Crawlability &amp; Structure</h3>
+                <ul class="phase-list">
+                    <li>Fix broken links (404 errors) &amp; crawl blockers</li>
+                    <li>Configure XML Sitemap &amp; Robots.txt directives</li>
+                    <li>Resolve missing or duplicate H1 headings</li>
+                    <li>Validate SSL encryption &amp; canonical declarations</li>
+                </ul>
+            </div>
+            <div class="roadmap-card phase-2">
+                <div class="phase-badge">Phase 2 &bull; Optimization</div>
+                <h3 class="phase-title">Content &amp; Experience</h3>
+                <ul class="phase-list">
+                    <li>Optimize meta titles (&le;60) &amp; descriptions (&le;155)</li>
+                    <li>Implement Schema.org JSON-LD Structured Data</li>
+                    <li>Compress heavy imagery &amp; modern WebP conversion</li>
+                    <li>Mobile viewport rendering &amp; responsive UX</li>
+                </ul>
+            </div>
+            <div class="roadmap-card phase-3">
+                <div class="phase-badge">Phase 3 &bull; Growth</div>
+                <h3 class="phase-title">Authority &amp; Conversions</h3>
+                <ul class="phase-list">
+                    <li>Refine internal link flow &amp; anchor hierarchy</li>
+                    <li>Expand target commercial keyword coverage</li>
+                    <li>Core Web Vitals speed &amp; render stability tuning</li>
+                    <li>Conversion funnel &amp; WhatsApp lead flow capture</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- UNMEASURED SECTION -->
+    <section id="unmeasuredSection" style="display:none; margin-bottom:48px;">
+        <div class="section-header">
+            <h2>Data That Could Not Be Verified</h2>
+            <p>These checks were not counted for or against your site. Each requires the named tool or API integration.</p>
+        </div>
+        <div id="unmeasuredList"></div>
+    </section>
+
+    <!-- REAL MEASURED DATA -->
+    <section id="realDataSection" style="display:none; margin-bottom:48px;">
+        <div class="section-header">
+            <h2>Real Measured API Data</h2>
+            <p>Direct API metrics returned from Google Search Console, Lighthouse, and DataForSEO.</p>
+        </div>
+        <div id="realDataContent"></div>
+    </section>
+
+    <!-- INTEGRATIONS TRANSPARENCY -->
+    <section>
+        <div class="section-header">
+            <h2>External Integrations &amp; Telemetry</h2>
+            <p>Verification boundaries. External platforms are only reported when verified.</p>
+        </div>
+        <div class="integrations-bar" id="integrationsBar">
+            <div class="integration-item">
+                <div class="integration-name">Google Search Console</div>
+                <div class="integration-status">Not connected</div>
+            </div>
+            <div class="integration-item">
+                <div class="integration-name">Google Analytics 4</div>
+                <div class="integration-status">Not connected</div>
+            </div>
+            <div class="integration-item">
+                <div class="integration-name">Backlink Index</div>
+                <div class="integration-status">Not configured</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- METHODOLOGY BOX -->
+    <div class="methodology-box">
+        <div class="methodology-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div>
+            <b style="color:var(--slate-900); font-size:14.5px; display:block; margin-bottom:4px;">Audit Methodology &amp; Data Integrity</b>
+            <span id="methodologyText">This audit was compiled via real-time HTTP crawler validation, direct DOM analysis, and Google Webmaster technical standards. Scores reflect strictly verifiable parameters without artificial inflation. Systematic execution of the recommendations identified herein unblocks maximum search visibility.</span>
+        </div>
+    </div>
+
+    <!-- HIGH-IMPACT CTA BANNER -->
+    <section class="cta-banner">
+        <div class="cta-banner-content">
+            <h2 id="ctaHeadline">Ready to Elevate Your Google Rankings &amp; Leads?</h2>
+            <p id="ctaDescription">Our certified SEO specialists handle the complete technical implementation, on-page optimization, and organic growth roadmap for your website.</p>
+            <div class="cta-buttons-wrap">
+                <a id="ctaWhatsAppBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn-cta-whatsapp">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.06-2.184-.555-1.801-.745-2.951-2.593-3.041-2.712-.089-.12-1.07-1.425-1.07-2.718 0-1.292.673-1.928.913-2.189.24-.26.523-.326.697-.326.174 0 .348.002.501.01.163.008.381-.061.596.455.22.529.749 1.83.815 1.963.065.134.109.293.022.467-.087.174-.131.282-.262.434-.131.152-.275.339-.393.456-.131.13-.267.272-.115.533.152.261.676 1.113 1.451 1.803 1 .892 1.843 1.168 2.104 1.299.261.13.414.109.567-.066.153-.174.654-.761.828-1.022.174-.261.348-.218.588-.13.24.087 1.524.718 1.785.849.261.13.435.196.499.305.066.109.066.63-.078 1.035z"/>
+                    </svg>
+                    <span id="ctaWhatsAppText">Discuss On WhatsApp (+94 71 069 0715)</span>
+                </a>
+                <a id="ctaEmailBtn" href="#" class="btn-cta-email">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect width="20" height="16" x="2" y="4" rx="2"></rect>
+                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+                    </svg>
+                    <span id="ctaEmailText">Request Strategy Consultation</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="public-footer">
+        <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:8px;">
+            <img src="/static/assets/esupport-logo.png" alt="eSupport Logo" style="height:28px; width:auto; object-fit:contain; border-radius:6px;">
+            <span><b>eSupport SEO</b> &bull; https://esupport.live &bull; Technical Search Excellence</span>
+        </div>
+        <div class="footer-contacts">
+            <span>Direct WhatsApp: <a href="https://wa.me/94710690715" target="_blank">+94 71 069 0715</a></span>
+            <span>Direct Email: <a href="mailto:prasad@esupport.live">prasad@esupport.live</a></span>
+            <span>Official Web: <a href="https://esupport.live/" target="_blank">https://esupport.live/</a></span>
+        </div>
+
+        <!-- Sleek Official Channels & Social Bar -->
+        <div class="footer-social-wrap">
+            <div class="footer-social-title">
+                <span>Official Channels &amp; Creative Portfolio</span>
+            </div>
+            <div class="footer-social-grid">
+                <a href="https://esupport.live/" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-web" title="eSupport Technologies Official Website">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    <span>Website</span>
+                </a>
+                <a href="https://www.linkedin.com/company/esupport-technologies-pvt-ltd/" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-linkedin" title="Follow eSupport on LinkedIn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                    <span>LinkedIn</span>
+                </a>
+                <a href="https://web.facebook.com/esupporttechnolgies" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-facebook" title="Follow eSupport on Facebook">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/></svg>
+                    <span>Facebook</span>
+                </a>
+                <a href="https://www.instagram.com/esupportlive/" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-instagram" title="Follow eSupport on Instagram">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                    <span>Instagram</span>
+                </a>
+                <a href="https://www.youtube.com/channel/UC7NiNE9QFIus9RxR7vdpJtw" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-youtube" title="Subscribe to eSupport on YouTube">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    <span>YouTube</span>
+                </a>
+                <a href="https://twitter.com/eSupportlive00" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-x" title="Follow eSupport on Twitter / X">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                    <span>Twitter (X)</span>
+                </a>
+                <a href="https://www.behance.net/esupportlive" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-behance" title="View eSupport on Behance">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22 7h-7v-2h7v2zm1.726 10c-.442 1.297-2.029 3-4.726 3-3.158 0-5.5-2.28-5.5-5.5 0-3.242 2.378-5.5 5.5-5.5 3.267 0 5.234 2.392 5.045 5.75h-7.854c.123 1.579 1.341 2.5 2.809 2.5 1.189 0 2.05-.551 2.457-1.25h2.269zm-7.535-4.25h5.17c-.128-1.378-1.127-2-2.528-2-1.47 0-2.457.735-2.642 2zm-8.691-3.75h-3.5v-3h3.5c1.104 0 2 .896 2 2s-.896 1-2 1zm0 5h-3.5v-3h3.5c1.104 0 2 .896 2 2s-.896 1-2 1zm.637-8h-6.137v14h6.137c2.485 0 4.5-2.015 4.5-4.5 0-1.488-.724-2.808-1.837-3.626 1.113-.818 1.837-2.138 1.837-3.374 0-2.485-2.015-2.5-4.5-2.5z"/></svg>
+                    <span>Behance</span>
+                </a>
+            </div>
+        </div>
+
+        <div style="font-size:12px; color:#94A3B8;">&copy; 2026 eSupport Technologies (Pvt) Ltd. All rights reserved. SEO health assessments are based on verifiable crawl signals and Google Webmaster technical standards.</div>
+    </footer>
+</div>
+
+<!-- FLOATING WHATSAPP BUTTON (1-Click Consultation) -->
+<a id="floatingWhatsAppBtn" href="https://wa.me/94710690715" target="_blank" rel="noopener noreferrer" class="floating-wa-btn">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.06-2.184-.555-1.801-.745-2.951-2.593-3.041-2.712-.089-.12-1.07-1.425-1.07-2.718 0-1.292.673-1.928.913-2.189.24-.26.523-.326.697-.326.174 0 .348.002.501.01.163.008.381-.061.596.455.22.529.749 1.83.815 1.963.065.134.109.293.022.467-.087.174-.131.282-.262.434-.131.152-.275.339-.393.456-.131.13-.267.272-.115.533.152.261.676 1.113 1.451 1.803 1 .892 1.843 1.168 2.104 1.299.261.13.414.109.567-.066.153-.174.654-.761.828-1.022.174-.261.348-.218.588-.13.24.087 1.524.718 1.785.849.261.13.435.196.499.305.066.109.066.63-.078 1.035z"/>
+    </svg>
+    <span class="floating-wa-text">Chat with SEO Expert</span>
+</a>
+
+<script>
+(function() {
+    const CIRCUMFERENCE = 282.74; // 2 * PI * 45
+    const MINI_CIRCUMFERENCE = 219.91; // 2 * PI * 35
+
+    function esc(s) {
+        return String(s ?? "").replace(/[&<>"']/g, m => ({
+            "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+        }[m]));
+    }
+
+    function fmt(n) {
+        return Number(n || 0).toLocaleString();
+    }
+
+    // Number Count-Up Animation
+    function animateValue(el, start, end, duration) {
+        if (!el) return;
+        let startTimestamp = null;
+        const step = (timestamp) => {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            const current = Math.floor(easeOut * (end - start) + start);
+            el.textContent = current;
+            if (progress < 1) {
+                window.requestAnimationFrame(step);
+            } else {
+                el.textContent = end;
+            }
+        };
+        window.requestAnimationFrame(step);
+    }
+
+    function getToken() {
+        const path = window.location.pathname;
+        const match = path.match(/\/report\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) return match[1];
+        return new URLSearchParams(window.location.search).get("token");
+    }
+
+    const isPreview = new URLSearchParams(window.location.search).get("preview") === "1";
+
+    async function loadReport() {
+        const token = getToken();
+        if (!token) {
+            showDisabled("No report token was specified in the link.");
+            return;
+        }
+
+        const viewFullBtn = document.getElementById("btnViewComprehensive");
+        if (viewFullBtn) {
+            viewFullBtn.href = `/api/reports/public/${token}/comprehensive`;
+        }
+
+        const pdfBtn = document.getElementById("btnDownloadClientPdf");
+        if (pdfBtn) {
+            pdfBtn.href = `/api/reports/public/${token}/pdf`;
+        }
+
+        const endpoint = isPreview ? `/api/reports/preview/${token}` : `/api/public/reports/${token}`;
+
+        try {
+            let resp = await fetch(endpoint);
+            if (!resp.ok && resp.status === 404 && !isPreview) {
+                resp = await fetch(`/api/reports/public/${token}`);
+            }
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                if (resp.status === 410) {
+                    showDisabled("This SEO report is no longer available.");
+                } else if (resp.status === 403) {
+                    showDisabled("This SEO report is currently in draft and has not been published.");
+                } else {
+                    showDisabled(data.detail || "This SEO report is not available.");
+                }
+                return;
+            }
+
+            const snapshot = data.data || {};
+            renderReport(snapshot);
+        } catch (err) {
+            showDisabled("Something went wrong while loading the SEO audit report.");
+        }
+    }
+
+    function showDisabled(msg) {
+        document.getElementById("loadingView").style.display = "none";
+        document.getElementById("reportContainer").style.display = "none";
+        const dis = document.getElementById("disabledView");
+        dis.style.display = "block";
+        document.getElementById("disabledReasonText").textContent = msg;
+    }
+
+    function renderReport(data) {
+        document.getElementById("loadingView").style.display = "none";
+        document.getElementById("disabledView").style.display = "none";
+        document.getElementById("reportContainer").style.display = "block";
+
+        const target = data.target_url || "https://example.com";
+        const scored = data.score !== null && data.score !== undefined;
+        const score = scored ? Math.round(Number(data.score)) : 0;
+        const statusInfo = data.score_status || {};
+        
+        let auditedDate = "Recently Audited";
+        if (data.audited_at) {
+            try {
+                const d = new Date(data.audited_at);
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = d.toLocaleDateString("en-US", { month: 'long' });
+                const year = d.getFullYear();
+                auditedDate = `${day} ${month} ${year}`;
+            } catch (e) {
+                auditedDate = "Recently Audited";
+            }
+        }
+
+        // Hero Info
+        document.getElementById("heroTargetUrl").textContent = target;
+        document.getElementById("heroAuditDate").textContent = auditedDate;
+        if (data.company || data.client_name) {
+            document.getElementById("heroClientCompany").style.display = "inline";
+            document.getElementById("heroCompanyName").textContent = data.company || data.client_name;
+        }
+
+        // Main Score Ring with Animation & Glowing Gradient
+        const scoreRing = document.getElementById("mainScoreRing");
+        let strokeColor = "#2563EB";
+        if (score >= 85) strokeColor = "#10B981";
+        else if (score >= 70) strokeColor = "#0284C7";
+        else if (score >= 50) strokeColor = "#F59E0B";
+        else strokeColor = "#EF4444";
+
+        scoreRing.style.stroke = strokeColor;
+        const offset = CIRCUMFERENCE - (CIRCUMFERENCE * (score / 100));
+        setTimeout(() => {
+            scoreRing.style.strokeDashoffset = String(offset);
+        }, 120);
+
+        const scoreNumEl = document.getElementById("mainScoreNum");
+        if (scored) {
+            animateValue(scoreNumEl, 0, score, 1500);
+        } else {
+            scoreNumEl.textContent = "–";
+        }
+
+        // Status badge
+        const badge = document.getElementById("mainScoreBadge");
+        const statusLabel = statusInfo.status || (score >= 85 ? "EXCELLENT SEO HEALTH" : score >= 70 ? "GOOD SEO FOUNDATION" : score >= 50 ? "NEEDS IMPROVEMENT" : "CRITICAL ACTION REQUIRED");
+        badge.innerHTML = `<span style="width:8px; height:8px; border-radius:50%; background:${strokeColor}; display:inline-block; animation:pulseDot 2s infinite;"></span> ${statusLabel}`;
+        badge.style.color = strokeColor;
+        badge.style.backgroundColor = strokeColor + "15";
+        badge.style.border = `1px solid ${strokeColor}40`;
+
+        document.getElementById("heroHeadline").textContent = statusInfo.headline || (score >= 70 ? "Solid Baseline with Clear Growth Opportunities" : "Urgent Remediation Recommended for Organic Visibility");
+        document.getElementById("heroDescription").textContent = statusInfo.description || "Comprehensive multi-factor audit evaluating server crawlability, on-page search signals, content depth, and conversion flow.";
+
+        // Populate Hero KPI Strip
+        const summ = data.summary || {};
+        const kpiPages = document.getElementById("kpiPagesAudited");
+        if (kpiPages) kpiPages.textContent = fmt(summ.total_pages_crawled || data.page_count || 1);
+        const kpiCrit = document.getElementById("kpiCritIssues");
+        if (kpiCrit) kpiCrit.textContent = fmt(summ.critical_issues || 0);
+        const kpiWarn = document.getElementById("kpiWarnings");
+        if (kpiWarn) kpiWarn.textContent = fmt(summ.warnings || 0);
+
+        // Render Categories
+        renderCategories(data.categories || []);
+
+        // Summary Metrics
+        renderSummary(summ);
+
+        // Top Issues
+        renderIssues(data.top_issues || []);
+
+        // Quick Wins
+        renderQuickWins(data.quick_wins || []);
+
+        // Real Data & Integrations
+        renderRealData(data.real_data || {});
+        renderIntegrations(data.integrations || {});
+        renderEngineExtras(data);
+
+        // Methodology
+        if (data.methodology) {
+            document.getElementById("methodologyText").textContent = data.methodology;
+        }
+
+        // CTA
+        const cta = data.cta || {};
+        document.getElementById("ctaHeadline").textContent = cta.headline || statusInfo.cta_headline || "Ready to Boost Your Organic Rankings & Leads?";
+        document.getElementById("ctaDescription").textContent = cta.description || statusInfo.cta_description || "Our certified SEO specialists handle full technical implementation, on-page optimization, and high-converting keyword growth.";
+
+        const waText = cta.whatsapp_button_text || "Discuss On WhatsApp (+94 71 069 0715)";
+        const emailText = cta.email_button_text || "Request Strategy Consultation";
+        const waTextEl = document.getElementById("ctaWhatsAppText");
+        if (waTextEl) waTextEl.textContent = waText;
+        const emailTextEl = document.getElementById("ctaEmailText");
+        if (emailTextEl) emailTextEl.textContent = emailText;
+
+        const waBtn = document.getElementById("ctaWhatsAppBtn");
+        const floatingWa = document.getElementById("floatingWhatsAppBtn");
+        const defaultMsg = `Hello eSupport,\n\nI reviewed my official website SEO report.\n\nWebsite: ${target}\nCurrent SEO Score: ${score}/100\n\nI would like to discuss implementing your optimization recommendations to increase my search traffic.\n\nThank you.`;
+        const waUrl = cta.whatsapp_url || `https://wa.me/94710690715?text=${encodeURIComponent(defaultMsg)}`;
+        if (waBtn) waBtn.href = waUrl;
+        if (floatingWa) floatingWa.href = waUrl;
+
+        const emailBtn = document.getElementById("ctaEmailBtn");
+        if (cta.email_url) {
+            emailBtn.href = cta.email_url;
+        } else {
+            const subject = `SEO Optimization Consultation - ${target}`;
+            const body = `Hello eSupport Team,\n\nI reviewed my website SEO report for ${target} (Score: ${score}/100).\n\nPlease let me know your availability for a strategy consultation on implementing the prioritized roadmap.\n\nThank you.`;
+            emailBtn.href = `mailto:prasad@esupport.live?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        }
+    }
+
+    function getCatColor(score) {
+        if (score === null || score === undefined) return "#94A3B8";
+        if (score >= 85) return "#10B981";
+        if (score >= 70) return "#0284C7";
+        if (score >= 50) return "#F59E0B";
+        return "#EF4444";
+    }
+
+    const CHECK_ICONS = { 
+        pass: ["✓", "#10B981"], 
+        warn: ["◐", "#F59E0B"], 
+        partial: ["◐", "#F59E0B"], 
+        fail: ["✗", "#EF4444"],
+        unmeasured: ["–", "#94A3B8"], 
+        not_measured: ["–", "#94A3B8"], 
+        not_applicable: ["n/a", "#94A3B8"] 
+    };
+
+    function renderChecks(checks) {
+        const list = (checks || []).filter(c => c.status !== "not_applicable");
+        if (!list.length) return "";
+        return `
+            <details style="text-align:left; margin-top:12px; font-size:12px; width:100%; border-top:1px solid #F1F5F9; padding-top:8px;">
+                <summary style="cursor:pointer; color:#2563EB; font-weight:700;">View verified checks (${list.length})</summary>
+                <ul style="list-style:none; padding:0; margin:10px 0 0;">
+                    ${list.map(c => {
+                        const [icon, color] = CHECK_ICONS[c.status] || CHECK_ICONS.not_measured;
+                        return `<li style="margin-bottom:8px; line-height:1.45;">
+                            <span style="color:${color}; font-weight:800;">${icon}</span> <b>${esc(c.label)}</b>${c.display_as ? ` <i style="color:#94A3B8;">(${esc(c.display_as)})</i>` : ""}<br>
+                            <span style="color:#64748B; font-size:11.5px;">${c.evidence_label ? `<b>${esc(c.evidence_label)}:</b> ` : ""}${esc(c.detail)}</span>
+                        </li>`;
+                    }).join("")}
+                </ul>
+            </details>`;
+    }
+
+    function renderCategories(categories) {
+        const grid = document.getElementById("categoriesGrid");
+        grid.innerHTML = "";
+
+        categories.forEach((cat, idx) => {
+            const hasScore = cat.score !== null && cat.score !== undefined;
+            const scoreVal = hasScore ? Math.round(cat.score) : 0;
+            const color = getCatColor(cat.score);
+            const offset = hasScore ? MINI_CIRCUMFERENCE - (MINI_CIRCUMFERENCE * (scoreVal / 100)) : MINI_CIRCUMFERENCE;
+
+            const card = document.createElement("div");
+            card.className = "category-card";
+            card.style.animationDelay = `${0.05 * idx}s`;
+
+            let ringHtml = "";
+            if (hasScore) {
+                ringHtml = `
+                    <div class="cat-mini-ring">
+                        <svg class="cat-mini-svg" viewBox="0 0 80 80">
+                            <circle class="cat-mini-bg" cx="40" cy="40" r="35"></circle>
+                            <circle class="cat-mini-fill" id="catRingFill_${idx}" cx="40" cy="40" r="35" 
+                                style="stroke:${color}; stroke-dashoffset:${MINI_CIRCUMFERENCE};"></circle>
+                        </svg>
+                        <div class="cat-mini-text" style="color:${color};"><span id="catNum_${idx}">0</span>%</div>
+                    </div>
+                `;
+            } else {
+                ringHtml = `
+                    <div class="cat-mini-ring">
+                        <svg class="cat-mini-svg" viewBox="0 0 80 80">
+                            <circle class="cat-mini-bg" cx="40" cy="40" r="35" style="stroke-dasharray:4 4;"></circle>
+                        </svg>
+                        <div class="cat-mini-text" style="font-size:12px; color:#94A3B8;">N/A</div>
+                    </div>
+                `;
+            }
+
+            const checksPassed = cat.checks_passed !== undefined ? cat.checks_passed : null;
+            const checksTotal = cat.checks_total !== undefined ? cat.checks_total : cat.checks_measured;
+            const checksLine = (checksPassed !== null && checksTotal !== null) 
+                ? `<div class="cat-card-checks">✓ <b>${checksPassed} of ${checksTotal}</b> checks passed</div>` 
+                : "";
+
+            card.innerHTML = `
+                ${ringHtml}
+                <div class="cat-card-name">${esc(cat.name)}${cat.provisional ? ' <span title="Provisional: part of this category could not be measured" style="color:#F59E0B;">*</span>' : ""}</div>
+                <div class="cat-card-weight">Weight: ${esc(cat.weight || 10)}% of Total</div>
+                <div class="cat-card-status" style="color:${color}; background:${color}15; border:1px solid ${color}35;">
+                    ● ${esc(cat.status || (scoreVal >= 85 ? "Excellent" : scoreVal >= 70 ? "Good" : scoreVal >= 50 ? "Needs Work" : "Critical"))}
+                </div>
+                ${checksLine}
+                <p class="cat-card-desc">${esc(cat.description || cat.summary || "")}</p>
+                ${cat.provisional_note ? `<p class="cat-card-desc" style="font-size:11px; color:#B45309; margin-top:6px;">${esc(cat.provisional_note)}</p>` : ""}
+                ${cat.ai_summary ? `<p class="cat-card-desc" style="background:#F0F9FF; border:1px solid #BAE6FD; border-radius:8px; padding:8px; text-align:left; margin-top:8px;" title="Actionable Insight">💡 <b>eSupport Insight:</b> ${esc(cat.ai_summary)}</p>` : ""}
+                ${renderChecks(cat.checks)}
+            `;
+            grid.appendChild(card);
+
+            if (hasScore) {
+                setTimeout(() => {
+                    const rEl = document.getElementById(`catRingFill_${idx}`);
+                    if (rEl) rEl.style.strokeDashoffset = String(offset);
+                    const nEl = document.getElementById(`catNum_${idx}`);
+                    if (nEl) animateValue(nEl, 0, scoreVal, 1400);
+                }, 200 + idx * 60);
+            }
+        });
+    }
+
+    function renderEngineExtras(data) {
+        document.getElementById("integrityBox").textContent = data.integrity_statement || "Data Integrity Standard: Every metric represents verifiable crawler evidence without artificial inflation.";
+        const pot = data.potential;
+        document.getElementById("potentialBox").innerHTML = pot ? `
+            <div class="client-issue-card" style="border-left:4px solid #10B981;">
+                <h3 class="issue-card-title" style="margin-bottom:6px;">Projected Score After Systematic Optimization: ${esc(pot.overall)}/100 (${esc(pot.grade)})</h3>
+                <p class="issue-sub-text">Current baseline ${esc(data.score)}/100 &rarr; potential ${esc(pot.overall)}/100 (+${esc(pot.improvement_absolute)} points estimated lift).</p>
+                <p class="issue-sub-text" style="color:#059669; font-size:12px; margin-top:4px;"><b>Authoritative Engineering Target:</b> ${esc(pot.disclaimer || "Systematic execution of the high-priority action items delivers verified ranking gains.")}</p>
+            </div>` : "";
+        const un = data.unmeasured || [];
+        const sec = document.getElementById("unmeasuredSection");
+        if (!un.length) { sec.style.display = "none"; return; }
+        sec.style.display = "block";
+        document.getElementById("unmeasuredList").innerHTML = `
+            <div class="client-issue-card"><table style="width:100%; font-size:13px; border-collapse:collapse;">
+                <thead><tr style="text-align:left; color:#64748B; border-bottom:1px solid #E2E8F0;"><th style="padding:8px 4px;">Check Factor</th><th>Measurement Status</th><th>Resolution Instrument</th></tr></thead>
+                <tbody>${un.map(u => `<tr style="border-top:1px solid #F1F5F9;"><td style="padding:8px 4px; font-weight:600;">${esc(u.metric)}</td><td><span style="color:#64748B; font-size:12px;">${esc(u.display_as)}</span></td><td style="color:#2563EB;">${esc(u.required_source)}</td></tr>`).join("")}</tbody>
+            </table></div>`;
+    }
+
+    function renderSummary(summary) {
+        const grid = document.getElementById("summaryMetricsGrid");
+        const items = [
+            { label: "Overall Score", value: summary.overall_score == null ? "Not scored" : `${Math.round(summary.overall_score)}/100` },
+            { label: "Categories Scored", value: `${fmt(summary.categories_evaluated || 12)} Pillars` },
+            { label: "Checks Passed", value: `${fmt(summary.passed_checks || 0)} / ${fmt((summary.passed_checks || 0) + (summary.critical_issues || 0) + (summary.warnings || 0))}` },
+            { label: "Critical Blockers (P1)", value: fmt(summary.critical_issues || 0) },
+            { label: "Warnings / Gaps (P2)", value: fmt(summary.warnings || 0) },
+            { label: "Pages Audited", value: fmt(summary.total_pages_crawled || 1) }
+        ];
+
+        grid.innerHTML = items.map(it => `
+            <div class="metric-card">
+                <div class="metric-value">${esc(it.value)}</div>
+                <div class="metric-label">${esc(it.label)}</div>
+            </div>
+        `).join("");
+    }
+
+    function renderIssues(issues) {
+        const container = document.getElementById("issuesList");
+        if (!issues || issues.length === 0) {
+            container.innerHTML = `<div class="client-issue-card" style="text-align:center; color:#10B981; font-weight:700; padding:32px;">✓ No critical search engine blockers detected during this crawl.</div>`;
+            return;
+        }
+
+        container.innerHTML = issues.map((iss, index) => {
+            const sevClass = iss.severity_class || (String(iss.severity || "").toLowerCase().includes("crit") ? "danger" : "warning");
+            const sevLabel = iss.severity || "HIGH PRIORITY";
+            const tech = iss.technical_details || {};
+
+            return `
+                <div class="client-issue-card">
+                    <div class="issue-card-top">
+                        <span class="issue-severity-pill ${sevClass}">${esc(sevLabel)}</span>
+                        ${iss.priority ? `<span class="issue-severity-pill info">${esc(iss.priority)}</span>` : ""}
+                        <h3 class="issue-card-title">${esc(iss.title || iss.message || "SEO Optimization Finding")}</h3>
+                    </div>
+                    <p class="issue-explanation">${iss.evidence_label ? `<b>${esc(iss.evidence_label)}:</b> ` : ""}${esc(iss.explanation || iss.details || "")}</p>
+                    <div class="issue-details-grid">
+                        <div>
+                            <div class="issue-sub-title">⚠️ Search Impact</div>
+                            <p class="issue-sub-text">${esc(iss.why_it_matters || "Impairs search crawler indexing or degrades ranking positions in Google.")}</p>
+                        </div>
+                        <div>
+                            <div class="issue-sub-title">🎯 Recommended eSupport Action</div>
+                            <p class="issue-sub-text">${esc(iss.recommended_action || "Deploy recommended on-page and technical remediation.")}</p>
+                        </div>
+                    </div>
+                    ${(iss.references || []).length ? `<div style="font-size:12px; color:#64748B; margin:4px 0 12px;">Standard: ${(iss.references || []).map(r => `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" style="color:#2563EB;">${esc(r.name)}</a>`).join(" &bull; ")}</div>` : ""}
+                    <div>
+                        <button class="tech-accordion-btn" onclick="toggleTech(${index})">
+                            <span id="techToggleIcon_${index}">▶</span> View technical evidence &amp; developer fix
+                        </button>
+                        <div id="techDetails_${index}" class="tech-accordion-content">
+Pillar: ${esc(tech.category || iss.category || "Technical SEO")}
+Code: ${esc(tech.code || iss.code || "SEO-RULE-CHECK")}
+Target URL: ${esc(tech.url || iss.url || "Site-wide")}
+Observed Finding: ${esc(tech.evidence || iss.evidence || "Observed during DOM & HTTP protocol crawl.")}
+Recommended Fix:
+${esc(tech.developer_fix || iss.fix || "Remediate according to Google Search Central best practices.")}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join("");
+    }
+
+    window.toggleTech = function(index) {
+        const box = document.getElementById(`techDetails_${index}`);
+        const icon = document.getElementById(`techToggleIcon_${index}`);
+        if (!box) return;
+        if (box.classList.contains("open")) {
+            box.classList.remove("open");
+            if (icon) icon.textContent = "▶";
+        } else {
+            box.classList.add("open");
+            if (icon) icon.textContent = "▼";
+        }
+    };
+
+    const RATING_COLORS = { "good": "#10B981", "needs-improvement": "#F59E0B", "poor": "#EF4444" };
+
+    function fmtMetric(name, m) {
+        if (!m) return "—";
+        if (name === "CLS") return Number(m.p75).toFixed(2);
+        return (Number(m.p75) / 1000).toFixed(2) + " s";
+    }
+
+    function cwvBlock(label, d) {
+        if (!d) return "";
+        const lh = d.lighthouse_scores || {};
+        const field = d.field;
+        const metrics = field ? ["LCP", "INP", "CLS", "FCP", "TTFB"].filter(k => field.metrics[k]) : [];
+        return `
+            <div class="client-issue-card">
+                <h3 class="issue-card-title" style="margin-bottom:10px;">${esc(label)}</h3>
+                ${field ? `<p class="issue-sub-text">Core Web Vitals assessment (real Chrome users, ${esc(field.scope)}-level): <b style="color:${field.assessment === "passed" ? "#10B981" : "#EF4444"}">${esc(String(field.assessment).toUpperCase())}</b></p>
+                <div class="summary-metrics-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; margin:10px 0;">
+                    ${metrics.map(k => `<div class="metric-card"><div class="metric-value" style="color:${RATING_COLORS[field.metrics[k].rating] || "inherit"}">${esc(fmtMetric(k, field.metrics[k]))}</div><div class="metric-label">${esc(k)} &middot; ${esc(field.metrics[k].rating)}</div></div>`).join("")}
+                </div>` : `<p class="issue-sub-text">Not enough real-user traffic in the Chrome UX Report for field data. Lab results are shown below.</p>`}
+                <p class="issue-sub-text">Lighthouse lab scores: ${["performance", "seo", "accessibility", "best-practices"].filter(k => lh[k] != null).map(k => `${esc(k)} <b>${esc(lh[k])}</b>`).join(" &bull; ") || "—"}</p>
+            </div>`;
+    }
+
+    function renderRealData(rd) {
+        const sec = document.getElementById("realDataSection");
+        const box = document.getElementById("realDataContent");
+        let html = "";
+        if (rd.core_web_vitals) {
+            html += cwvBlock("Page Speed & Core Web Vitals - Mobile", rd.core_web_vitals.mobile);
+            html += cwvBlock("Page Speed & Core Web Vitals - Desktop", rd.core_web_vitals.desktop);
+        }
+        if (rd.search_console) {
+            const t = rd.search_console.totals || {};
+            html += `
+                <div class="client-issue-card">
+                    <h3 class="issue-card-title" style="margin-bottom:10px;">Google Search Performance (${esc(rd.search_console.period)})</h3>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:12px;">
+                        <div class="metric-card"><div class="metric-value">${fmt(t.clicks)}</div><div class="metric-label">Clicks</div></div>
+                        <div class="metric-card"><div class="metric-value">${fmt(t.impressions)}</div><div class="metric-label">Impressions</div></div>
+                        <div class="metric-card"><div class="metric-value">${esc(t.ctr)}%</div><div class="metric-label">Avg. CTR</div></div>
+                        <div class="metric-card"><div class="metric-value">${esc(t.position)}</div><div class="metric-label">Avg. Position</div></div>
+                    </div>
+                    <div class="issue-sub-title">Top search queries</div>
+                    <p class="issue-sub-text">${(rd.search_console.top_queries || []).map(q => `${esc(q.query)} (${fmt(q.clicks)} clicks, pos ${esc(q.position)})`).join(" &bull; ") || "No query data."}</p>
+                </div>`;
+        }
+        if (rd.rankings) {
+            html += `
+                <div class="client-issue-card">
+                    <h3 class="issue-card-title" style="margin-bottom:10px;">Google Rankings - ${fmt(rd.rankings.total_ranking_keywords)} ranking keywords</h3>
+                    <p class="issue-sub-text">${(rd.rankings.top_keywords || []).map(k => `${esc(k.keyword)} - <b>#${esc(k.position)}</b> (${fmt(k.search_volume)}/mo)`).join(" &bull; ") || "No ranking keywords found."}</p>
+                </div>`;
+        }
+        if (rd.backlinks) {
+            const b = rd.backlinks;
+            html += `
+                <div class="client-issue-card">
+                    <h3 class="issue-card-title" style="margin-bottom:10px;">Backlink Profile</h3>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
+                        <div class="metric-card"><div class="metric-value">${fmt(b.referring_domains)}</div><div class="metric-label">Referring Domains</div></div>
+                        <div class="metric-card"><div class="metric-value">${fmt(b.backlinks)}</div><div class="metric-label">Backlinks</div></div>
+                        <div class="metric-card"><div class="metric-value">${b.domain_rank ?? "—"}<small>/${esc(b.domain_rank_scale)}</small></div><div class="metric-label">Domain Rank (DataForSEO)</div></div>
+                        <div class="metric-card"><div class="metric-value">${b.spam_score ?? "—"}</div><div class="metric-label">Spam Score</div></div>
+                    </div>
+                </div>`;
+        }
+        if (!html) { sec.style.display = "none"; return; }
+        sec.style.display = "block";
+        box.innerHTML = html;
+    }
+
+    function renderIntegrations(integ) {
+        const names = { 
+            core_web_vitals: "Core Web Vitals (PageSpeed / CrUX)", 
+            search_console: "Google Search Console", 
+            keyword_data: "Keyword Data", 
+            backlinks: "Backlink Index", 
+            google_analytics: "Google Analytics 4" 
+        };
+        const keys = Object.keys(names).filter(k => integ[k]);
+        if (!keys.length) return;
+        document.getElementById("integrationsBar").innerHTML = keys.map(k => `
+            <div class="integration-item">
+                <div class="integration-name">${esc(names[k])}</div>
+                <div class="integration-status" style="${String(integ[k]).startsWith("Connected") ? "color:#059669; font-weight:700;" : ""}">${esc(integ[k])}</div>
+            </div>`).join("");
+    }
+
+    function renderQuickWins(wins) {
+        const container = document.getElementById("quickWinsList");
+        const sec = document.getElementById("quickWinsSection");
+        if (!wins || wins.length === 0) {
+            sec.style.display = "none";
+            return;
+        }
+        sec.style.display = "block";
+        container.innerHTML = wins.map(w => `
+            <div class="quick-win-item">
+                <span class="win-check">✓</span>
+                <span>${esc(w)}</span>
+            </div>
+        `).join("");
+    }
+
+    loadReport();
+})();
+</script>
+</body>
+</html>

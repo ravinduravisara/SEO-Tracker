@@ -1,0 +1,9 @@
+{
+  "target": "https://example.com",
+  "url": "https://example.com",
+  "score": 85.0,
+  "page_count": 1,
+  "stats": {"indexable_pages": 1, "broken_links": 0, "broken_resources": 0, "missing_alt_images": 0, "sitemap_urls": 1},
+  "scores": {"label": "Good", "critical": 0, "warnings": 2, "categories": [{"category": "Performance", "score": 8}, {"category": "Security", "score": 9}]},
+  "issues": [{"severity": "warning", "category": "Title", "code": "long_title", "message": "Title is too long", "recommendation": "Shorten it", "url": "https://example.com"}]
+}

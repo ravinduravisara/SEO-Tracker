@@ -1,0 +1,30 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://aviance-seo-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/static/:path*",
+      "destination": "/frontend/:path*"
+    },
+    {
+      "source": "/admin",
+      "destination": "/frontend/index.html"
+    },
+    {
+      "source": "/seo-check",
+      "destination": "/frontend/seo-check.html"
+    },
+    {
+      "source": "/report/:token",
+      "destination": "/frontend/report.html"
+    },
+    {
+      "source": "/",
+      "destination": "/frontend/seo-check.html"
+    }
+  ]
+}
+

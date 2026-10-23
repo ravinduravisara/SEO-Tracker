@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eSupport SEO • Admin Platform</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/assets/favicon-32x32.png?v=3">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/assets/favicon-16x16.png?v=3">
+    <link rel="shortcut icon" href="/favicon.ico?v=3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+        if (window.location.port && window.location.port !== "8000" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+            window.location.replace("http://" + window.location.hostname + ":8000/admin");
+        }
+    </script>
+    <link rel="stylesheet" href="/static/style.css?v=10.4.3">
+    <link rel="stylesheet" href="/static/tech_detector.css?v=10.4.3">
+</head>
+<body>
+<div class="layout" id="appLayout">
+    <!-- ADMIN SIDEBAR -->
+    <aside class="sidebar" id="adminSidebar">
+        <div class="sidebar-header" style="display:flex; align-items:center; gap:12px;">
+            <img src="/static/assets/esupport-logo.png" alt="eSupport Logo" style="height:36px; width:auto; object-fit:contain; border-radius:6px;">
+            <div>
+                <div class="sidebar-brand-name">eSupport SEO</div>
+                <div class="sidebar-brand-sub">Platform v10.4.0</div>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebarNav">
+            <div class="nav-section-title" data-section="portal">Main Portal</div>
+            <div class="nav-item active" data-view="dashboard" data-permission="dashboard.view" onclick="app.navigate('dashboard')">
+                <span class="nav-icon">📊</span>
+                <span>Dashboard</span>
+            </div>
+            <div class="nav-item" data-view="leads" data-permission="leads.view" onclick="app.navigate('leads')">
+                <span class="nav-icon">🎯</span>
+                <span>SEO Leads</span>
+            </div>
+            <div class="nav-item" data-view="clients" data-permission="clients.view" onclick="app.navigate('clients')">
+                <span class="nav-icon">👥</span>
+                <span>Clients</span>
+            </div>
+            <div class="nav-item" data-view="audits" data-permission="audits.view" onclick="app.navigate('audits')">
+                <span class="nav-icon">⚡</span>
+                <span>Audit History</span>
+            </div>
+            <div class="nav-item" data-view="reports" data-permission="public_reports.view" onclick="app.navigate('reports')">
+                <span class="nav-icon">🔗</span>
+                <span>Public Reports</span>
+            </div>
+
+            <div class="nav-section-title" data-section="tools">Analysis &amp; Tools</div>
+            <a class="nav-item" href="/seo-check" target="_blank" data-permission="scanner.view" style="text-decoration:none; color:inherit; display:flex; align-items:center;">
+                <span class="nav-icon">🚀</span>
+                <span>Public SEO Scanner ↗</span>
+            </a>
+            <div class="nav-item" data-view="technical_report" data-permission="technical_report.view" onclick="app.navigate('technical_report')">
+                <span class="nav-icon">🛠️</span>
+                <span>Technical Report</span>
+            </div>
+            <div class="nav-item" data-view="source_audit" data-permission="source_audit.run" onclick="app.navigate('source_audit')">
+                <span class="nav-icon">📦</span>
+                <span>Source Code ZIP</span>
+            </div>
+            <div class="nav-item" data-view="technology_detector" data-permission="tech_detector.view" onclick="app.navigate('technology_detector')">
+                <span class="nav-icon">🔍</span>
+                <span>Technology Detector</span>
+            </div>
+
+            <div class="nav-section-title" data-section="admin" data-permission="admin_users.view">Administration</div>
+            <div class="nav-item" data-view="team_users" data-permission="admin_users.view" onclick="app.navigate('team_users')">
+                <span class="nav-icon">🛡️</span>
+                <span>Team Members</span>
+            </div>
+            <div class="nav-item" data-view="activity_logs" data-permission="activity_logs.view" onclick="app.navigate('activity_logs')">
+                <span class="nav-icon">📜</span>
+                <span>Activity Logs</span>
+            </div>
+
+            <div class="nav-section-title" data-section="account">My Account</div>
+            <div class="nav-item" data-view="profile" onclick="app.navigate('profile')">
+                <span class="nav-icon">👤</span>
+                <span>My Profile</span>
+            </div>
+        </nav>
+
+        <div class="sidebar-profile" style="display:flex; align-items:center; gap:10px;">
+            <div class="profile-avatar" id="sidebarAvatar">eS</div>
+            <div class="profile-info" style="flex:1; min-width:0;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="profile-name" id="sidebarAdminName" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:700;">Admin</span>
+                </div>
+                <div style="margin-top:2px; display:flex; align-items:center; gap:6px;">
+                    <span id="sidebarRoleBadge" class="role-badge role-super-admin" style="font-size:9px; padding:2px 6px;">SUPER ADMIN</span>
+                </div>
+                <div class="profile-email" id="sidebarAdminEmail" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:11px; color:#64748B;">prasad@esupport.live</div>
+            </div>
+            <button class="btn btn-secondary btn-xs" onclick="app.handleLogout()" title="Sign Out" style="margin-left:auto; padding:4px 8px; font-size:11px;">Logout</button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="main-content">
+        <!-- TOP HEADER -->
+        <header class="top-header">
+            <div style="display:flex; align-items:center; gap:16px;">
+                <button class="mobile-nav-toggle" onclick="app.toggleSidebar()">☰</button>
+                <div class="page-title-wrap">
+                    <h1 id="pageTitle">Dashboard</h1>
+                    <div class="page-breadcrumbs" id="pageBreadcrumb">Overview &bull; SEO Performance Management</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div id="healthBadge" class="api-health-badge">
+                    <span style="color:var(--warning)">●</span> Checking API...
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="app.openClientModal()">+ Add Client</button>
+                <button class="btn btn-primary btn-sm" onclick="app.navigate('dashboard'); document.getElementById('auditUrlInput').focus();">+ Run Audit</button>
+            </div>
+        </header>
+
+        <!-- VIEW 1: DASHBOARD -->
+        <div id="viewDashboard" class="admin-view active">
+            <!-- EXECUTIVE SUMMARY (6 BALANCED OVERVIEW CARDS) -->
+            <div class="dash-summary-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:20px; margin-bottom:28px;">
+                <!-- 1. Public Page SEO Checks -->
+                <div class="card stat-card" style="text-align:left; border-top:3px solid #2563EB;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; letter-spacing:0.5px; font-weight:700; color:var(--text-muted);">Public Page Checks</span>
+                            <b class="stat-value" id="kpiPublicChecks" style="color:#2563EB; font-size:32px; margin:4px 0;">0</b>
+                        </div>
+                        <div style="width:40px; height:40px; border-radius:10px; background:#EFF6FF; display:flex; align-items:center; justify-content:center; font-size:18px;">🌐</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;" id="kpiPublicChecksSub">Checks on /seo-check page</div>
+                </div>
+
+                <!-- 2. Public SEO Leads -->
+                <div class="card stat-card" style="text-align:left; border-top:3px solid #10B981; cursor:pointer;" onclick="app.navigate('leads')" title="Click to view all leads">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; letter-spacing:0.5px; font-weight:700; color:var(--text-muted);">Public SEO Leads</span>
+                            <b class="stat-value" id="kpiLeads" style="color:#10B981; font-size:32px; margin:4px 0;">0</b>
+                        </div>
+                        <div style="width:40px; height:40px; border-radius:10px; background:#ECFDF5; display:flex; align-items:center; justify-content:center; font-size:18px;">📩</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;" id="kpiLeadsLabel">0 New (0 total)</div>
+                </div>
+
+                <!-- 3. Total Clients -->
+                <div class="card stat-card" style="text-align:left; border-top:3px solid #6366F1; cursor:pointer;" onclick="app.navigate('clients')" title="Click to view clients">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; letter-spacing:0.5px; font-weight:700; color:var(--text-muted);">Total Clients</span>
+                            <b class="stat-value" id="kpiClients" style="color:#6366F1; font-size:32px; margin:4px 0;">0</b>
+                        </div>
+                        <div style="width:40px; height:40px; border-radius:10px; background:#EEF2FF; display:flex; align-items:center; justify-content:center; font-size:18px;">👥</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">Registered client accounts</div>
+                </div>
+
+                <!-- 4. Audits Completed -->
+                <div class="card stat-card" style="text-align:left; border-top:3px solid #0284C7; cursor:pointer;" onclick="app.navigate('audits')" title="Click to view audit history">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; letter-spacing:0.5px; font-weight:700; color:var(--text-muted);">Audits Completed</span>
+                            <b class="stat-value" id="kpiAudits" style="color:#0284C7; font-size:32px; margin:4px 0;">0</b>
+                        </div>
+                        <div style="width:40px; height:40px; border-radius:10px; background:#F0F9FF; display:flex; align-items:center; justify-content:center; font-size:18px;">⚡</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;" id="kpiAuditsSub">Total technical audits</div>
+                </div>
+
+                <!-- 5. Average SEO Score -->
+                <div class="card stat-card" style="text-align:left; border-top:3px solid #F59E0B;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; letter-spacing:0.5px; font-weight:700; color:var(--text-muted);">Average SEO Score</span>
+                            <b class="stat-value" id="kpiAvgScore" style="color:#F59E0B; font-size:32px; margin:4px 0;">0%</b>
+                        </div>
+                        <div style="width:40px; height:40px; border-radius:10px; background:#FFFBEB; display:flex; align-items:center; justify-content:center; font-size:18px;">📊</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;" id="kpiScoreSub">Overall website health</div>
+                </div>
+
+                <!-- 6. Published Reports -->
+                <div class="card stat-card" style="text-align:left; border-top:3px solid #8B5CF6; cursor:pointer;" onclick="app.navigate('reports')" title="Click to view public reports">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; letter-spacing:0.5px; font-weight:700; color:var(--text-muted);">Published Reports</span>
+                            <b class="stat-value" id="kpiPublished" style="color:#8B5CF6; font-size:32px; margin:4px 0;">0</b>
+                        </div>
+                        <div style="width:40px; height:40px; border-radius:10px; background:#F5F3FF; display:flex; align-items:center; justify-content:center; font-size:18px;">📄</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">Client handover reports</div>
+                </div>
+            </div>
+
+            <!-- HEALTH BY CATEGORY / TOP PROBLEMS / DATA SOURCES -->
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:24px; margin-bottom:28px;">
+                <div class="card">
+                    <h3 style="margin:0 0 4px; font-size:16px;">SEO Health by Category</h3>
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">Average across the latest audit of each website</div>
+                    <div id="dashCategoryHealth"><div class="empty-state">No audits yet.</div></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin:0 0 4px; font-size:16px;">Most Common Problems</h3>
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">Critical issues and warnings, by number of websites affected</div>
+                    <div id="dashTopIssues"><div class="empty-state">No audits yet.</div></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin:0 0 4px; font-size:16px;">Activity &amp; Data Sources</h3>
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">Audit volume and connected real-data sources</div>
+                    <div id="dashDataSources"></div>
+                </div>
+            </div>
+
+            <!-- QUICK AUDIT RUNNER -->
+            <div class="card" style="margin-bottom:28px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <div>
+                        <h2 style="margin:0; font-size:18px;">Live Website SEO Audit Runner</h2>
+                        <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Real-time crawling, HTTP/HTML verification, and automated technical analysis.</div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="app.runPreflight()" id="preflightBtn">Test Live Site</button>
+                        <button class="btn btn-primary btn-sm" onclick="app.startAudit()" id="runAuditBtn">Run Full Audit</button>
+                    </div>
+                </div>
+
+                <div class="grid" style="grid-template-columns: 2fr 1fr 1fr; gap:12px; margin-bottom:12px;">
+                    <div class="form-group" style="margin:0;">
+                        <input id="auditUrlInput" class="form-input" type="url" placeholder="https://example.com" value="">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <select id="auditClientSelect" class="form-select">
+                            <option value="">-- Assign to Client (Optional) --</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <select id="crawlModeSelect" class="form-select">
+                            <option value="auto">Auto crawl + JS fallback</option>
+                            <option value="http">HTTP/HTML only</option>
+                            <option value="rendered">Full Rendered audit</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- CRAWL OPTIONS -->
+                <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+                    <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="optRobots" checked> Respect robots.txt</label>
+                    <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="optLinks" checked> Verify internal links</label>
+                    <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="optResources" checked> Verify static resources</label>
+                    <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="optSubdomains"> Follow subdomains</label>
+                    <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="optAi"> Ollama AI Recommendations</label>
+                    <label style="display:flex; align-items:center; gap:6px;" title="Free. Real Core Web Vitals (CrUX) + Lighthouse via Google PageSpeed Insights API"><input type="checkbox" id="optPagespeed" checked> PageSpeed / Core Web Vitals</label>
+                    <label style="display:flex; align-items:center; gap:6px;" title="Free. Real clicks, impressions, CTR and positions. Needs the service account added to the site's Search Console property"><input type="checkbox" id="optGsc" checked> Search Console data</label>
+                    <label style="display:flex; align-items:center; gap:6px;" title="PAID. Real search volume, keyword difficulty, Google rankings and backlinks"><input type="checkbox" id="optDataforseo"> DataForSEO (paid)</label>
+                </div>
+
+                <!-- PROGRESS BAR & TELEMETRY -->
+                <div class="progress-bar-wrap">
+                    <div id="auditProgressBar" class="progress-bar-fill"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--text-muted);">
+                    <div id="auditStatusLine">Ready. Enter target URL to begin real audit.</div>
+                    <div id="auditTelemetry"></div>
+                    <button id="cancelAuditBtn" class="btn btn-danger btn-sm hidden" onclick="app.cancelAudit()">Cancel Audit</button>
+                </div>
+
+                <!-- PREFLIGHT RESULTS PANEL -->
+                <div id="preflightBox" class="hidden" style="margin-top:16px; padding:16px; background:#F8FAFC; border:1px solid var(--border); border-radius:10px;"></div>
+            </div>
+
+            <!-- RECENT AUDITS -->
+            <div class="card" style="margin-bottom:24px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                    <h3 style="margin:0; font-size:16px;">Recent Audits</h3>
+                    <a href="javascript:void(0)" onclick="app.navigate('audits')" style="font-size:13px; color:var(--primary); font-weight:600;">View all</a>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr><th>Target URL</th><th>Score</th><th>Pages</th><th>Critical</th><th>Warnings</th><th>Client</th><th>Date</th><th>Action</th></tr>
+                        </thead>
+                        <tbody id="dashRecentAuditsBody">
+                            <tr><td colspan="8" class="empty-state">No audits completed yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- DASHBOARD TABLES -->
+            <div class="grid" style="grid-template-columns: 1fr; gap:24px;">
+                <!-- CLIENT QUICK LIST -->
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <h3 style="margin:0; font-size:16px;">Active Clients</h3>
+                        <a href="javascript:void(0)" onclick="app.navigate('clients')" style="font-size:13px; color:var(--primary); font-weight:600;">Manage clients</a>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr><th>Client</th><th>Website</th><th>Score</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="dashRecentClientsBody">
+                                <tr><td colspan="4" class="empty-state">No clients added yet.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: CLIENTS LIST -->
+        <div id="viewClients" class="admin-view">
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h2 style="margin:0; font-size:20px;">Client Management</h2>
+                        <div style="font-size:13px; color:var(--text-muted);">Manage client profiles, websites, historical audits, and generated reports.</div>
+                    </div>
+                    <div style="display:flex; gap:12px;">
+                        <input id="clientSearchInput" class="form-input" type="text" placeholder="Search clients..." style="width:220px;" onkeyup="app.filterClients()">
+                        <button class="btn btn-primary" onclick="app.openClientModal()">+ Add New Client</button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table id="clientsTable">
+                        <thead>
+                            <tr>
+                                <th>Client Name</th>
+                                <th>Company</th>
+                                <th>Target Website</th>
+                                <th>Contact</th>
+                                <th>SEO Score</th>
+                                <th>Last Audit</th>
+                                <th>Public Report</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientsTableBody">
+                            <tr><td colspan="8" class="empty-state">Loading clients...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 3: CLIENT DETAIL -->
+        <div id="viewClientDetail" class="admin-view">
+            <div style="margin-bottom:20px;">
+                <button class="btn btn-secondary btn-sm" onclick="app.navigate('clients')">&larr; Back to Clients</button>
+            </div>
+
+            <!-- CLIENT HEADER CARD -->
+            <div class="card" style="margin-bottom:24px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+                    <div>
+                        <h2 id="cdName" style="margin:0 0 4px 0; font-size:24px;">Client Name</h2>
+                        <div style="font-size:14px; color:var(--text-muted); display:flex; gap:16px; flex-wrap:wrap;">
+                            <span>🏢 <b id="cdCompany">-</b></span>
+                            <span>🌐 <a id="cdUrl" href="#" target="_blank" style="color:var(--primary); font-weight:600;">-</a></span>
+                            <span>✉️ <span id="cdEmail">-</span></span>
+                            <span>📞 <span id="cdPhone">-</span></span>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="app.auditCurrentClient()">Run New Audit</button>
+                        <button class="btn btn-primary btn-sm" onclick="app.generateReportForClient()">Generate Public Report</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CLIENT AUDIT HISTORY & REPORTS -->
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:24px;">
+                <div class="card">
+                    <h3 style="margin-top:0; font-size:16px;">Client Audit History</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr><th>Date</th><th>Score</th><th>Status</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="cdAuditsBody">
+                                <tr><td colspan="4" class="empty-state">No audits run for this client.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-top:0; font-size:16px;">Public Client Reports</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr><th>Created</th><th>Score</th><th>Status</th><th>Actions</th></tr>
+                            </thead>
+                            <tbody id="cdReportsBody">
+                                <tr><td colspan="4" class="empty-state">No public reports generated.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 4: AUDITS HISTORY -->
+        <div id="viewAudits" class="admin-view">
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <div>
+                        <h2 style="margin:0; font-size:20px;">Audit History</h2>
+                        <div style="font-size:13px; color:var(--text-muted);">Historical audits stored in the platform database. Click any audit to review complete technical data.</div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Audit Date</th>
+                                <th>Target Website</th>
+                                <th>Client</th>
+                                <th>Score</th>
+                                <th>Public Report</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditsTableBody">
+                            <tr><td colspan="6" class="empty-state">Loading audits...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 5: PUBLIC REPORTS MANAGER -->
+        <div id="viewReports" class="admin-view">
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <div>
+                        <h2 style="margin:0; font-size:20px;">Public Report Manager</h2>
+                        <div style="font-size:13px; color:var(--text-muted);">Secure client report links. Only reports set to PUBLISHED can be opened by clients.</div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Client / Site</th>
+                                <th>Score</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Token</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportsTableBody">
+                            <tr><td colspan="6" class="empty-state">No public reports generated.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 6: TECHNICAL AUDIT REPORT (DETAILED ADMIN VIEW) -->
+        <div id="viewTechnicalReport" class="admin-view">
+            <div id="noAuditNotice" class="card" style="text-align:center; padding:48px 24px;">
+                <h3>No Audit Loaded</h3>
+                <p style="color:var(--text-muted);">Run an audit from the Dashboard or select an existing audit from the Audit History.</p>
+                <button class="btn btn-primary" onclick="app.navigate('dashboard')">Go to Audit Tool</button>
+            </div>
+
+            <div id="technicalReportContent" class="hidden">
+                <!-- TECHNICAL OVERVIEW CARD -->
+                <div class="card" style="margin-bottom:24px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+                        <div>
+                            <div style="font-size:12px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px;">Complete Technical Inspection</div>
+                            <h2 id="techTargetUrl" style="margin:4px 0; font-size:24px;">https://example.com</h2>
+                            <div style="font-size:13px; color:var(--text-muted);" id="techAuditMeta">-</div>
+                        </div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button class="btn btn-primary btn-sm" onclick="app.downloadSpecialPdf('client')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Client PDF (2-3 Pages)</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.generateReportFromCurrentAudit()">Generate Client Web Link</button>
+                            <button class="btn btn-secondary btn-sm" style="background:#0F172A; color:#fff; border-color:#0F172A;" onclick="app.downloadSpecialPdf('comprehensive')">30-Section Comprehensive PDF</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.downloadSpecialPdf('developer')">Developer Fix PDF</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.downloadBundleZip()">ZIP Pack</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TABS HEADER -->
+                <div class="tabs-header" id="techTabsHeader">
+                    <button class="tab-btn active" onclick="app.switchTechTab('overview')">Overview</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('checks')">Checks &amp; Evidence</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('realdata')">Real Data</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('technical')">Technical SEO</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('onpage')">On-Page SEO</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('content')">Content SEO</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('keywords')">Keywords &amp; Intent</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('links')">Links &amp; Architecture</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('local')">Local SEO</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('ecommerce')">Industry / Vertical</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('issues')">All Issues</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('pages')">Audited Pages</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('recommendations')">Developer Action Plan</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('export')">Report Center</button>
+                    <button class="tab-btn" onclick="app.switchTechTab('raw')">Raw JSON</button>
+                </div>
+
+                <!-- TAB CONTENTS -->
+                <div id="techTabContent" class="card">
+                    <!-- Loaded dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 8: SOURCE AUDIT -->
+        <div id="viewSourceAudit" class="admin-view">
+            <div class="card">
+                <h2 style="margin:0 0 8px 0; font-size:20px;">Source Code ZIP Intelligence</h2>
+                <div style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Upload a ZIP archive containing website source code (Next.js, React, Vue, HTML) for static SEO code analysis.</div>
+                
+                <div style="display:flex; gap:12px; align-items:center; margin-bottom:20px;">
+                    <input type="file" id="sourceZipInput" accept=".zip" class="form-input" style="max-width:340px;">
+                    <button class="btn btn-primary" onclick="app.runSourceAudit()">Analyze ZIP Source</button>
+                </div>
+                <div id="sourceAuditResults" class="hidden"></div>
+            </div>
+        </div>
+
+        <!-- VIEW: SEO LEADS -->
+        <div id="viewLeads" class="admin-view">
+            <!-- LEAD STAT CARDS -->
+            <div class="grid grid-stats" style="margin-bottom:28px;">
+                <div class="card stat-card">
+                    <b class="stat-value" id="kpiLeadsTotal">0</b>
+                    <span class="stat-label">Total Leads</span>
+                </div>
+                <div class="card stat-card">
+                    <b class="stat-value" id="kpiLeadsNew" style="color:var(--primary)">0</b>
+                    <span class="stat-label">New Inquiries</span>
+                </div>
+                <div class="card stat-card">
+                    <b class="stat-value" id="kpiLeadsContacted" style="color:var(--secondary)">0</b>
+                    <span class="stat-label">Contacted</span>
+                </div>
+                <div class="card stat-card">
+                    <b class="stat-value" id="kpiLeadsConverted" style="color:var(--success)">0</b>
+                    <span class="stat-label">Converted</span>
+                </div>
+            </div>
+
+            <!-- LEADS TABLE CARD -->
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h2 style="margin:0; font-size:18px;">Public SEO Leads &amp; Analysis Requests</h2>
+                        <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Potential clients who scanned their website and requested full SEO analysis.</div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="app.loadLeads()">Refresh Leads</button>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Lead / Company</th>
+                                <th>Website</th>
+                                <th>Email &amp; Phone</th>
+                                <th>Initial Score</th>
+                                <th>Requested At</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leadsTableBody">
+                            <tr><td colspan="7" class="empty-state">Loading leads...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: TEAM MEMBERS (ADMIN USERS) -->
+        <div id="viewTeamUsers" class="admin-view">
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h2 style="margin:0; font-size:20px;">Team Members &amp; Access Control</h2>
+                        <div style="font-size:13px; color:var(--text-muted);">Manage platform administrators, sales team, and SEO analysts with role-based permissions.</div>
+                    </div>
+                    <div style="display:flex; gap:12px;">
+                        <input id="userSearchInput" class="form-input" type="text" placeholder="Search team members..." style="width:220px;" onkeyup="app.filterUsers()">
+                        <button class="btn btn-primary" onclick="app.openInviteUserModal()">+ Invite Team Member</button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table id="usersTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Last Login</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr><td colspan="7" class="empty-state">Loading team members...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: ACTIVITY LOGS -->
+        <div id="viewActivityLogs" class="admin-view">
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h2 style="margin:0; font-size:20px;">Audit &amp; Team Activity Logs</h2>
+                        <div style="font-size:13px; color:var(--text-muted);">Immutable audit trail recording team actions, user administration, status changes, and report publishing.</div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="app.loadActivityLogs()">Refresh Logs</button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Action</th>
+                                <th>Resource / Target</th>
+                                <th>Details</th>
+                                <th>Status</th>
+                                <th>IP Address</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activityLogsTableBody">
+                            <tr><td colspan="8" class="empty-state">Loading activity logs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: MY PROFILE -->
+        <div id="viewProfile" class="admin-view">
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:24px;">
+                <!-- PROFILE INFORMATION -->
+                <div class="card">
+                    <h2 style="margin:0 0 16px 0; font-size:18px;">My Account Profile</h2>
+                    <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px; padding:16px; background:#F8FAFC; border:1px solid var(--border); border-radius:12px;">
+                        <div class="user-avatar" id="profileAvatar" style="width:48px; height:48px; font-size:18px;">eS</div>
+                        <div>
+                            <div style="font-size:16px; font-weight:700;" id="profileDisplayName">Admin User</div>
+                            <div style="font-size:13px; color:var(--text-muted);" id="profileDisplayEmail">email@example.com</div>
+                            <div style="margin-top:6px; display:flex; gap:8px; align-items:center;">
+                                <span id="profileRoleBadge" class="role-badge role-super-admin">SUPER ADMIN</span>
+                                <span id="profileStatusBadge" class="status-badge status-active">ACTIVE</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form onsubmit="app.handleSaveProfile(event)">
+                        <div id="profileAlertBox" style="display:none; margin-bottom:12px;"></div>
+                        <div class="form-group" style="margin-bottom:14px;">
+                            <label>Full Name</label>
+                            <input id="profileNameInput" class="form-input" type="text" required placeholder="Your Full Name">
+                        </div>
+                        <div class="form-group" style="margin-bottom:14px;">
+                            <label>Email Address</label>
+                            <input id="profileEmailInput" class="form-input" type="email" readonly disabled style="background:#F1F5F9; color:#64748B;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:18px;">
+                            <label>Last Login</label>
+                            <input id="profileLastLogin" class="form-input" type="text" readonly disabled style="background:#F1F5F9; color:#64748B;">
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="saveProfileBtn">Save Profile Details</button>
+                    </form>
+                </div>
+
+                <!-- PASSWORD UPDATE -->
+                <div class="card">
+                    <h2 style="margin:0 0 16px 0; font-size:18px;">Change Password</h2>
+                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Keep your account secure by using a strong password with at least 8 characters.</div>
+                    
+                    <form onsubmit="app.handleChangePassword(event)">
+                        <div id="passwordAlertBox" style="display:none; margin-bottom:12px;"></div>
+                        <div class="form-group" style="margin-bottom:14px;">
+                            <label>Current Password</label>
+                            <input id="currentPasswordInput" class="form-input" type="password" required placeholder="••••••••••••">
+                        </div>
+                        <div class="form-group" style="margin-bottom:14px;">
+                            <label>New Password (min 8 characters)</label>
+                            <input id="newPasswordInput" class="form-input" type="password" required minlength="8" placeholder="••••••••••••">
+                        </div>
+                        <div class="form-group" style="margin-bottom:18px;">
+                            <label>Confirm New Password</label>
+                            <input id="confirmPasswordInput" class="form-input" type="password" required minlength="8" placeholder="••••••••••••">
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="changePasswordBtn">Update Password</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: WEBSITE TECHNOLOGY DETECTOR -->
+        <div id="viewTechDetector" class="admin-view">
+            <div class="tech-detector-container" id="tdRoot">
+                <!-- HEADER -->
+                <div class="td-header">
+                    <div>
+                        <h2 class="td-header-title">
+                            <span>🔍</span> Website Technology Detector
+                        </h2>
+                        <p class="td-header-desc">
+                            Analyze a website URL to identify its CMS, website platform, frontend frameworks, backend indicators, and other detectable technologies.
+                        </p>
+                    </div>
+                    <div>
+                        <span class="td-admin-badge">🛡️ Administrator Only</span>
+                    </div>
+                </div>
+
+                <!-- SCAN FORM -->
+                <div class="td-scan-card">
+                    <form id="tdScanForm" onsubmit="window.techDetector ? window.techDetector.handleScanSubmit(event) : event.preventDefault()">
+                        <div class="td-input-group">
+                            <div class="td-input-wrapper">
+                                <span class="td-input-icon">🌐</span>
+                                <input 
+                                    type="text" 
+                                    id="tdUrlInput" 
+                                    class="td-url-input" 
+                                    placeholder="https://example.com" 
+                                    autocomplete="off" 
+                                    spellcheck="false"
+                                    required
+                                />
+                                <button type="button" id="tdClearBtn" class="td-clear-btn" title="Clear input">&times;</button>
+                            </div>
+                            <button type="submit" id="tdScanBtn" class="td-btn-scan">
+                                <span>Scan Website</span>
+                                <span>➔</span>
+                            </button>
+                            <button type="button" id="tdCatalogBtn" class="td-btn-secondary" title="View all 96 cataloged technologies" onclick="window.techDetector && window.techDetector.openCatalogModal()">
+                                <span>📚 96 Tech Catalog</span>
+                            </button>
+                        </div>
+                    </form>
+                    <div id="tdStatusLine" style="display:none;"></div>
+                </div>
+
+                <!-- RESULTS AREA (Hidden until scan completed) -->
+                <div id="tdResultsContainer" style="display:none;">
+                    <!-- PRIMARY CLASSIFICATION HERO -->
+                    <div class="td-primary-card" id="tdPrimaryCard">
+                        <div class="td-primary-header">
+                            <div>
+                                <div class="td-primary-category" id="tdPrimaryCategory">CMS Platforms</div>
+                                <h3 class="td-primary-title" id="tdPrimaryTitle">WordPress Detected</h3>
+                            </div>
+                            <div>
+                                <span class="td-pill td-pill-strong" id="tdPrimaryPill">Strong Evidence</span>
+                            </div>
+                        </div>
+                        <div class="td-primary-summary" id="tdPrimarySummary">
+                            The website displays confirmed signatures of WordPress.
+                        </div>
+
+                        <!-- CUSTOM-DEVELOPED WEBSITE ASSESSMENT CALLOUT -->
+                        <div class="td-assessment-box">
+                            <div class="td-assessment-label">Architecture Assessment</div>
+                            <p class="td-assessment-text" id="tdAssessmentText">
+                                No recognized CMS signature was detected from the available evidence. This website may be custom-developed, use a headless or less common CMS, or conceal its technology indicators.
+                            </p>
+                        </div>
+
+                        <!-- METADATA & SECURITY HEADERS GRID -->
+                        <div class="td-meta-grid">
+                            <div class="td-meta-item">
+                                <div class="td-meta-label">Submitted Target</div>
+                                <div class="td-meta-value" id="tdMetaSubmitted">-</div>
+                            </div>
+                            <div class="td-meta-item">
+                                <div class="td-meta-label">Final Destination URL</div>
+                                <div class="td-meta-value" id="tdMetaFinal">-</div>
+                            </div>
+                            <div class="td-meta-item">
+                                <div class="td-meta-label">HTTP Status</div>
+                                <div class="td-meta-value" id="tdMetaStatus">-</div>
+                            </div>
+                            <div class="td-meta-item">
+                                <div class="td-meta-label">Security &amp; SSL</div>
+                                <div class="td-meta-value" id="tdMetaHttps">-</div>
+                            </div>
+                            <div class="td-meta-item">
+                                <div class="td-meta-label">Scanned At</div>
+                                <div class="td-meta-value" id="tdMetaTimestamp">-</div>
+                            </div>
+                            <div class="td-meta-item">
+                                <div class="td-meta-label">Total Detected</div>
+                                <div class="td-meta-value" id="tdMetaCount">0 Technologies</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ACTION CONTROLS BAR -->
+                    <div class="td-action-bar">
+                        <button type="button" class="td-btn-secondary" onclick="window.techDetector && window.techDetector.exportScan('json')">
+                            <span>📥 Export Full JSON</span>
+                        </button>
+                        <button type="button" class="td-btn-secondary" onclick="window.techDetector && window.techDetector.exportScan('csv')">
+                            <span>📊 Export Findings CSV</span>
+                        </button>
+                        <button type="button" class="td-btn-secondary" onclick="window.techDetector && window.techDetector.copySummary()">
+                            <span id="tdCopyIcon">📋</span> <span id="tdCopyText">Copy Summary</span>
+                        </button>
+                        <button type="button" class="td-btn-secondary" onclick="window.techDetector && window.techDetector.resetScan()">
+                            <span>🔄 Scan Another Website</span>
+                        </button>
+                    </div>
+
+                    <!-- CATEGORY FILTER TABS -->
+                    <div class="td-tabs-bar">
+                        <button type="button" class="td-tab-btn active" id="tdTabDetected" onclick="window.techDetector && window.techDetector.switchTab('detected')">
+                            Detected Technologies (<span id="tdTabDetectedCount">0</span>)
+                        </button>
+                        <button type="button" class="td-tab-btn" id="tdTabAll" onclick="window.techDetector && window.techDetector.switchTab('all')">
+                            All Evaluated Catalog (96 entries)
+                        </button>
+                    </div>
+
+                    <!-- FINDINGS LIST (Dynamic) -->
+                    <div id="tdFindingsList" class="td-findings-list">
+                        <!-- Injected dynamically -->
+                    </div>
+
+                    <!-- SECURITY HEADERS SUMMARY -->
+                    <div style="margin-top:36px;">
+                        <h4 class="td-section-title" style="margin-bottom:14px;">
+                            <span>🛡️</span> Observed Security Headers
+                        </h4>
+                        <div class="td-security-grid" id="tdSecurityGrid">
+                            <!-- Injected dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- SCAN LIMITATIONS DISCLAIMER -->
+                    <div style="margin-top:36px; padding:18px 22px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px;">
+                        <div style="font-weight:800; font-size:13px; color:#475569; text-transform:uppercase; margin-bottom:8px;">
+                            Diagnostic Limitations &amp; Uncertainty Disclosures
+                        </div>
+                        <ul id="tdLimitationsList" style="margin:0; padding-left:20px; font-size:12px; color:#64748B; line-height:1.6;">
+                            <!-- Injected dynamically -->
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- RECENT HISTORY PANEL -->
+                <div class="td-history-card" id="tdHistoryCard">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h4 class="td-section-title">
+                            <span>📜</span> Recent Scans History (Current Administrator)
+                        </h4>
+                        <button type="button" class="td-btn-secondary" style="padding:6px 12px; font-size:12px;" onclick="window.techDetector && window.techDetector.loadHistory()">
+                            Refresh History
+                        </button>
+                    </div>
+                    <div id="tdHistoryBody" style="margin-top:12px;">
+                        <div style="color:var(--text-muted); font-size:13px;">No scans recorded in this session.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 96 TECH CATALOG MODAL -->
+            <div id="tdCatalogModal" class="td-catalog-modal" style="display:none;">
+                <div class="td-catalog-box">
+                    <div class="td-catalog-header">
+                        <div>
+                            <h3 style="margin:0; font-size:18px; font-weight:800;">Technology Detection Catalog (96 Entries)</h3>
+                            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+                                Comprehensive detection signatures covering CMS platforms, builders, frameworks, and web architectures.
+                            </div>
+                        </div>
+                        <button type="button" class="modal-close" onclick="window.techDetector && window.techDetector.closeCatalogModal()">&times;</button>
+                    </div>
+                    <div style="padding:12px 24px; border-bottom:1px solid var(--border); background:#F8FAFC;">
+                        <input 
+                            type="text" 
+                            id="tdCatalogSearch" 
+                            class="td-url-input" 
+                            placeholder="Search all 96 technologies or categories..." 
+                            style="padding:8px 14px; font-size:13px;"
+                            oninput="window.techDetector && window.techDetector.filterCatalog(this.value)"
+                        />
+                    </div>
+                    <div class="td-catalog-body" id="tdCatalogBody">
+                        <div style="text-align:center; padding:30px; color:var(--text-muted);">Loading catalog...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: ACCESS RESTRICTED -->
+        <div id="viewAccessRestricted" class="admin-view">
+            <div class="access-restricted-card">
+                <div class="access-restricted-icon">🔒</div>
+                <h2 style="margin:0 0 8px 0; font-size:22px;">Access Restricted</h2>
+                <p style="color:var(--text-muted); font-size:14px; margin-bottom:24px;">
+                    You do not have permission to access this section. Please contact your Super Administrator if you need access to this resource.
+                </p>
+                <button class="btn btn-primary" onclick="app.navigate('dashboard')">Back to Dashboard</button>
+            </div>
+        </div>
+    </main>
+</div>
+
+
+<!-- MODAL: ADD / EDIT CLIENT -->
+<div id="clientModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="clientModalTitle">Add New Client</h2>
+            <button class="modal-close" onclick="app.closeClientModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Client / Contact Name *</label>
+                <input id="modalClientName" class="form-input" type="text" placeholder="e.g. John Doe">
+            </div>
+            <div class="form-group">
+                <label>Company Name</label>
+                <input id="modalCompany" class="form-input" type="text" placeholder="e.g. Acme Corporation">
+            </div>
+            <div class="form-group">
+                <label>Website URL</label>
+                <input id="modalTargetUrl" class="form-input" type="url" placeholder="https://example.com">
+            </div>
+            <div class="form-group">
+                <label>Email Address</label>
+                <input id="modalEmail" class="form-input" type="email" placeholder="client@example.com">
+            </div>
+            <div class="form-group">
+                <label>WhatsApp / Phone Number</label>
+                <input id="modalPhone" class="form-input" type="text" placeholder="e.g. 0710690715">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="app.closeClientModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="app.saveClient()">Save Client</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: REPORT PREVIEW (IFRAME) -->
+<div id="previewModal" class="modal-overlay hidden">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <div>
+                <h2 id="previewModalTitle">Client Report Preview</h2>
+                <div style="font-size:12px; color:var(--text-muted);">Exact view rendered for the client. No admin tools or controls are exposed.</div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-success btn-sm" id="previewDownloadPdfBtn" onclick="app.downloadPreviewPdf()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Client PDF (2-3 Pages)</button>
+                <button class="btn btn-secondary btn-sm" id="previewCopyLinkBtn" onclick="app.copyPreviewLink()">Copy Link</button>
+                <button class="btn btn-primary btn-sm" id="previewOpenNewTabBtn" onclick="app.openPreviewTab()">Open in New Tab</button>
+                <button class="modal-close" onclick="app.closePreviewModal()" style="margin-left:12px;">&times;</button>
+            </div>
+        </div>
+        <div class="modal-body" style="padding:0; flex:1;">
+            <div class="preview-iframe-wrap">
+                <iframe id="previewIframe" src="about:blank"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: LEAD DETAIL & CONVERSION -->
+<div id="leadDetailModal" class="modal-overlay hidden">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <div>
+                <h2 id="leadModalTitle" style="margin:0 0 4px 0;">SEO Lead Profile</h2>
+                <div style="font-size:12px; color:var(--text-muted);">Lead inquiry details, conversion actions, and timeline</div>
+            </div>
+            <button class="modal-close" onclick="app.closeLeadDetailModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px;">
+            <div id="leadDetailContent">
+                <!-- Rendered dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ADMIN LOGIN OVERLAY SCREEN -->
+<div id="adminLoginScreen" class="admin-login-overlay" style="display:none;">
+    <div class="login-card">
+        <div class="login-header">
+            <img src="/static/assets/esupport-logo.png" alt="eSupport Logo" class="login-logo" style="height:48px; width:auto; object-fit:contain; margin-bottom:12px;">
+            <h2 class="login-title" style="margin:0 0 4px 0; font-size:22px; font-weight:800; color:var(--text);">eSupport SEO</h2>
+            <div class="login-subtitle" style="font-size:13px; color:var(--text-muted); font-weight:500;">Admin &amp; Management Portal</div>
+        </div>
+        <form id="adminLoginForm" onsubmit="app.handleLogin(event)" style="margin-top:24px;">
+            <div id="loginAlertBox" style="display:none;"></div>
+            <div class="form-group" style="margin-bottom:16px;">
+                <label style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Admin Email</label>
+                <input id="loginEmail" class="form-input" type="email" required autocomplete="username" placeholder="prasad@esupport.live" value="prasad@esupport.live" style="width:100%; box-sizing:border-box;">
+            </div>
+            <div class="form-group" style="margin-bottom:20px;">
+                <label style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Password</label>
+                <input id="loginPassword" class="form-input" type="password" required autocomplete="current-password" placeholder="••••••••••••" style="width:100%; box-sizing:border-box;">
+            </div>
+            <button id="loginSubmitBtn" type="submit" class="btn btn-primary" style="width:100%; padding:12px; font-size:14px; font-weight:700; justify-content:center; display:flex;">
+                <span>Sign In to Admin Portal</span>
+            </button>
+            <div style="margin-top:16px; text-align:center; font-size:11px; color:var(--text-muted);">
+                Protected by Argon2id password hashing and brute-force lockout.
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: INVITE TEAM MEMBER -->
+<div id="inviteUserModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="inviteModalTitle">Invite Team Member</h2>
+            <button class="modal-close" onclick="app.closeInviteUserModal()">&times;</button>
+        </div>
+        <form onsubmit="app.handleInviteUser(event)">
+            <div class="modal-body">
+                <div id="inviteAlertBox" style="display:none; margin-bottom:12px;"></div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>Full Name *</label>
+                    <input id="inviteNameInput" class="form-input" type="text" required placeholder="e.g. Sarah Jenkins">
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>Work Email Address *</label>
+                    <input id="inviteEmailInput" class="form-input" type="email" required placeholder="name@esupport.live">
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>Assigned Role *</label>
+                    <select id="inviteRoleSelect" class="form-select" onchange="app.handleInviteRoleChange()">
+                        <option value="ADMIN">ADMIN — Operational Administrator</option>
+                        <option value="SALES" selected>SALES — Leads, Pipeline &amp; Client Outreach</option>
+                        <option value="SEO_ANALYST">SEO ANALYST — Audits &amp; Technical Analysis</option>
+                        <option value="SUPER_ADMIN">SUPER ADMIN — Full Platform Administration</option>
+                    </select>
+                    <div id="inviteRoleHelp" style="font-size:12px; color:var(--text-muted); margin-top:6px; line-height:1.4;"></div>
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>How will they get access? *</label>
+                    <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; font-weight:400; margin-top:6px; cursor:pointer;">
+                        <input type="radio" name="inviteAccessMode" value="password" checked onchange="app.handleInviteModeChange()" style="margin-top:3px;">
+                        <span><b>Set a password now</b> — the account works immediately. You send them the email and password.</span>
+                    </label>
+                    <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; font-weight:400; margin-top:6px; cursor:pointer;">
+                        <input type="radio" name="inviteAccessMode" value="invite" onchange="app.handleInviteModeChange()" style="margin-top:3px;">
+                        <span><b>Send an invitation link</b> — they open the link and choose their own password (valid 48 hours).</span>
+                    </label>
+                </div>
+                <div class="form-group" id="invitePasswordWrap" style="margin-bottom:14px;">
+                    <label>Password for this member * <small style="font-weight:400; color:var(--text-muted);">(min. 8 characters)</small></label>
+                    <div style="display:flex; gap:8px;">
+                        <input id="invitePasswordInput" class="form-input" type="text" minlength="8" autocomplete="new-password" style="flex:1;">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="app.generateInvitePassword()">Generate</button>
+                    </div>
+                </div>
+                <div id="superAdminConfirmWrap" class="form-group hidden" style="background:#FEF2F2; padding:12px; border-radius:8px; border:1px solid #FECACA; margin-bottom:14px;">
+                    <label style="display:flex; align-items:center; gap:8px; color:#DC2626; font-weight:700; font-size:12px; cursor:pointer;">
+                        <input type="checkbox" id="inviteConfirmSuperAdmin">
+                        I confirm granting full unrestricted Super Admin privileges to this user.
+                    </label>
+                </div>
+
+                <div id="inviteSuccessBanner" class="invite-link-banner hidden">
+                    <div id="inviteSuccessTitle" style="font-weight:700; color:#059669; font-size:13px;">✓ Invitation Created Successfully!</div>
+                    <div id="inviteSuccessHint" style="font-size:12px; color:#065F46; margin-top:4px;">Share this one-time activation link with the team member:</div>
+                    <div class="invite-link-box">
+                        <textarea id="inviteLinkBoxInput" class="invite-link-input" readonly rows="3" style="resize:none; font-family:inherit;"></textarea>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="app.copyInviteLink()">Copy</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="app.closeInviteUserModal()">Close</button>
+                <button type="submit" class="btn btn-primary" id="sendInviteBtn">Create Invitation</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: CHANGE ROLE -->
+<div id="changeRoleModal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Change Team Member Role</h2>
+            <button class="modal-close" onclick="app.closeChangeRoleModal()">&times;</button>
+        </div>
+        <form onsubmit="app.handleChangeRoleSubmit(event)">
+            <div class="modal-body">
+                <div id="changeRoleAlertBox" style="display:none; margin-bottom:12px;"></div>
+                <input type="hidden" id="changeRoleUserId">
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>Team Member</label>
+                    <input id="changeRoleUserName" class="form-input" readonly disabled style="background:#F1F5F9;">
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label>Select New Role</label>
+                    <select id="changeRoleSelect" class="form-select" onchange="app.handleChangeRoleRoleChange()">
+                        <option value="ADMIN">ADMIN — Operational Administrator</option>
+                        <option value="SALES">SALES — Leads &amp; Client Outreach</option>
+                        <option value="SEO_ANALYST">SEO ANALYST — Audits &amp; Technical Analysis</option>
+                        <option value="SUPER_ADMIN">SUPER ADMIN — Full Platform Administration</option>
+                    </select>
+                </div>
+                <div id="changeRoleSuperAdminConfirmWrap" class="form-group hidden" style="background:#FEF2F2; padding:12px; border-radius:8px; border:1px solid #FECACA; margin-bottom:14px;">
+                    <label style="display:flex; align-items:center; gap:8px; color:#DC2626; font-weight:700; font-size:12px; cursor:pointer;">
+                        <input type="checkbox" id="changeRoleConfirmSuperAdmin">
+                        I confirm promoting this user to full Super Administrator.
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="app.closeChangeRoleModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="saveRoleBtn">Save Role</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ACCEPT INVITATION OVERLAY SCREEN -->
+<div id="acceptInviteScreen" class="admin-login-overlay" style="display:none;">
+    <div class="login-card" style="max-width:440px;">
+        <div class="login-header">
+            <img src="/static/assets/esupport-logo.png" alt="eSupport Logo" class="login-logo" style="height:48px; width:auto; object-fit:contain; margin-bottom:12px;">
+            <h2 class="login-title" style="margin:0 0 4px 0; font-size:22px; font-weight:800; color:var(--text);">Welcome to eSupport SEO</h2>
+            <div class="login-subtitle" style="font-size:13px; color:var(--text-muted); font-weight:500;">Complete your team account activation</div>
+        </div>
+        <div id="acceptInviteInfoBanner" style="margin-top:16px; padding:12px; background:#F8FAFC; border:1px solid var(--border); border-radius:10px; font-size:13px; text-align:left;">
+            <div>Invited Email: <b id="acceptInviteEmailText">-</b></div>
+            <div style="margin-top:4px;">Assigned Role: <span id="acceptInviteRoleBadge" class="role-badge role-admin">ADMIN</span></div>
+        </div>
+        <form id="acceptInviteForm" onsubmit="app.handleAcceptInvite(event)" style="margin-top:20px; text-align:left;">
+            <div id="acceptInviteAlertBox" style="display:none; margin-bottom:14px;"></div>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Your Full Name *</label>
+                <input id="acceptInviteNameInput" class="form-input" type="text" required placeholder="e.g. John Doe" style="width:100%; box-sizing:border-box;">
+            </div>
+            <div class="form-group" style="margin-bottom:14px;">
+                <label style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Create Password (min 8 chars) *</label>
+                <input id="acceptInvitePasswordInput" class="form-input" type="password" required minlength="8" placeholder="••••••••••••" style="width:100%; box-sizing:border-box;">
+            </div>
+            <div class="form-group" style="margin-bottom:20px;">
+                <label style="display:block; font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Confirm Password *</label>
+                <input id="acceptInviteConfirmInput" class="form-input" type="password" required minlength="8" placeholder="••••••••••••" style="width:100%; box-sizing:border-box;">
+            </div>
+            <button id="acceptInviteSubmitBtn" type="submit" class="btn btn-primary" style="width:100%; padding:12px; font-size:14px; font-weight:700; justify-content:center; display:flex;">
+                <span>Activate Account &amp; Sign In</span>
+            </button>
+            <div style="margin-top:16px; text-align:center; font-size:11px; color:var(--text-muted);">
+                Single-use secure token. Passwords hashed using Argon2id.
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="/static/app.js?v=10.4.3"></script>
+<script src="/static/tech_detector.js?v=10.4.3"></script>
+
+</body>
+</html>

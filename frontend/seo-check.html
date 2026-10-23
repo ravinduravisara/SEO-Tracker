@@ -1,0 +1,3445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free Website SEO Score Checker | eSupport</title>
+    <meta name="description" content="Check your website SEO score with eSupport's website SEO checker and discover your overall SEO performance.">
+    <link rel="canonical" href="https://esupport.live/seo-check">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://esupport.live/seo-check">
+    <meta property="og:title" content="Free Website SEO Score Checker | eSupport">
+    <meta property="og:description" content="Check your website SEO score with eSupport's website SEO checker and discover your overall SEO performance.">
+    <meta property="og:image" content="/static/assets/esupport-logo.png">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Free Website SEO Score Checker | eSupport">
+    <meta name="twitter:description" content="Check your website SEO score with eSupport's website SEO checker and discover your overall SEO performance.">
+    <meta name="twitter:image" content="/static/assets/esupport-logo.png">
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/assets/favicon-32x32.png?v=3">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/assets/favicon-16x16.png?v=3">
+    <link rel="shortcut icon" href="/favicon.ico?v=3">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #2563EB;
+            --primary-hover: #1D4ED8;
+            --secondary: #06B6D4;
+            --success: #10B981;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+            --bg: #F8FAFC;
+            --card-bg: #FFFFFF;
+            --text: #0F172A;
+            --text-muted: #64748B;
+            --border: #E2E8F0;
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 8px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 10px 30px -5px rgba(37, 99, 235, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: var(--font);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        a {
+            color: var(--primary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        a:hover {
+            color: var(--primary-hover);
+        }
+
+        /* Container */
+        .container {
+            max-width: 1140px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header Navigation */
+        .site-header {
+            background: #FFFFFF;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 72px;
+        }
+
+        .brand-logo-wrap {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--text);
+        }
+
+        .brand-logo-img {
+            height: 40px;
+            width: auto;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+
+        .brand-text-name {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+        }
+
+        .brand-text-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 28px;
+            list-style: none;
+        }
+
+        .nav-link {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: color 0.2s;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--primary);
+        }
+
+        .btn-header-cta {
+            background: var(--primary);
+            color: white;
+            font-size: 14px;
+            font-weight: 700;
+            padding: 10px 20px;
+            border-radius: var(--radius-sm);
+            transition: background 0.2s, transform 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-header-cta:hover {
+            background: var(--primary-hover);
+            color: white;
+            transform: translateY(-1px);
+        }
+
+        .hamburger-btn {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--text);
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        /* Hero Section */
+        .hero-section {
+            padding: 70px 0 60px;
+            text-align: center;
+            background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #EFF6FF;
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 700;
+            padding: 6px 16px;
+            border-radius: 999px;
+            border: 1px solid #DBEAFE;
+            margin-bottom: 20px;
+        }
+
+        .hero-title {
+            font-size: 46px;
+            font-weight: 900;
+            letter-spacing: -1.5px;
+            line-height: 1.15;
+            color: var(--text);
+            max-width: 800px;
+            margin: 0 auto 16px;
+        }
+
+        .hero-subtitle {
+            font-size: 18px;
+            color: var(--text-muted);
+            max-width: 620px;
+            margin: 0 auto 36px;
+            line-height: 1.5;
+        }
+
+        /* Checker Input Form */
+        .checker-box-wrap {
+            max-width: 720px;
+            margin: 0 auto;
+            background: #FFFFFF;
+            padding: 8px 10px;
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.06);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: border-color 0.2s, box-shadow 0.2s, max-width 0.25s ease;
+        }
+
+        .checker-box-wrap:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+        }
+
+        .url-input-field {
+            flex: 1;
+            border: none;
+            outline: none;
+            padding: 14px 18px;
+            font-size: 16px;
+            font-family: var(--font);
+            color: var(--text);
+            background: transparent;
+            min-width: 180px;
+        }
+
+        .url-input-field::placeholder {
+            color: #94A3B8;
+        }
+
+        .checker-btn-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .btn-check-submit {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            font-size: 15px;
+            font-weight: 700;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font);
+        }
+
+        .btn-check-submit:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-check-submit:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .checker-box-wrap.has-new-audit {
+            max-width: 780px;
+        }
+
+        .btn-new-audit-hero {
+            background: #F8FAFC;
+            color: #334155;
+            border: 1.5px solid #CBD5E1;
+            padding: 13px 18px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            white-space: nowrap;
+            display: none;
+            align-items: center;
+            gap: 7px;
+            font-family: var(--font);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+            animation: newAuditPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .btn-new-audit-hero:hover {
+            background: #EFF6FF;
+            color: var(--primary);
+            border-color: #93C5FD;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+        }
+
+        @keyframes newAuditPop {
+            0% {
+                opacity: 0;
+                transform: scale(0.9) translateY(4px);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .hero-support-text {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 14px;
+        }
+
+        .input-error-msg {
+            color: var(--danger);
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 10px;
+            display: none;
+        }
+
+        /* Scanning State Section with Animated Pie Chart */
+        .scan-state-section {
+            display: none;
+            max-width: 660px;
+            margin: 36px auto 0;
+            background: #FFFFFF;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 38px 28px;
+            text-align: center;
+            box-shadow: 0 16px 40px -10px rgba(37, 99, 235, 0.1), 0 4px 12px rgba(0, 0, 0, 0.03);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .scan-state-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #2563EB, #06B6D4, #10B981);
+        }
+
+        /* Pie Chart Visual Container */
+        .scan-pie-container {
+            position: relative;
+            width: 170px;
+            height: 170px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .scan-pie-glow {
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(37, 99, 235, 0.14) 0%, rgba(6, 182, 212, 0.05) 55%, transparent 70%);
+            animation: piePulse 2.4s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes piePulse {
+            0%, 100% { transform: scale(0.95); opacity: 0.6; }
+            50% { transform: scale(1.06); opacity: 1; }
+        }
+
+        .scan-pie-slice {
+            position: absolute;
+            width: 132px;
+            height: 132px;
+            border-radius: 50%;
+            background: conic-gradient(from -90deg, rgba(37, 99, 235, 0.12) var(--scan-angle, 0deg), transparent var(--scan-angle, 0deg));
+            pointer-events: none;
+        }
+
+        .scan-pie-svg {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .scan-pie-bg {
+            fill: none;
+            stroke: #F1F5F9;
+            stroke-width: 11;
+        }
+
+        .scan-pie-fill {
+            fill: none;
+            stroke: url(#scanPieGrad);
+            stroke-width: 11;
+            stroke-linecap: round;
+            stroke-dasharray: 414.7;
+            stroke-dashoffset: 414.7;
+            transition: stroke-dashoffset 0.12s linear;
+        }
+
+        .scan-pie-center {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .scan-pie-pct-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .scan-pie-pct-num {
+            font-size: 44px;
+            font-weight: 900;
+            letter-spacing: -2px;
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .scan-pie-pct-sign {
+            font-size: 19px;
+            font-weight: 800;
+            color: var(--primary);
+            margin-left: 2px;
+        }
+
+        .scan-pie-status-pill {
+            margin-top: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--primary);
+            background: #EFF6FF;
+            border: 1px solid #DBEAFE;
+            padding: 2px 9px;
+            border-radius: 999px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+
+        .scan-pulse-dot {
+            width: 6px;
+            height: 6px;
+            background-color: var(--primary);
+            border-radius: 50%;
+            display: inline-block;
+            animation: blinkDot 1.2s infinite ease-in-out;
+        }
+
+        @keyframes blinkDot {
+            0%, 100% { opacity: 0.3; transform: scale(0.85); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+
+        .scan-state-phase {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: var(--primary);
+            background: #EFF6FF;
+            border: 1px solid #DBEAFE;
+            padding: 4px 14px;
+            border-radius: 999px;
+            margin-bottom: 10px;
+        }
+
+        .scan-state-msg {
+            font-size: 21px;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 6px;
+            letter-spacing: -0.5px;
+        }
+
+        .scan-state-sub {
+            font-size: 14px;
+            color: var(--text-muted);
+            max-width: 500px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+
+        /* 4-Step Pipeline */
+        .scan-milestones-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid #F1F5F9;
+            text-align: left;
+        }
+
+        .scan-step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            transition: all 0.25s ease;
+        }
+
+        .scan-step-icon {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            flex-shrink: 0;
+            background: #E2E8F0;
+            color: #64748B;
+            transition: all 0.25s;
+        }
+
+        .scan-step-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .scan-step-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .scan-step-desc {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .scan-step-badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+
+        .scan-step.pending .scan-step-badge {
+            color: #94A3B8;
+            background: #F1F5F9;
+        }
+
+        .scan-step.active {
+            background: #EFF6FF;
+            border-color: #BFDBFE;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+        }
+        .scan-step.active .scan-step-icon {
+            background: var(--primary);
+            color: white;
+        }
+        .scan-step.active .scan-step-title {
+            color: var(--primary);
+        }
+        .scan-step.active .scan-step-badge {
+            color: var(--primary);
+            background: #DBEAFE;
+        }
+
+        .scan-step.done {
+            background: #F0FDF4;
+            border-color: #BBF7D0;
+        }
+        .scan-step.done .scan-step-icon {
+            background: #10B981;
+            color: white;
+        }
+        .scan-step.done .scan-step-title {
+            color: #065F46;
+        }
+        .scan-step.done .scan-step-badge {
+            color: #059669;
+            background: #DCFCE7;
+        }
+
+        .scan-step-spin {
+            width: 11px;
+            height: 11px;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-top-color: white;
+            border-radius: 50%;
+            display: inline-block;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @media (max-width: 600px) {
+            .scan-milestones-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Result Section */
+        .result-section {
+            display: none;
+            padding: 50px 0 70px;
+        }
+
+        .result-card-main {
+            background: #FFFFFF;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 48px 36px;
+            text-align: center;
+            box-shadow: var(--shadow-md);
+            margin-bottom: 40px;
+        }
+
+        .result-header-label {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--primary);
+            background: #EFF6FF;
+            border: 1px solid #DBEAFE;
+            padding: 4px 14px;
+            border-radius: 999px;
+            margin-bottom: 12px;
+        }
+
+        .result-domain-title {
+            font-size: 30px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: var(--text);
+            margin-bottom: 6px;
+            word-break: break-all;
+        }
+
+        .result-meta-date {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 28px;
+        }
+
+        /* Large Circular Score */
+        @keyframes heroGlowPulse {
+            0% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.65; }
+            50% { transform: translate(-50%, -50%) scale(1.08); opacity: 0.95; }
+            100% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.65; }
+        }
+
+        .score-circle-container {
+            position: relative;
+            width: 210px;
+            height: 210px;
+            margin: 0 auto 20px;
+            filter: drop-shadow(0 10px 25px rgba(37, 99, 235, 0.16));
+        }
+
+        .score-circle-aura {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 320px;
+            height: 320px;
+            background: radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, rgba(6, 182, 212, 0.08) 45%, transparent 70%);
+            filter: blur(40px);
+            pointer-events: none;
+            z-index: 0;
+            animation: heroGlowPulse 5s ease-in-out infinite;
+        }
+
+        .score-svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .score-svg-bg {
+            fill: none;
+            stroke: #F1F5F9;
+            stroke-width: 10;
+        }
+
+        .score-svg-fill {
+            fill: none;
+            stroke-width: 10;
+            stroke-linecap: round;
+            stroke-dasharray: 282.74;
+            stroke-dashoffset: 282.74;
+            transition: stroke-dashoffset 1.6s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.5s ease;
+            filter: drop-shadow(0 0 10px rgba(37, 99, 235, 0.35));
+        }
+
+        .score-center-wrap {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+        }
+
+        .score-big-num {
+            font-size: 56px;
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -2px;
+            color: var(--text);
+        }
+
+        .score-fraction {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+
+        .score-status-pill {
+            display: inline-block;
+            font-size: 14px;
+            font-weight: 800;
+            padding: 6px 18px;
+            border-radius: 999px;
+            margin-bottom: 16px;
+        }
+
+        .result-summary-text {
+            font-size: 16px;
+            color: var(--text);
+            max-width: 640px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+
+        /* Result Action Buttons & Quick Audit Bar */
+        .result-actions-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 14px;
+            margin-top: 28px;
+            flex-wrap: wrap;
+        }
+
+        .btn-check-another {
+            background: #FFFFFF;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+            padding: 13px 26px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+            font-family: var(--font);
+            text-decoration: none;
+        }
+
+        .btn-check-another:hover {
+            background: #EFF6FF;
+            border-color: var(--primary-hover);
+            color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.16);
+        }
+
+        .btn-res-lead-cta {
+            background: var(--primary);
+            color: white;
+            border: 2px solid var(--primary);
+            padding: 13px 26px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+            font-family: var(--font);
+        }
+
+        .btn-res-lead-cta:hover {
+            background: var(--primary-hover);
+            border-color: var(--primary-hover);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+
+        /* Pulse highlight animation for hero box */
+        @keyframes pulseInputGlow {
+            0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); border-color: var(--primary); }
+            50% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0.18); border-color: var(--primary); }
+            100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        }
+
+        .pulse-highlight {
+            animation: pulseInputGlow 1.5s ease-out;
+        }
+
+        /* 8 Category Cards Grid */
+        .categories-section-head {
+            margin-bottom: 24px;
+        }
+
+        .categories-section-head h3 {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 4px;
+        }
+
+        .categories-section-head p {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .category-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+            margin-bottom: 48px;
+        }
+
+        .cat-card {
+            background: #FFFFFF;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 22px 18px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .cat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.05);
+        }
+
+        .cat-ring-wrap {
+            position: relative;
+            width: 76px;
+            height: 76px;
+            margin-bottom: 14px;
+        }
+
+        .cat-ring-svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+        }
+
+        .cat-ring-bg {
+            fill: none;
+            stroke: #F1F5F9;
+            stroke-width: 8;
+        }
+
+        .cat-ring-fill {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+            stroke-dasharray: 219.9;
+            stroke-dashoffset: 219.9;
+            transition: stroke-dashoffset 1.2s ease-out;
+        }
+
+        .cat-ring-val {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .cat-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        .cat-status-badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 999px;
+            margin-bottom: 8px;
+            display: inline-block;
+        }
+
+        .cat-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        /* Lead Conversion Banner */
+        .lead-cta-banner {
+            background: linear-gradient(135deg, #1E3A8A 0%, #1E40AF 50%, #2563EB 100%);
+            border-radius: 24px;
+            padding: 48px 36px;
+            color: white;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+            margin-bottom: 48px;
+        }
+
+        .lead-cta-banner h2 {
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+            margin-bottom: 12px;
+        }
+
+        .lead-cta-banner p {
+            font-size: 16px;
+            color: #DBEAFE;
+            max-width: 600px;
+            margin: 0 auto 32px;
+            line-height: 1.5;
+        }
+
+        .lead-cta-btns {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn-lead-whatsapp {
+            background: #25D366;
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            padding: 16px 28px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 14px rgba(37, 211, 102, 0.35);
+            transition: transform 0.2s, filter 0.2s;
+        }
+
+        .btn-lead-whatsapp:hover {
+            color: white;
+            transform: translateY(-2px);
+            filter: brightness(1.05);
+        }
+
+        .btn-lead-analysis {
+            background: white;
+            color: #1E3A8A;
+            font-size: 16px;
+            font-weight: 700;
+            padding: 16px 28px;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-lead-analysis:hover {
+            background: #F8FAFC;
+            transform: translateY(-2px);
+        }
+
+        .cta-email-helper {
+            font-size: 13px;
+            color: #BFDBFE;
+            margin-top: 18px;
+        }
+
+        .cta-email-helper a {
+            color: white;
+            text-decoration: underline;
+            font-weight: 600;
+        }
+
+        /* How It Works & Why eSupport Sections */
+        .info-section {
+            padding: 60px 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .section-center-head {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .section-center-head h2 {
+            font-size: 30px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+        }
+
+        .section-center-head p {
+            font-size: 16px;
+            color: var(--text-muted);
+            max-width: 580px;
+            margin: 0 auto;
+        }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .step-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 32px 24px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .step-badge {
+            width: 44px;
+            height: 44px;
+            background: #EFF6FF;
+            color: var(--primary);
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            font-weight: 900;
+            font-size: 18px;
+            margin: 0 auto 18px;
+        }
+
+        .step-card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .step-card p {
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* Why eSupport Features */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .feature-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 28px 24px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .feature-icon {
+            font-size: 28px;
+            margin-bottom: 14px;
+            display: inline-block;
+        }
+
+        .feature-card h3 {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .feature-card p {
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* Modal: Request Full SEO Analysis */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            display: none;
+            place-items: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal-overlay.open {
+            display: grid;
+        }
+
+        .modal-window {
+            background: white;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 540px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+            animation: modalFadeIn 0.2s ease-out;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(12px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .modal-head {
+            padding: 24px 28px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-head h3 {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .modal-close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .modal-body {
+            padding: 28px;
+        }
+
+        .lead-form-group {
+            margin-bottom: 16px;
+        }
+
+        .lead-form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        .lead-form-input, .lead-form-textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: var(--font);
+            font-size: 14px;
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .lead-form-input:focus, .lead-form-textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+
+        .lead-form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .btn-submit-lead {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 700;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 8px;
+        }
+
+        .btn-submit-lead:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-submit-lead:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        .lead-status-alert {
+            display: none;
+            padding: 14px 18px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+
+        .lead-status-alert.success {
+            background: #ECFDF5;
+            border: 1px solid #A7F3D0;
+            color: #065F46;
+        }
+
+        .lead-status-alert.error {
+            background: #FEF2F2;
+            border: 1px solid #FECACA;
+            color: #991B1B;
+        }
+
+        /* =========================================================
+           LEADOS-STYLE STEP-BY-STEP INQUIRY & DIAGNOSIS SYSTEM
+           ========================================================= */
+
+        /* 1. What's holding your website back? (Diagnosis Card) */
+        .lead-diagnosis-section {
+            margin: 36px 0 44px;
+        }
+
+        .lead-diagnosis-card {
+            background: #FFFFFF;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 32px 36px;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .lead-diagnosis-badge-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .lead-diagnosis-badge {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #FEE2E2;
+            color: #DC2626;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .lead-diagnosis-headline {
+            font-size: 15px;
+            font-weight: 700;
+            color: #DC2626;
+            margin: 0;
+        }
+
+        .lead-diagnosis-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--text);
+            margin: 4px 0 6px;
+            letter-spacing: -0.5px;
+        }
+
+        .lead-diagnosis-subtitle {
+            font-size: 14.5px;
+            color: var(--text-muted);
+            margin: 0 0 24px;
+        }
+
+        .lead-keyword-box {
+            background: #FFF5F5;
+            border: 1px solid #FEE2E2;
+            border-radius: 16px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+        }
+
+        .lead-keyword-header-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #94A3B8;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #FEE2E2;
+            margin-bottom: 12px;
+        }
+
+        .lead-keyword-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 9px 0;
+            border-bottom: 1px dashed rgba(254, 202, 202, 0.6);
+            font-size: 14px;
+        }
+
+        .lead-keyword-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .lead-keyword-name {
+            font-weight: 600;
+            color: #1E293B;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .lead-keyword-status {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #DC2626;
+            background: #FEF2F2;
+            padding: 3px 10px;
+            border-radius: 999px;
+            border: 1px solid #FECACA;
+        }
+
+        .lead-keyword-more {
+            margin-top: 14px;
+            font-size: 12.5px;
+            color: #64748B;
+            font-weight: 600;
+        }
+
+        .btn-see-how-fix {
+            width: 100%;
+            background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+            color: white;
+            border: none;
+            padding: 16px 24px;
+            font-size: 16px;
+            font-weight: 800;
+            border-radius: 999px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 10px 25px -4px rgba(99, 102, 241, 0.45);
+        }
+
+        .btn-see-how-fix:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 30px -4px rgba(99, 102, 241, 0.6);
+            background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%);
+        }
+
+        /* 2. Wizard Modal Styles */
+        .modal-wizard-window {
+            max-width: 520px;
+            background: #FFFFFF;
+            border-radius: 24px;
+            border: 1px solid #E2E8F0;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .wizard-header {
+            padding: 18px 24px 14px;
+            border-bottom: 1px solid #F1F5F9;
+            background: #FFFFFF;
+        }
+
+        .wizard-top-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .wizard-back-btn {
+            background: none;
+            border: none;
+            color: #64748B;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: all 0.15s;
+        }
+
+        .wizard-back-btn:hover {
+            color: #0F172A;
+            background: #F1F5F9;
+        }
+
+        .wizard-brand-tag {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 800;
+            font-size: 15px;
+            color: #0F172A;
+        }
+
+        .wizard-progress-track {
+            display: flex;
+            gap: 8px;
+            height: 4px;
+        }
+
+        .wizard-progress-seg {
+            flex: 1;
+            background: #E2E8F0;
+            border-radius: 999px;
+            transition: background 0.3s ease;
+        }
+
+        .wizard-progress-seg.active {
+            background: #6366F1;
+        }
+
+        .wizard-progress-seg.done {
+            background: #10B981;
+        }
+
+        .wizard-body {
+            padding: 24px 28px 32px;
+        }
+
+        .wizard-sparkle-icon {
+            font-size: 32px;
+            color: #6366F1;
+            text-align: center;
+            margin-bottom: 12px;
+            animation: pulse 2s infinite;
+        }
+
+        .wizard-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: #0F172A;
+            letter-spacing: -0.5px;
+            margin-bottom: 6px;
+            line-height: 1.25;
+        }
+
+        .wizard-subtitle {
+            font-size: 13.5px;
+            color: #64748B;
+            margin-bottom: 22px;
+            line-height: 1.45;
+        }
+
+        .text-center { text-align: center; }
+
+        .wizard-features-card {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .wizard-feat-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13.5px;
+            font-weight: 600;
+            color: #1E293B;
+        }
+
+        .feat-check {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #ECFDF5;
+            color: #10B981;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            border: 1px solid #A7F3D0;
+            flex-shrink: 0;
+        }
+
+        .btn-wizard-primary {
+            width: 100%;
+            background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            font-size: 15px;
+            font-weight: 800;
+            border-radius: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 8px 20px -3px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-wizard-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 25px -3px rgba(99, 102, 241, 0.55);
+            background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%);
+        }
+
+        .btn-wizard-primary:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .wizard-trust-badges {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 18px;
+            font-size: 11.5px;
+            color: #64748B;
+            font-weight: 600;
+            flex-wrap: wrap;
+        }
+
+        .wizard-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+
+        .wizard-field-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .wizard-field-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .wizard-label {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: #475569;
+            margin-bottom: 6px;
+        }
+
+        .wizard-input-wrap {
+            display: flex;
+            align-items: center;
+            background: #FFFFFF;
+            border: 1.5px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 0 12px;
+            transition: all 0.2s;
+        }
+
+        .wizard-input-wrap:focus-within {
+            border-color: #6366F1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .wizard-input-icon {
+            font-size: 14px;
+            margin-right: 8px;
+            color: #64748B;
+            flex-shrink: 0;
+        }
+
+        .wizard-input, .wizard-select {
+            width: 100%;
+            border: none;
+            background: transparent;
+            padding: 12px 0;
+            font-family: var(--font);
+            font-size: 14px;
+            font-weight: 600;
+            color: #0F172A;
+            outline: none;
+        }
+
+        .wizard-pills-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .wiz-pill {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: #FFFFFF;
+            border: 1.5px solid #E2E8F0;
+            border-radius: 12px;
+            font-size: 13.5px;
+            font-weight: 600;
+            color: #334155;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            user-select: none;
+        }
+
+        .wiz-pill:hover {
+            border-color: #CBD5E1;
+            background: #F8FAFC;
+        }
+
+        .wiz-pill.active {
+            border-color: #6366F1;
+            background: #EEF2FF;
+            color: #4338CA;
+        }
+
+        .wiz-pill-check {
+            font-size: 14px;
+            color: #94A3B8;
+        }
+
+        .wiz-pill.active .wiz-pill-check {
+            color: #6366F1;
+        }
+
+        .wizard-add-service-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .wizard-input-sm {
+            flex: 1;
+            padding: 9px 12px;
+            border: 1.5px solid #E2E8F0;
+            border-radius: 10px;
+            font-size: 13px;
+            font-family: var(--font);
+            outline: none;
+        }
+
+        .wizard-input-sm:focus {
+            border-color: #6366F1;
+        }
+
+        .btn-add-service {
+            padding: 8px 14px;
+            background: #F1F5F9;
+            border: 1px solid #E2E8F0;
+            border-radius: 10px;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-add-service:hover {
+            background: #E2E8F0;
+            color: #0F172A;
+        }
+
+        .wizard-privacy-note {
+            text-align: center;
+            font-size: 11px;
+            color: #64748B;
+            margin-top: 14px;
+        }
+
+        .btn-whatsapp-direct {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            background: #25D366;
+            color: white !important;
+            padding: 14px 20px;
+            font-size: 15px;
+            font-weight: 800;
+            border-radius: 14px;
+            text-decoration: none;
+            box-shadow: 0 8px 20px rgba(37, 211, 102, 0.4);
+            transition: all 0.2s;
+        }
+
+        .btn-whatsapp-direct:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 25px rgba(37, 211, 102, 0.55);
+        }
+
+        /* Pulsing WhatsApp Effect */
+        @keyframes pulseWhatsApp {
+            0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.55); }
+            70% { box-shadow: 0 0 0 18px rgba(37, 211, 102, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+        }
+
+        /* FLOATING WHATSAPP TRIGGER */
+        .floating-wa-btn {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #25D366;
+            color: #FFFFFF !important;
+            padding: 12px 20px;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+            font-size: 14px;
+            text-decoration: none;
+            box-shadow: 0 8px 25px rgba(37, 211, 102, 0.4);
+            z-index: 999;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: pulseWhatsApp 3s infinite;
+        }
+
+        .floating-wa-btn:hover {
+            transform: translateY(-4px) scale(1.03);
+            box-shadow: 0 12px 30px rgba(37, 211, 102, 0.55);
+            color: #FFFFFF !important;
+        }
+
+        /* Footer */
+        .site-footer {
+            background: #FFFFFF;
+            border-top: 1px solid var(--border);
+            padding: 50px 0 36px;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 1fr;
+            gap: 36px;
+            margin-bottom: 36px;
+        }
+
+        .footer-brand h4 {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        .footer-col h5 {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 12px;
+        }
+
+        .footer-links-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .footer-links-list a {
+            color: var(--text-muted);
+            font-size: 13px;
+            text-decoration: none;
+            transition: color 0.15s ease;
+        }
+
+        .footer-links-list a:hover {
+            color: var(--primary);
+        }
+
+        .footer-contacts {
+            display: flex;
+            justify-content: center;
+            gap: 28px;
+            margin: 14px 0 16px;
+            flex-wrap: wrap;
+            font-size: 13.5px;
+            color: var(--text-muted);
+        }
+
+        .footer-contacts a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .footer-contacts a:hover {
+            text-decoration: underline;
+        }
+
+        .footer-social-wrap {
+            margin: 22px auto 20px;
+            padding: 20px 24px;
+            background: rgba(248, 250, 252, 0.9);
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            border-radius: 20px;
+            backdrop-filter: blur(12px);
+            display: block;
+            max-width: 920px;
+            width: 100%;
+            box-sizing: border-box;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+            text-align: center;
+        }
+
+        .footer-social-title {
+            font-size: 11.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .footer-social-grid {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .social-pill-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 999px;
+            color: #334155;
+            text-decoration: none;
+            font-size: 12.5px;
+            font-weight: 600;
+            transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+        }
+
+        .social-pill-btn svg {
+            flex-shrink: 0;
+            transition: transform 0.22s ease;
+        }
+
+        .social-pill-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+        }
+
+        .social-pill-btn:hover svg {
+            transform: scale(1.1);
+        }
+
+        .social-pill-btn.pill-web:hover {
+            color: #2563EB;
+            border-color: #93C5FD;
+            background: #EFF6FF;
+        }
+
+        .social-pill-btn.pill-linkedin:hover {
+            color: #0A66C2;
+            border-color: #93C5FD;
+            background: #EFF6FF;
+        }
+
+        .social-pill-btn.pill-facebook:hover {
+            color: #1877F2;
+            border-color: #BFDBFE;
+            background: #EFF6FF;
+        }
+
+        .social-pill-btn.pill-instagram:hover {
+            color: #E4405F;
+            border-color: #FECDD3;
+            background: #FFF1F2;
+        }
+
+        .social-pill-btn.pill-youtube:hover {
+            color: #EF4444;
+            border-color: #FECACA;
+            background: #FEF2F2;
+        }
+
+        .social-pill-btn.pill-x:hover {
+            color: #0F172A;
+            border-color: #CBD5E1;
+            background: #F1F5F9;
+        }
+
+        .social-pill-btn.pill-behance:hover {
+            color: #0057FF;
+            border-color: #93C5FD;
+            background: #EFF6FF;
+        }
+
+        .footer-bottom {
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            font-size: 12px;
+            color: #94A3B8;
+        }
+
+        /* Responsive Breakpoints */
+        @media (max-width: 1024px) {
+            .category-cards-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .steps-grid, .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .footer-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+                flex-direction: column;
+                position: absolute;
+                top: 72px;
+                left: 0;
+                width: 100%;
+                background: white;
+                border-bottom: 1px solid var(--border);
+                padding: 20px;
+                gap: 16px;
+            }
+
+            .nav-links.mobile-open {
+                display: flex;
+            }
+
+            .hamburger-btn {
+                display: block;
+            }
+
+            .hero-title {
+                font-size: 32px;
+            }
+
+            .hero-subtitle {
+                font-size: 16px;
+            }
+
+            .checker-box-wrap {
+                flex-direction: column;
+                padding: 12px;
+            }
+
+            .checker-btn-group {
+                width: 100%;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .btn-check-submit, .btn-new-audit-hero {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .category-cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .steps-grid, .features-grid, .footer-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .result-actions-bar {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .btn-check-another, .btn-res-lead-cta {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SITE HEADER -->
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="/seo-check" class="brand-logo-wrap">
+                <img src="/static/assets/esupport-logo.png" alt="eSupport Logo" class="brand-logo-img">
+                <div>
+                    <div class="brand-text-name">eSupport SEO</div>
+                    <div class="brand-text-sub">Score Checker</div>
+                </div>
+            </a>
+
+            <ul class="nav-links" id="navLinksMenu">
+                <li><a href="#checker" class="nav-link active">SEO Checker</a></li>
+                <li><a href="#how-it-works" class="nav-link">How It Works</a></li>
+                <li><a href="#why-esupport" class="nav-link">Why eSupport</a></li>
+                <li><a href="#contact" class="nav-link">Contact</a></li>
+            </ul>
+
+            <div style="display:flex; align-items:center; gap:12px;">
+                <button class="btn-header-cta" onclick="focusCheckerInput()">Check My SEO Score</button>
+                <button class="hamburger-btn" onclick="toggleMobileNav()" aria-label="Toggle Navigation">☰</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- HERO SECTION -->
+    <section class="hero-section" id="checker">
+        <div class="container">
+            <div class="hero-badge">
+                <span>⚡</span>
+                <span>Fast &amp; Accurate Live Website Analysis</span>
+            </div>
+            
+            <h1 class="hero-title">Check Your Website SEO Score</h1>
+            <p class="hero-subtitle">Discover your website's SEO health with a real website analysis.</p>
+
+            <div class="checker-box-wrap" id="checkerBoxWrap">
+                <input 
+                    type="text" 
+                    id="scanUrlInput" 
+                    class="url-input-field" 
+                    placeholder="https://yourwebsite.com" 
+                    aria-label="Website URL"
+                    autocomplete="url"
+                >
+                <div class="checker-btn-group">
+                    <button id="scanSubmitBtn" class="btn-check-submit" onclick="runPublicScan()">
+                        <span>Check My SEO Score</span>
+                    </button>
+                    <button id="btnNewAuditHero" class="btn-new-audit-hero" onclick="startNewAudit()" style="display: none;" title="Start a fresh SEO audit on another website">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-1.19"/>
+                        </svg>
+                        <span>New Audit</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="urlErrorMsg" class="input-error-msg"></div>
+            <div class="hero-support-text">Free website SEO score check • No credit card required</div>
+
+            <!-- SCANNING STATE SCREEN -->
+            <div id="scanStateScreen" class="scan-state-section">
+                <!-- PIE CHART PROGRESS -->
+                <div class="scan-pie-container">
+                    <div class="scan-pie-glow"></div>
+                    <div id="scanPieSlice" class="scan-pie-slice"></div>
+                    <svg class="scan-pie-svg" viewBox="0 0 160 160">
+                        <defs>
+                            <linearGradient id="scanPieGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#2563EB" />
+                                <stop offset="50%" stop-color="#06B6D4" />
+                                <stop offset="100%" stop-color="#10B981" />
+                            </linearGradient>
+                        </defs>
+                        <circle class="scan-pie-bg" cx="80" cy="80" r="66" />
+                        <circle id="scanPieFill" class="scan-pie-fill" cx="80" cy="80" r="66" />
+                    </svg>
+                    <div class="scan-pie-center">
+                        <div class="scan-pie-pct-row">
+                            <span id="scanPercentNum" class="scan-pie-pct-num">0</span><span class="scan-pie-pct-sign">%</span>
+                        </div>
+                        <div class="scan-pie-status-pill">
+                            <span class="scan-pulse-dot"></span>
+                            <span id="scanMiniStatus">Scanning</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="scanPhaseBadge" class="scan-state-phase">
+                    <span>⚡</span>
+                    <span id="scanPhaseText">SCANNING</span>
+                </div>
+                <div id="scanMsgText" class="scan-state-msg">Connecting to website...</div>
+                <p id="scanSubText" class="scan-state-sub">Analyzing HTML tags, crawlability, performance signals, and search indexability.</p>
+
+                <!-- STEP-BY-STEP MILESTONES -->
+                <div class="scan-milestones-grid">
+                    <div class="scan-step active" id="scanStep1">
+                        <div class="scan-step-icon">1</div>
+                        <div class="scan-step-info">
+                            <div class="scan-step-title">Connection &amp; DNS</div>
+                            <div class="scan-step-desc">Host handshake &amp; SSL</div>
+                        </div>
+                        <div class="scan-step-badge">In Progress</div>
+                    </div>
+                    <div class="scan-step pending" id="scanStep2">
+                        <div class="scan-step-icon">2</div>
+                        <div class="scan-step-info">
+                            <div class="scan-step-title">HTML &amp; SEO Audit</div>
+                            <div class="scan-step-desc">Meta tags, H1-H6 &amp; robots</div>
+                        </div>
+                        <div class="scan-step-badge">Waiting</div>
+                    </div>
+                    <div class="scan-step pending" id="scanStep3">
+                        <div class="scan-step-icon">3</div>
+                        <div class="scan-step-info">
+                            <div class="scan-step-title">Links &amp; Resources</div>
+                            <div class="scan-step-desc">Internal links &amp; speed</div>
+                        </div>
+                        <div class="scan-step-badge">Waiting</div>
+                    </div>
+                    <div class="scan-step pending" id="scanStep4">
+                        <div class="scan-step-icon">4</div>
+                        <div class="scan-step-info">
+                            <div class="scan-step-title">Health Score &amp; Rating</div>
+                            <div class="scan-step-desc">8-category evaluation</div>
+                        </div>
+                        <div class="scan-step-badge">Waiting</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- RESULT SECTION -->
+    <section class="result-section" id="resultSection">
+        <div class="container">
+            <!-- MAIN RESULT HERO CARD -->
+            <div class="result-card-main">
+                <div class="result-header-label">Your Website SEO Score</div>
+                <h2 id="resTargetUrl" class="result-domain-title">example.com</h2>
+                <div class="result-meta-date">Analyzed on <b id="resScanDate">Recently</b></div>
+
+                <!-- Circular Score -->
+                <div class="score-circle-container">
+                    <div class="score-circle-aura"></div>
+                    <svg class="score-svg" viewBox="0 0 100 100">
+                        <circle class="score-svg-bg" cx="50" cy="50" r="45"></circle>
+                        <circle id="resScoreRing" class="score-svg-fill" cx="50" cy="50" r="45"></circle>
+                    </svg>
+                    <div class="score-center-wrap">
+                        <div class="score-big-num" id="resScoreNum">0</div>
+                        <div class="score-fraction">SEO SCORE / 100</div>
+                    </div>
+                </div>
+
+                <div id="resStatusBadge" class="score-status-pill">Calculating...</div>
+                <p id="resGeneralSummary" class="result-summary-text"></p>
+
+                <!-- RESULT ACTIONS: CHECK ANOTHER WEBSITE + GET REPORT -->
+                <div class="result-actions-bar">
+                    <button class="btn-check-another" onclick="startNewAudit()" title="Audit another website">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-1.19"/>
+                        </svg>
+                        <span>Audit Another Website</span>
+                    </button>
+                    <button class="btn-res-lead-cta" onclick="openLeadModal()">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                        </svg>
+                        <span>Request Full SEO Analysis</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- WHAT'S HOLDING YOUR WEBSITE BACK? (HIGH-CONVERSION DIAGNOSIS CARD) -->
+            <div class="lead-diagnosis-section" id="leadDiagnosisSection">
+                <div class="lead-diagnosis-card">
+                    <div class="lead-diagnosis-header">
+                        <div class="lead-diagnosis-badge-wrap">
+                            <span class="lead-diagnosis-badge">1</span>
+                            <h3 class="lead-diagnosis-headline">You're missing important search keywords &amp; traffic</h3>
+                        </div>
+                        <h2 class="lead-diagnosis-title">What's holding your website back?</h2>
+                        <p class="lead-diagnosis-subtitle">These are the main issues and traffic opportunities we found during your scan.</p>
+                    </div>
+
+                    <div class="lead-keyword-box">
+                        <div class="lead-keyword-header-row">
+                            <span>Keyword / Search Gap</span>
+                            <span>Status</span>
+                        </div>
+                        <div class="lead-keyword-list" id="leadKeywordList">
+                            <!-- Populated dynamically with website-tailored keywords -->
+                        </div>
+                        <div class="lead-keyword-more" id="leadKeywordMoreText">
+                            + 2 more search gaps found
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-see-how-fix" onclick="openLeadModal(0)">
+                        <span>See How to Fix This</span>
+                        <span style="font-size:18px;">➔</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 8 CATEGORY BREAKDOWN -->
+            <div class="categories-section-head">
+                <h3>SEO Category Breakdown</h3>
+                <p>High-level performance across all 8 essential dimensions of search visibility.</p>
+            </div>
+
+            <div id="categoryCardsGrid" class="category-cards-grid">
+                <!-- Rendered dynamically -->
+            </div>
+
+            <!-- LEAD CONVERSION SECTION -->
+            <div class="lead-cta-banner">
+                <h2>Want to Improve Your SEO?</h2>
+                <p>Get a detailed SEO analysis from eSupport and discover the issues affecting your website.</p>
+                <div class="lead-cta-btns">
+                    <a id="btnLeadWhatsApp" href="https://wa.me/94710690715" target="_blank" rel="noopener noreferrer" class="btn-lead-whatsapp">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.06-2.184-.555-1.801-.745-2.951-2.593-3.041-2.712-.089-.12-1.07-1.425-1.07-2.718 0-1.292.673-1.928.913-2.189.24-.26.523-.326.697-.326.174 0 .348.002.501.01.163.008.381-.061.596.455.22.529.749 1.83.815 1.963.065.134.109.293.022.467-.087.174-.131.282-.262.434-.131.152-.275.339-.393.456-.131.13-.267.272-.115.533.152.261.676 1.113 1.451 1.803 1 .892 1.843 1.168 2.104 1.299.261.13.414.109.567-.066.153-.174.654-.761.828-1.022.174-.261.348-.218.588-.13.24.087 1.524.718 1.785.849.261.13.435.196.499.305.066.109.066.63-.078 1.035z"/>
+                        </svg>
+                        <span>Get Professional SEO Help</span>
+                    </a>
+                    <button class="btn-lead-analysis" onclick="openLeadModal()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                        </svg>
+                        <span>Request Full SEO Analysis</span>
+                    </button>
+                </div>
+                <div class="cta-email-helper">
+                    Or contact us via Email: <a id="linkEmailCta" href="mailto:prasad@esupport.live">prasad@esupport.live</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="info-section" id="how-it-works">
+        <div class="container">
+            <div class="section-center-head">
+                <h2>How It Works</h2>
+                <p>Simple, automated, and accurate SEO assessment in three steps.</p>
+            </div>
+
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-badge">1</div>
+                    <h3>Enter Your Website</h3>
+                    <p>Enter any public domain or landing page URL. We automatically validate and format the web address.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-badge">2</div>
+                    <h3>Automated Analysis</h3>
+                    <p>Our crawler evaluates HTML tags, response times, sitemaps, robots.txt, links, and structured data.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-badge">3</div>
+                    <h3>Discover Your Score</h3>
+                    <p>View your overall SEO score and 8-category breakdown, then connect with our team for strategic fixes.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- WHY ESUPPORT -->
+    <section class="info-section" id="why-esupport">
+        <div class="container">
+            <div class="section-center-head">
+                <h2>Why Choose eSupport</h2>
+                <p>Engineering-grade website auditing with zero fake metrics.</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <span class="feature-icon">🔍</span>
+                    <h3>Real Crawled Data</h3>
+                    <p>We analyze live HTTP/HTML responses directly from your web server, ensuring genuine and verified signals.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🛡️</span>
+                    <h3>No False Guarantees</h3>
+                    <p>We never promise instant "#1 on Google" rankings. We focus on solid technical foundations that search engines reward.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">💼</span>
+                    <h3>Actionable SEO Expertise</h3>
+                    <p>Our specialists translate complex technical requirements into high-impact growth for your business.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CONTACT / FOOTER SECTION -->
+    <footer class="site-footer" id="contact">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <h4>eSupport</h4>
+                    <p style="margin-bottom:12px;">Professional SEO &amp; Digital Solutions</p>
+                    <p style="font-size:13px;">Empowering businesses with technical search visibility and high-performance digital infrastructure.</p>
+                </div>
+
+                <div class="footer-col">
+                    <h5>Direct Contact</h5>
+                    <ul class="footer-links-list">
+                        <li>WhatsApp: <a href="https://wa.me/94710690715" target="_blank">+94 71 069 0715</a></li>
+                        <li>Email: <a href="mailto:prasad@esupport.live">prasad@esupport.live</a></li>
+                        <li>Web: <a href="https://esupport.live/" target="_blank">https://esupport.live/</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-col">
+                    <h5>Quick Links</h5>
+                    <ul class="footer-links-list">
+                        <li><a href="#checker">SEO Checker</a></li>
+                        <li><a href="#how-it-works">How It Works</a></li>
+                        <li><a href="#why-esupport">Why eSupport</a></li>
+                        <li><a href="javascript:alert('eSupport Privacy: We do not sell or share your contact information with any third parties.')">Privacy Policy</a></li>
+                        <li><a href="javascript:alert('eSupport Terms: SEO scores represent implementation health assessments and do not guarantee specific search rankings.')">Terms of Service</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:8px; margin-top:20px;">
+                <img src="/static/assets/esupport-logo.png" alt="eSupport Logo" style="height:28px; width:auto; object-fit:contain; border-radius:6px;">
+                <span style="font-size:14px; color:var(--text);"><b>eSupport SEO</b> &bull; https://esupport.live &bull; Technical Search Excellence</span>
+            </div>
+            <div class="footer-contacts">
+                <span>Direct WhatsApp: <a href="https://wa.me/94710690715" target="_blank">+94 71 069 0715</a></span>
+                <span>Direct Email: <a href="mailto:prasad@esupport.live">prasad@esupport.live</a></span>
+                <span>Official Web: <a href="https://esupport.live/" target="_blank">https://esupport.live/</a></span>
+            </div>
+
+            <!-- Sleek Official Channels & Social Bar -->
+            <div class="footer-social-wrap">
+                <div class="footer-social-title">
+                    <span>Official Channels &amp; Creative Portfolio</span>
+                </div>
+                <div class="footer-social-grid">
+                    <a href="https://esupport.live/" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-web" title="eSupport Technologies Official Website">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                        <span>Website</span>
+                    </a>
+                    <a href="https://www.linkedin.com/company/esupport-technologies-pvt-ltd/" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-linkedin" title="Follow eSupport on LinkedIn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+                        <span>LinkedIn</span>
+                    </a>
+                    <a href="https://web.facebook.com/esupporttechnolgies" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-facebook" title="Follow eSupport on Facebook">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/></svg>
+                        <span>Facebook</span>
+                    </a>
+                    <a href="https://www.instagram.com/esupportlive/" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-instagram" title="Follow eSupport on Instagram">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                        <span>Instagram</span>
+                    </a>
+                    <a href="https://www.youtube.com/channel/UC7NiNE9QFIus9RxR7vdpJtw" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-youtube" title="Subscribe to eSupport on YouTube">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        <span>YouTube</span>
+                    </a>
+                    <a href="https://twitter.com/eSupportlive00" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-x" title="Follow eSupport on Twitter / X">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                        <span>Twitter (X)</span>
+                    </a>
+                    <a href="https://www.behance.net/esupportlive" target="_blank" rel="noopener noreferrer" class="social-pill-btn pill-behance" title="View eSupport on Behance">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M22 7h-7v-2h7v2zm1.726 10c-.442 1.297-2.029 3-4.726 3-3.158 0-5.5-2.28-5.5-5.5 0-3.242 2.378-5.5 5.5-5.5 3.267 0 5.234 2.392 5.045 5.75h-7.854c.123 1.579 1.341 2.5 2.809 2.5 1.189 0 2.05-.551 2.457-1.25h2.269zm-7.535-4.25h5.17c-.128-1.378-1.127-2-2.528-2-1.47 0-2.457.735-2.642 2zm-8.691-3.75h-3.5v-3h3.5c1.104 0 2 .896 2 2s-.896 1-2 1zm0 5h-3.5v-3h3.5c1.104 0 2 .896 2 2s-.896 1-2 1zm.637-8h-6.137v14h6.137c2.485 0 4.5-2.015 4.5-4.5 0-1.488-.724-2.808-1.837-3.626 1.113-.818 1.837-2.138 1.837-3.374 0-2.485-2.015-2.5-4.5-2.5z"/></svg>
+                        <span>Behance</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                &copy; 2026 eSupport Technologies (Pvt) Ltd. All rights reserved. SEO health assessments are based on verifiable crawl signals and Google Webmaster technical standards.
+            </div>
+        </div>
+    </footer>
+
+    <!-- FLOATING WHATSAPP BUTTON (1-Click Consultation) -->
+    <a id="floatingWhatsAppBtn" href="https://wa.me/94710690715" target="_blank" rel="noopener noreferrer" class="floating-wa-btn" title="Chat directly with our SEO specialists on WhatsApp">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.06-2.184-.555-1.801-.745-2.951-2.593-3.041-2.712-.089-.12-1.07-1.425-1.07-2.718 0-1.292.673-1.928.913-2.189.24-.26.523-.326.697-.326.174 0 .348.002.501.01.163.008.381-.061.596.455.22.529.749 1.83.815 1.963.065.134.109.293.022.467-.087.174-.131.282-.262.434-.131.152-.275.339-.393.456-.131.13-.267.272-.115.533.152.261.676 1.113 1.451 1.803 1 .892 1.843 1.168 2.104 1.299.261.13.414.109.567-.066.153-.174.654-.761.828-1.022.174-.261.348-.218.588-.13.24.087 1.524.718 1.785.849.261.13.435.196.499.305.066.109.066.63-.078 1.035z"/>
+        </svg>
+        <span class="floating-wa-text">Chat with SEO Expert</span>
+    </a>
+
+    <!-- MULTI-STEP LEAD INQUIRY WIZARD MODAL (LEADOS STYLE) -->
+    <div class="modal-overlay" id="leadModal" role="dialog" aria-modal="true">
+        <div class="modal-window modal-wizard-window">
+            
+            <!-- WIZARD PROGRESS HEADER -->
+            <div class="wizard-header" id="wizardHeader">
+                <div class="wizard-top-nav">
+                    <button type="button" class="wizard-back-btn" id="wizardBackBtn" onclick="wizardPrevStep()" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                        <span>Back</span>
+                    </button>
+                    <div class="wizard-brand-tag" id="wizardBrandTag">
+                        <img src="/static/assets/esupport-logo.png" alt="eSupport" style="height:22px; border-radius:4px;">
+                        <span>eSupport SEO</span>
+                    </div>
+                    <button type="button" class="modal-close-btn" onclick="closeLeadModal()" aria-label="Close modal">&times;</button>
+                </div>
+                
+                <div class="wizard-progress-track" id="wizardProgressTrack">
+                    <div class="wizard-progress-seg active" id="wProg1"></div>
+                    <div class="wizard-progress-seg" id="wProg2"></div>
+                    <div class="wizard-progress-seg" id="wProg3"></div>
+                </div>
+            </div>
+
+            <div class="modal-body wizard-body">
+                <div id="leadAlert" class="lead-status-alert"></div>
+
+                <!-- STEP 0: SOLUTION VALUE PROPOSITION -->
+                <div class="wizard-step" id="wizardStep0">
+                    <div class="wizard-sparkle-icon">✦</div>
+                    <h2 class="wizard-title text-center">eSupport can fix these issues for you.</h2>
+                    <p class="wizard-subtitle text-center">We optimize and monitor everything automatically — you just keep running your business.</p>
+
+                    <div class="wizard-features-card">
+                        <div class="wizard-feat-item">
+                            <span class="feat-check">✓</span>
+                            <span>Find and rank for missing high-value keywords</span>
+                        </div>
+                        <div class="wizard-feat-item">
+                            <span class="feat-check">✓</span>
+                            <span>Optimize your website tags, content, &amp; structure</span>
+                        </div>
+                        <div class="wizard-feat-item">
+                            <span class="feat-check">✓</span>
+                            <span>Improve Google, Bing, &amp; AI search visibility</span>
+                        </div>
+                        <div class="wizard-feat-item">
+                            <span class="feat-check">✓</span>
+                            <span>Build quality backlinks and local citation strength</span>
+                        </div>
+                        <div class="wizard-feat-item">
+                            <span class="feat-check">✓</span>
+                            <span>Continuously monitor your rankings &amp; Core Web Vitals</span>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-wizard-primary" onclick="wizardGoToStep(1)">
+                        <span>Fix My SEO with eSupport ➔</span>
+                    </button>
+
+                    <div class="wizard-trust-badges">
+                        <span>🔧 No setup required</span>
+                        <span>🏢 Tailored for your industry</span>
+                        <span>🔄 Cancel anytime</span>
+                    </div>
+                </div>
+
+                <!-- STEP 1: BUSINESS PROFILE -->
+                <div class="wizard-step" id="wizardStep1" style="display:none;">
+                    <h2 class="wizard-title">Tell us about your business</h2>
+                    <p class="wizard-subtitle">We found this information from your website. Please confirm or edit.</p>
+
+                    <div class="wizard-fields">
+                        <div class="wizard-field-group">
+                            <label class="wizard-label">BUSINESS NAME</label>
+                            <div class="wizard-input-wrap">
+                                <span class="wizard-input-icon">🏢</span>
+                                <input type="text" id="leadCompany" class="wizard-input" placeholder="eSupport" required>
+                            </div>
+                        </div>
+
+                        <div class="wizard-field-row">
+                            <div class="wizard-field-group" style="flex:1;">
+                                <label class="wizard-label">COUNTRY</label>
+                                <div class="wizard-input-wrap">
+                                    <span class="wizard-input-icon">🌍</span>
+                                    <select id="wizCountry" class="wizard-select">
+                                        <option value="Sri Lanka" selected>Sri Lanka</option>
+                                        <option value="United States">United States</option>
+                                        <option value="United Kingdom">United Kingdom</option>
+                                        <option value="Australia">Australia</option>
+                                        <option value="Canada">Canada</option>
+                                        <option value="United Arab Emirates">United Arab Emirates</option>
+                                        <option value="Singapore">Singapore</option>
+                                        <option value="India">India</option>
+                                        <option value="Germany">Germany</option>
+                                        <option value="Other">Other Country</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="wizard-field-group" style="flex:1;">
+                                <label class="wizard-label">CITY / REGION</label>
+                                <div class="wizard-input-wrap">
+                                    <span class="wizard-input-icon">📍</span>
+                                    <input type="text" id="wizCity" class="wizard-input" placeholder="Sri Lanka / Colombo" value="Sri Lanka">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="wizard-field-group">
+                            <label class="wizard-label">INDUSTRY / SECTOR</label>
+                            <div class="wizard-input-wrap">
+                                <span class="wizard-input-icon">💼</span>
+                                <input type="text" id="wizIndustry" class="wizard-input" placeholder="Digital Marketing &amp; SEO Services" value="Digital Marketing &amp; SEO Services">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-wizard-primary" onclick="wizardGoToStep(2)">
+                        <span>Continue ➔</span>
+                    </button>
+                </div>
+
+                <!-- STEP 2: WHAT DO YOU WANT CUSTOMERS TO FIND YOU FOR? -->
+                <div class="wizard-step" id="wizardStep2" style="display:none;">
+                    <h2 class="wizard-title">What do you want customers to find you for?</h2>
+                    <p class="wizard-subtitle">Select the most relevant services or business goals.</p>
+
+                    <div class="wizard-pills-list" id="wizServicesList">
+                        <div class="wiz-pill active" onclick="toggleWizPill(this)" data-val="Free Website SEO Score Checker">
+                            <span class="wiz-pill-check">☑</span>
+                            <span class="wiz-pill-text">Free Website SEO Score Checker</span>
+                        </div>
+                        <div class="wiz-pill active" onclick="toggleWizPill(this)" data-val="Professional SEO Analysis">
+                            <span class="wiz-pill-check">☑</span>
+                            <span class="wiz-pill-text">Professional SEO Analysis</span>
+                        </div>
+                        <div class="wiz-pill active" onclick="toggleWizPill(this)" data-val="Technical SEO Consulting">
+                            <span class="wiz-pill-check">☑</span>
+                            <span class="wiz-pill-text">Technical SEO Consulting</span>
+                        </div>
+                        <div class="wiz-pill" onclick="toggleWizPill(this)" data-val="Google Rankings &amp; Traffic Growth">
+                            <span class="wiz-pill-check">☐</span>
+                            <span class="wiz-pill-text">Google Rankings &amp; Traffic Growth</span>
+                        </div>
+                        <div class="wiz-pill" onclick="toggleWizPill(this)" data-val="Core Web Vitals &amp; Speed Optimization">
+                            <span class="wiz-pill-check">☐</span>
+                            <span class="wiz-pill-text">Core Web Vitals &amp; Speed Optimization</span>
+                        </div>
+                    </div>
+
+                    <div class="wizard-add-service-row">
+                        <input type="text" id="wizCustomServiceInput" class="wizard-input-sm" placeholder="Add another service..." onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomWizService();}">
+                        <button type="button" class="btn-add-service" onclick="addCustomWizService()">+ Add</button>
+                    </div>
+
+                    <div class="wizard-field-group" style="margin-top:16px;">
+                        <label class="wizard-label">TARGET LOCATION</label>
+                        <div class="wizard-input-wrap">
+                            <span class="wizard-input-icon">📍</span>
+                            <input type="text" id="wizTargetLocation" class="wizard-input" value="Sri Lanka" placeholder="e.g. Sri Lanka or Worldwide">
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-wizard-primary" onclick="wizardGoToStep(3)" style="margin-top:18px;">
+                        <span>Continue ➔</span>
+                    </button>
+                </div>
+
+                <!-- STEP 3: CONTACT & DELIVERY -->
+                <div class="wizard-step" id="wizardStep3" style="display:none;">
+                    <h2 class="wizard-title">Where should we send your SEO Action Plan?</h2>
+                    <p class="wizard-subtitle">Enter your details to receive your customized SEO audit report and recommendations.</p>
+
+                    <form id="leadFormWizard" onsubmit="submitLeadFormWizard(event)">
+                        <div class="wizard-fields">
+                            <div class="wizard-field-group">
+                                <label class="wizard-label">YOUR FULL NAME *</label>
+                                <div class="wizard-input-wrap">
+                                    <span class="wizard-input-icon">👤</span>
+                                    <input type="text" id="leadName" class="wizard-input" placeholder="e.g. John Doe" required>
+                                </div>
+                            </div>
+
+                            <div class="wizard-field-group">
+                                <label class="wizard-label">BUSINESS EMAIL *</label>
+                                <div class="wizard-input-wrap">
+                                    <span class="wizard-input-icon">✉️</span>
+                                    <input type="email" id="leadEmail" class="wizard-input" placeholder="name@company.com" required>
+                                </div>
+                            </div>
+
+                            <div class="wizard-field-group">
+                                <label class="wizard-label">WHATSAPP / PHONE NUMBER</label>
+                                <div class="wizard-input-wrap">
+                                    <span class="wizard-input-icon">📱</span>
+                                    <input type="tel" id="leadPhone" class="wizard-input" placeholder="071 069 0715">
+                                </div>
+                            </div>
+
+                            <div class="wizard-field-group">
+                                <label class="wizard-label">TARGET WEBSITE</label>
+                                <div class="wizard-input-wrap">
+                                    <span class="wizard-input-icon">🌐</span>
+                                    <input type="url" id="leadWebsite" class="wizard-input" readonly style="background:#F8FAFC; color:#64748B;">
+                                </div>
+                            </div>
+
+                            <input type="hidden" id="leadInitialScore" value="">
+                        </div>
+
+                        <button type="submit" id="leadSubmitBtn" class="btn-wizard-primary" style="margin-top:16px;">
+                            <span>Get My Free SEO Action Plan ➔</span>
+                        </button>
+
+                        <div class="wizard-privacy-note">
+                            🔒 100% Confidential • No spam guarantee • Delivered in under 24 hours.
+                        </div>
+                    </form>
+                </div>
+
+                <!-- STEP 4: CELEBRATION & SUCCESS -->
+                <div class="wizard-step" id="wizardStep4" style="display:none; text-align:center; padding: 16px 0;">
+                    <div style="font-size: 52px; margin-bottom: 12px; animation: bounce 0.6s ease;">🎉</div>
+                    <h2 class="wizard-title" style="color:#0F172A; margin-bottom:8px;">Your SEO Action Plan is on its way!</h2>
+                    <p class="wizard-subtitle" style="max-width:440px; margin:0 auto 24px;">Thank you! We've received your request. An eSupport SEO specialist is reviewing your website performance.</p>
+
+                    <a id="wizWhatsAppDirectBtn" href="https://wa.me/94710690715" target="_blank" rel="noopener noreferrer" class="btn-whatsapp-direct">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.06-2.184-.555-1.801-.745-2.951-2.593-3.041-2.712-.089-.12-1.07-1.425-1.07-2.718 0-1.292.673-1.928.913-2.189.24-.26.523-.326.697-.326.174 0 .348.002.501.01.163.008.381-.061.596.455.22.529.749 1.83.815 1.963.065.134.109.293.022.467-.087.174-.131.282-.262.434-.131.152-.275.339-.393.456-.131.13-.267.272-.115.533.152.261.676 1.113 1.451 1.803 1 .892 1.843 1.168 2.104 1.299.261.13.414.109.567-.066.153-.174.654-.761.828-1.022.174-.261.348-.218.588-.13.24.087 1.524.718 1.785.849.261.13.435.196.499.305.066.109.066.63-.078 1.035z"/>
+                        </svg>
+                        <span>Chat Now on WhatsApp (Instant Reply)</span>
+                    </a>
+
+                    <div style="margin-top:20px;">
+                        <button type="button" class="btn-check-another" style="margin:0 auto;" onclick="closeLeadModal()">
+                            <span>Done &amp; Return to Results</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        (function() {
+            const CIRCUMFERENCE = 282.74; // 2 * PI * 45
+            const MINI_CIRCUMFERENCE = 219.91; // 2 * PI * 35
+            const SCAN_CIRCUMFERENCE = 414.7; // 2 * PI * 66
+            let currentScannedData = null;
+            let pollTimer = null;
+            let scanAnimTimer = null;
+            let currentScanPct = 0;
+            let targetScanPct = 0;
+
+            function $(id) { return document.getElementById(id); }
+
+            function updateScanPieUI(val) {
+                const fill = $("scanPieFill");
+                const num = $("scanPercentNum");
+                const slice = $("scanPieSlice");
+                if (!fill || !num) return;
+
+                const rounded = Math.min(100, Math.max(0, Math.round(val)));
+                num.textContent = rounded;
+
+                const offset = SCAN_CIRCUMFERENCE - (SCAN_CIRCUMFERENCE * (rounded / 100));
+                fill.style.strokeDashoffset = String(offset);
+
+                const angle = (rounded / 100) * 360;
+                if (slice) {
+                    slice.style.setProperty("--scan-angle", `${angle}deg`);
+                }
+
+                updateScanMilestones(rounded);
+            }
+
+            function updateScanMilestones(val) {
+                const s1 = $("scanStep1");
+                const s2 = $("scanStep2");
+                const s3 = $("scanStep3");
+                const s4 = $("scanStep4");
+                if (!s1 || !s2 || !s3 || !s4) return;
+
+                const setStep = (el, state, text, iconHtml) => {
+                    el.className = `scan-step ${state}`;
+                    const b = el.querySelector(".scan-step-badge");
+                    if (b) b.textContent = text;
+                    const ic = el.querySelector(".scan-step-icon");
+                    if (ic) ic.innerHTML = iconHtml;
+                };
+
+                const spinHtml = `<span class="scan-step-spin"></span>`;
+
+                if (val < 25) {
+                    setStep(s1, "active", "In Progress", spinHtml);
+                    setStep(s2, "pending", "Waiting", "2");
+                    setStep(s3, "pending", "Waiting", "3");
+                    setStep(s4, "pending", "Waiting", "4");
+                } else if (val < 55) {
+                    setStep(s1, "done", "Done ✓", "✓");
+                    setStep(s2, "active", "Auditing...", spinHtml);
+                    setStep(s3, "pending", "Waiting", "3");
+                    setStep(s4, "pending", "Waiting", "4");
+                } else if (val < 82) {
+                    setStep(s1, "done", "Done ✓", "✓");
+                    setStep(s2, "done", "Done ✓", "✓");
+                    setStep(s3, "active", "Checking...", spinHtml);
+                    setStep(s4, "pending", "Waiting", "4");
+                } else if (val < 100) {
+                    setStep(s1, "done", "Done ✓", "✓");
+                    setStep(s2, "done", "Done ✓", "✓");
+                    setStep(s3, "done", "Done ✓", "✓");
+                    setStep(s4, "active", "Scoring...", spinHtml);
+                } else {
+                    setStep(s1, "done", "Done ✓", "✓");
+                    setStep(s2, "done", "Done ✓", "✓");
+                    setStep(s3, "done", "Done ✓", "✓");
+                    setStep(s4, "done", "Done ✓", "✓");
+                }
+            }
+
+            function setTargetProgress(target, miniLabel) {
+                targetScanPct = Math.max(targetScanPct, target);
+                if (miniLabel && $("scanMiniStatus")) {
+                    $("scanMiniStatus").textContent = miniLabel;
+                }
+            }
+
+            function startScanProgressAnimation() {
+                stopScanProgressAnimation();
+                currentScanPct = 0;
+                targetScanPct = 18;
+                updateScanPieUI(0);
+                if ($("scanMiniStatus")) $("scanMiniStatus").textContent = "Connecting";
+
+                scanAnimTimer = setInterval(() => {
+                    if (currentScanPct < targetScanPct) {
+                        const diff = targetScanPct - currentScanPct;
+                        const step = Math.max(0.3, diff * 0.15);
+                        currentScanPct = Math.min(targetScanPct, currentScanPct + step);
+                        updateScanPieUI(currentScanPct);
+                    } else if (targetScanPct < 96) {
+                        // Gentle natural crawl forward while waiting for next poll
+                        targetScanPct = Math.min(96, targetScanPct + 0.35);
+                        currentScanPct = Math.min(targetScanPct, currentScanPct + 0.22);
+                        updateScanPieUI(currentScanPct);
+                    }
+                }, 35);
+            }
+
+            function stopScanProgressAnimation() {
+                if (scanAnimTimer) {
+                    clearInterval(scanAnimTimer);
+                    scanAnimTimer = null;
+                }
+            }
+
+            window.toggleMobileNav = function() {
+                $("navLinksMenu").classList.toggle("mobile-open");
+            };
+
+            window.focusCheckerInput = function() {
+                const inp = $("scanUrlInput");
+                inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                inp.focus();
+            };
+
+            window.startNewAudit = function() {
+                const inp = $("scanUrlInput");
+                if (inp) inp.value = "";
+                const errEl = $("urlErrorMsg");
+                if (errEl) { errEl.style.display = "none"; errEl.textContent = ""; }
+                const scanScreen = $("scanStateScreen");
+                if (scanScreen) scanScreen.style.display = "none";
+                const submitBtn = $("scanSubmitBtn");
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "Check My SEO Score";
+                }
+                const resultSection = $("resultSection");
+                if (resultSection) resultSection.style.display = "none";
+                const btnHero = $("btnNewAuditHero");
+                if (btnHero) btnHero.style.display = "none";
+                const boxWrap = $("checkerBoxWrap");
+                if (boxWrap) boxWrap.classList.remove("has-new-audit");
+
+                const checkerSection = $("checker");
+                if (checkerSection) {
+                    checkerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                setTimeout(() => {
+                    if (inp) inp.focus();
+                    if (boxWrap) {
+                        boxWrap.classList.add("pulse-highlight");
+                        setTimeout(() => boxWrap.classList.remove("pulse-highlight"), 1600);
+                    }
+                }, 300);
+            };
+
+            window.resetAndScanAnother = function() {
+                window.startNewAudit();
+            };
+
+            function normalizeUrl(input) {
+                let url = (input || "").trim();
+                if (!url) return "";
+                if (!/^https?:\/\//i.test(url)) {
+                    url = "https://" + url;
+                }
+                return url;
+            }
+
+            function validateUrl(url) {
+                if (!url) return "Please enter a website URL.";
+                try {
+                    const parsed = new URL(url);
+                    if (!["http:", "https:"].includes(parsed.protocol)) {
+                        return "Only HTTP and HTTPS websites are supported.";
+                    }
+                    if (!parsed.hostname || parsed.hostname.indexOf('.') === -1) {
+                        return "Please enter a valid domain name (e.g. example.com).";
+                    }
+                    return null;
+                } catch {
+                    return "Please enter a valid website URL format.";
+                }
+            }
+
+            window.runPublicScan = async function() {
+                const raw = $("scanUrlInput").value;
+                const errEl = $("urlErrorMsg");
+                errEl.style.display = "none";
+                errEl.textContent = "";
+
+                const normalized = normalizeUrl(raw);
+                $("scanUrlInput").value = normalized;
+
+                const validationError = validateUrl(normalized);
+                if (validationError) {
+                    errEl.textContent = validationError;
+                    errEl.style.display = "block";
+                    return;
+                }
+
+                // Show scanning state
+                $("scanSubmitBtn").disabled = true;
+                $("scanSubmitBtn").textContent = "Analyzing...";
+                $("scanStateScreen").style.display = "block";
+                $("resultSection").style.display = "none";
+
+                $("scanPhaseText").textContent = "SCANNING";
+                $("scanMsgText").textContent = "Connecting to website...";
+                $("scanSubText").textContent = "Testing website accessibility and loading initial response...";
+
+                startScanProgressAnimation();
+
+                try {
+                    // Start asynchronous scan job for real state transitions
+                    const startResp = await fetch("/api/public/scan/start", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ url: normalized })
+                    });
+
+                    if (!startResp.ok) {
+                        const errData = await startResp.json().catch(() => ({}));
+                        throw new Error(errData.detail || "We couldn't analyze this website right now. Please check the URL and try again.");
+                    }
+
+                    const startData = await startResp.json();
+                    const jobId = startData.job_id;
+
+                    setTargetProgress(28, "Scanning");
+
+                    // Poll status
+                    pollScanStatus(jobId);
+                } catch (err) {
+                    stopScanProgressAnimation();
+                    handleScanError(err.message);
+                }
+            };
+
+            function pollScanStatus(jobId) {
+                if (pollTimer) clearTimeout(pollTimer);
+
+                pollTimer = setTimeout(async () => {
+                    try {
+                        const resp = await fetch(`/api/public/scan/status/${jobId}`);
+                        if (!resp.ok) {
+                            throw new Error("Unable to retrieve scan status.");
+                        }
+
+                        const data = await resp.json();
+
+                        if (data.state === "completed") {
+                            // Smoothly complete to 100%
+                            targetScanPct = 100;
+                            currentScanPct = 100;
+                            updateScanPieUI(100);
+                            if ($("scanMiniStatus")) $("scanMiniStatus").textContent = "Completed";
+                            if ($("scanPhaseText")) $("scanPhaseText").textContent = "COMPLETE";
+                            if ($("scanMsgText")) $("scanMsgText").textContent = "Scan completed successfully!";
+                            if ($("scanSubText")) $("scanSubText").textContent = "Finalizing presentation and rendering full report...";
+
+                            setTimeout(() => {
+                                stopScanProgressAnimation();
+                                $("scanStateScreen").style.display = "none";
+                                $("scanSubmitBtn").disabled = false;
+                                $("scanSubmitBtn").textContent = "Check My SEO Score";
+                                renderResult(data.result);
+                            }, 450);
+                        } else if (data.state === "failed") {
+                            stopScanProgressAnimation();
+                            handleScanError(data.error || "We couldn't analyze this website right now. Please check the URL and try again.");
+                        } else {
+                            // Update phase and message from real backend
+                            if (data.phase) $("scanPhaseText").textContent = data.phase;
+                            if (data.message) $("scanMsgText").textContent = data.message;
+                            if (data.phase === "SCANNING") {
+                                setTargetProgress(35, "Scanning");
+                            } else if (data.phase === "ANALYZING") {
+                                setTargetProgress(65, "Analyzing");
+                                $("scanSubText").textContent = "Analyzing HTML structure, headings, metadata, and link health...";
+                            } else if (data.phase === "CALCULATING SCORE") {
+                                setTargetProgress(90, "Scoring");
+                                $("scanSubText").textContent = "Finalizing category performance and overall score calculation...";
+                            }
+                            pollScanStatus(jobId);
+                        }
+                    } catch (e) {
+                        stopScanProgressAnimation();
+                        handleScanError(e.message);
+                    }
+                }, 1000);
+            }
+
+            function handleScanError(msg) {
+                if (pollTimer) clearTimeout(pollTimer);
+                stopScanProgressAnimation();
+                $("scanStateScreen").style.display = "none";
+                $("scanSubmitBtn").disabled = false;
+                $("scanSubmitBtn").textContent = "Check My SEO Score";
+                const errEl = $("urlErrorMsg");
+                errEl.textContent = msg || "We couldn't analyze this website right now. Please check the URL and try again.";
+                errEl.style.display = "block";
+            }
+
+            // Number Count-Up Animation
+            function animateValue(el, start, end, duration) {
+                if (!el) return;
+                let startTimestamp = null;
+                const step = (timestamp) => {
+                    if (!startTimestamp) startTimestamp = timestamp;
+                    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    const current = Math.floor(easeOut * (end - start) + start);
+                    el.textContent = current;
+                    if (progress < 1) {
+                        window.requestAnimationFrame(step);
+                    } else {
+                        el.textContent = end;
+                    }
+                };
+                window.requestAnimationFrame(step);
+            }
+
+            function renderResult(res) {
+                currentScannedData = res;
+                const score = res.score === null || res.score === undefined ? 0 : Number(res.score);  // integer from the engine
+                const statusInfo = res.score_status || {};
+
+                $("resTargetUrl").textContent = res.target_url;
+                
+                // Formatted date
+                let formattedDate = "Recently";
+                if (res.scan_date) {
+                    try {
+                        const d = new Date(res.scan_date);
+                        formattedDate = d.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' });
+                    } catch {}
+                }
+                $("resScanDate").textContent = formattedDate;
+
+                // Animate circular score
+                const ring = $("resScoreRing");
+                const color = statusInfo.color || (score >= 90 ? "#10B981" : score >= 80 ? "#06B6D4" : score >= 70 ? "#2563EB" : score >= 50 ? "#F59E0B" : "#EF4444");
+                ring.style.stroke = color;
+                const offset = CIRCUMFERENCE - (CIRCUMFERENCE * (score / 100));
+                setTimeout(() => {
+                    ring.style.strokeDashoffset = String(offset);
+                }, 60);
+
+                animateValue($("resScoreNum"), 0, score, 1500);
+
+                // Status Badge
+                const badge = $("resStatusBadge");
+                badge.textContent = statusInfo.headline || statusInfo.status || "Evaluated";
+                badge.style.color = color;
+                badge.style.backgroundColor = color + "18";
+                badge.style.border = `1px solid ${color}40`;
+
+                // General Summary
+                const summary = res.summary || {};
+                $("resGeneralSummary").textContent = summary.general_summary || statusInfo.description || "";
+
+                // Render 8 Category Cards
+                renderCategoryCards(res.categories || []);
+
+                // Update CTAs
+                const cta = res.cta || {};
+                if (cta.whatsapp_url) {
+                    $("btnLeadWhatsApp").href = cta.whatsapp_url;
+                }
+                if (cta.email_url) {
+                    $("linkEmailCta").href = cta.email_url;
+                }
+
+                // Pre-fill lead form
+                $("leadWebsite").value = res.target_url;
+                $("leadInitialScore").value = String(score);
+
+                // Smart brand and domain extraction
+                let brandName = "eSupport";
+                let domainHost = "";
+                try {
+                    const u = new URL(res.target_url.startsWith("http") ? res.target_url : "https://" + res.target_url);
+                    domainHost = u.hostname.replace(/^www\./i, "");
+                    const parts = domainHost.split(".");
+                    if (parts.length > 0 && parts[0]) {
+                        brandName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+                    }
+                } catch (e) {
+                    brandName = "My Business";
+                }
+
+                if ($("leadCompany")) {
+                    $("leadCompany").value = brandName;
+                }
+
+                // Render dynamic keywords search gap list
+                const kwList = $("leadKeywordList");
+                if (kwList) {
+                    const keywords = [
+                        `free SEO checker Sri Lanka`,
+                        `website SEO audit tool`,
+                        `how to check website SEO score`,
+                        `${brandName} SEO services Sri Lanka`,
+                        `technical SEO analysis Sri Lanka`,
+                        `website health check tool free`
+                    ];
+                    kwList.innerHTML = keywords.map(kw => `
+                        <div class="lead-keyword-item">
+                            <span class="lead-keyword-name">${escapeHtml(kw)}</span>
+                            <span class="lead-keyword-status">Not ranked</span>
+                        </div>
+                    `).join("");
+                }
+                const diagSec = $("leadDiagnosisSection");
+                if (diagSec) {
+                    diagSec.style.display = "block";
+                }
+
+                // Reveal New Audit button beside Check My SEO Score now that scan has finished!
+                const btnHero = $("btnNewAuditHero");
+                if (btnHero) btnHero.style.display = "inline-flex";
+                const boxWrap = $("checkerBoxWrap");
+                if (boxWrap) boxWrap.classList.add("has-new-audit");
+
+                // Show result section & scroll smoothly
+                const resultSection = $("resultSection");
+                resultSection.style.display = "block";
+                resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            function getCatColor(val) {
+                if (val === null || val === undefined) return "#94A3B8";
+                if (val >= 90) return "#10B981";
+                if (val >= 80) return "#06B6D4";
+                if (val >= 70) return "#2563EB";
+                if (val >= 60) return "#F59E0B";
+                if (val >= 40) return "#F97316";
+                return "#EF4444";
+            }
+
+            const CHECK_ICONS = { pass: ["✓", "#10B981"], warn: ["◐", "#F59E0B"], partial: ["◐", "#F59E0B"], fail: ["✗", "#EF4444"], unmeasured: ["–", "#94A3B8"] };
+
+            function renderCheckList(checks) {
+                const list = (checks || []).filter(c => CHECK_ICONS[c.status]);
+                if (!list.length) return "";
+                return `
+                    <details style="text-align:left; margin-top:10px; font-size:12px;">
+                        <summary style="cursor:pointer; color:#2563EB; font-weight:600;">See what was checked</summary>
+                        <ul style="list-style:none; padding:0; margin:8px 0 0;">
+                            ${list.map(c => `<li style="margin-bottom:8px; line-height:1.4;">
+                                <span style="color:${CHECK_ICONS[c.status][1]}; font-weight:700;">${CHECK_ICONS[c.status][0]}</span> <b>${escapeHtml(c.label)}</b><br>
+                                <span style="color:#64748B;">${c.display_as ? "<i>" + escapeHtml(c.display_as) + ":</i> " : ""}${escapeHtml(c.detail)}</span>
+                            </li>`).join("")}
+                        </ul>
+                    </details>`;
+            }
+
+            function renderCategoryCards(cats) {
+                const grid = $("categoryCardsGrid");
+                grid.innerHTML = "";
+
+                cats.forEach((c, idx) => {
+                    const hasScore = c.score !== null && c.score !== undefined;
+                    const val = hasScore ? Math.round(c.score) : 0;
+                    const color = getCatColor(c.score);
+                    const offset = hasScore ? MINI_CIRCUMFERENCE - (MINI_CIRCUMFERENCE * (val / 100)) : MINI_CIRCUMFERENCE;
+
+                    const card = document.createElement("div");
+                    card.className = "cat-card";
+
+                    let ringSvg = "";
+                    if (hasScore) {
+                        ringSvg = `
+                            <div class="cat-ring-wrap">
+                                <svg class="cat-ring-svg" viewBox="0 0 80 80">
+                                    <circle class="cat-ring-bg" cx="40" cy="40" r="35"></circle>
+                                    <circle class="cat-ring-fill" id="catRingFill_${idx}" cx="40" cy="40" r="35" style="stroke:${color}; stroke-dashoffset:${MINI_CIRCUMFERENCE};"></circle>
+                                </svg>
+                                <div class="cat-ring-val" style="color:${color};"><span id="catNumVal_${idx}">0</span>%</div>
+                            </div>
+                        `;
+                    } else {
+                        ringSvg = `
+                            <div class="cat-ring-wrap">
+                                <svg class="cat-ring-svg" viewBox="0 0 80 80">
+                                    <circle class="cat-ring-bg" cx="40" cy="40" r="35" style="stroke-dasharray:4 4;"></circle>
+                                </svg>
+                                <div class="cat-ring-val" style="font-size:12px; color:#94A3B8;">N/A</div>
+                            </div>
+                        `;
+                    }
+
+                    const statusDisplay = c.status || (hasScore ? "Evaluated" : "Not available");
+
+                    card.innerHTML = `
+                        ${ringSvg}
+                        <div class="cat-name">${escapeHtml(c.name)}${c.provisional ? ' <span title="Provisional: part of this category could not be measured" style="color:#F59E0B;">*</span>' : ""}</div>
+                        <div class="cat-status-badge" style="color:${color}; background:${color}15; border:1px solid ${color}35;">
+                            ${escapeHtml(statusDisplay)}
+                        </div>
+                        ${hasScore && c.checks_total ? `<div style="font-size:11px; color:#059669; margin-top:6px;">${escapeHtml(c.checks_passed)} of ${escapeHtml(c.checks_total)} checks passed</div>` : ""}
+                        <p class="cat-desc">${escapeHtml(c.description || "")}</p>
+                        ${c.ai_summary ? `<p class="cat-desc" style="background:#F0F9FF; border-radius:8px; padding:8px; text-align:left;">💡 <b>AI tip:</b> ${escapeHtml(c.ai_summary)}</p>` : ""}
+                        ${renderCheckList(c.checks)}
+                    `;
+                    grid.appendChild(card);
+
+                    if (hasScore) {
+                        setTimeout(() => {
+                            const rEl = $(`catRingFill_${idx}`);
+                            if (rEl) rEl.style.strokeDashoffset = String(offset);
+                            const nEl = $(`catNumVal_${idx}`);
+                            if (nEl) animateValue(nEl, 0, val, 1400);
+                        }, 100 + idx * 60);
+                    }
+                });
+            }
+
+            function escapeHtml(s) {
+                return String(s ?? "").replace(/[&<>"']/g, m => ({
+                    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+                }[m]));
+            }
+
+            /* Multi-Step Lead Inquiry Wizard Controls (Leados Style) */
+            let currentWizStep = 0;
+
+            window.openLeadModal = function(step = 0) {
+                const alertEl = $("leadAlert");
+                if (alertEl) {
+                    alertEl.style.display = "none";
+                    alertEl.textContent = "";
+                }
+
+                if (currentScannedData) {
+                    if ($("leadWebsite")) $("leadWebsite").value = currentScannedData.target_url || "";
+                    if ($("leadInitialScore")) $("leadInitialScore").value = currentScannedData.score !== undefined ? currentScannedData.score : "";
+                }
+
+                wizardGoToStep(typeof step === "number" ? step : 0);
+                $("leadModal").classList.add("open");
+            };
+
+            window.closeLeadModal = function() {
+                $("leadModal").classList.remove("open");
+            };
+
+            window.wizardGoToStep = function(step) {
+                currentWizStep = step;
+                const steps = [0, 1, 2, 3, 4];
+                steps.forEach(s => {
+                    const el = $("wizardStep" + s);
+                    if (el) el.style.display = (s === step) ? "block" : "none";
+                });
+
+                // Back button visibility
+                const backBtn = $("wizardBackBtn");
+                if (backBtn) {
+                    backBtn.style.display = (step > 0 && step < 4) ? "inline-flex" : "none";
+                }
+
+                // Progress segment tracking (visible on steps 1, 2, 3)
+                const track = $("wizardProgressTrack");
+                if (track) {
+                    if (step === 0 || step === 4) {
+                        track.style.visibility = "hidden";
+                    } else {
+                        track.style.visibility = "visible";
+                        const p1 = $("wProg1");
+                        const p2 = $("wProg2");
+                        const p3 = $("wProg3");
+                        if (p1) p1.className = step >= 1 ? "wizard-progress-seg active" : "wizard-progress-seg";
+                        if (p2) p2.className = step >= 2 ? "wizard-progress-seg active" : "wizard-progress-seg";
+                        if (p3) p3.className = step >= 3 ? "wizard-progress-seg active" : "wizard-progress-seg";
+                    }
+                }
+
+                // Scroll modal body to top on step change
+                const modalBody = document.querySelector(".wizard-body");
+                if (modalBody) modalBody.scrollTop = 0;
+
+                // Focus first input of active step
+                if (step === 1 && $("leadCompany")) setTimeout(() => $("leadCompany").focus(), 150);
+                if (step === 3 && $("leadName")) setTimeout(() => $("leadName").focus(), 150);
+            };
+
+            window.wizardPrevStep = function() {
+                if (currentWizStep > 0 && currentWizStep < 4) {
+                    wizardGoToStep(currentWizStep - 1);
+                }
+            };
+
+            window.toggleWizPill = function(pillEl) {
+                if (!pillEl) return;
+                pillEl.classList.toggle("active");
+                const chk = pillEl.querySelector(".wiz-pill-check");
+                if (chk) {
+                    chk.textContent = pillEl.classList.contains("active") ? "☑" : "☐";
+                }
+            };
+
+            window.addCustomWizService = function() {
+                const input = $("wizCustomServiceInput");
+                if (!input) return;
+                const val = input.value.trim();
+                if (!val) return;
+
+                const list = $("wizServicesList");
+                if (!list) return;
+
+                const pill = document.createElement("div");
+                pill.className = "wiz-pill active";
+                pill.setAttribute("data-val", val);
+                pill.onclick = function() { toggleWizPill(this); };
+                pill.innerHTML = `
+                    <span class="wiz-pill-check">☑</span>
+                    <span class="wiz-pill-text">${escapeHtml(val)}</span>
+                `;
+                list.appendChild(pill);
+                input.value = "";
+            };
+
+            window.submitLeadFormWizard = async function(e) {
+                if (e && e.preventDefault) e.preventDefault();
+                const btn = $("leadSubmitBtn");
+                const alertEl = $("leadAlert");
+                if (alertEl) alertEl.style.display = "none";
+
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = "Submitting Action Plan...";
+                }
+
+                // Collect selected services
+                const selectedPills = Array.from(document.querySelectorAll("#wizServicesList .wiz-pill.active"));
+                const selectedServices = selectedPills.map(p => p.getAttribute("data-val") || p.innerText.trim()).filter(Boolean);
+
+                const company = $("leadCompany") ? $("leadCompany").value.trim() : "";
+                const country = $("wizCountry") ? $("wizCountry").value.trim() : "";
+                const city = $("wizCity") ? $("wizCity").value.trim() : "";
+                const industry = $("wizIndustry") ? $("wizIndustry").value.trim() : "";
+                const targetLoc = $("wizTargetLocation") ? $("wizTargetLocation").value.trim() : "";
+
+                let metaDetails = [];
+                if (company) metaDetails.push(`Business: ${company}`);
+                if (country || city) metaDetails.push(`Location: ${city ? city + ', ' : ''}${country}`);
+                if (industry) metaDetails.push(`Industry: ${industry}`);
+                if (targetLoc) metaDetails.push(`Target Market: ${targetLoc}`);
+                if (selectedServices.length) metaDetails.push(`Goals/Services: ${selectedServices.join('; ')}`);
+
+                const formattedMessage = metaDetails.length 
+                    ? `[Inquiry Wizard Details]\n` + metaDetails.join('\n')
+                    : "I would like a detailed SEO action plan and recommendations for my website.";
+
+                const payload = {
+                    name: ($("leadName") && $("leadName").value) ? $("leadName").value.trim() : "",
+                    company: company || (currentScannedData ? currentScannedData.target_url : ""),
+                    email: $("leadEmail") ? $("leadEmail").value.trim() : "",
+                    phone: $("leadPhone") ? $("leadPhone").value.trim() : "",
+                    website: $("leadWebsite") ? $("leadWebsite").value.trim() : (currentScannedData ? currentScannedData.target_url : ""),
+                    initial_score: ($("leadInitialScore") && $("leadInitialScore").value) ? parseFloat($("leadInitialScore").value) : null,
+                    message: formattedMessage
+                };
+
+                try {
+                    const resp = await fetch("/api/leads", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const data = await resp.json().catch(() => ({}));
+
+                    if (!resp.ok) {
+                        throw new Error(data.detail || "Unable to submit your inquiry. Please check your email and try again.");
+                    }
+
+                    // Update direct WhatsApp link
+                    const waBtn = $("wizWhatsAppDirectBtn");
+                    if (waBtn) {
+                        const targetSite = payload.website || "";
+                        const waText = encodeURIComponent(`Hello eSupport! I just ran an SEO audit for ${targetSite} (Score: ${payload.initial_score || 'N/A'}/100) and would like to discuss my SEO Action Plan.`);
+                        waBtn.href = `https://wa.me/94710690715?text=${waText}`;
+                    }
+
+                    // Transition directly to celebration screen (Step 4)
+                    wizardGoToStep(4);
+
+                } catch (err) {
+                    if (alertEl) {
+                        alertEl.className = "lead-status-alert error";
+                        alertEl.textContent = err.message || "Something went wrong. Please check your information and try again.";
+                        alertEl.style.display = "block";
+                    }
+                    wizardGoToStep(3);
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = "Get My Free SEO Action Plan ➔";
+                    }
+                }
+            };
+
+            // Backwards compatibility for any legacy callers
+            window.submitLeadForm = window.submitLeadFormWizard;
+
+            // Close modal on click outside
+            window.addEventListener("click", function(e) {
+                const modal = $("leadModal");
+                if (e.target === modal) {
+                    closeLeadModal();
+                }
+            });
+
+            // Enter key trigger on URL input
+            $("scanUrlInput").addEventListener("keydown", function(e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    runPublicScan();
+                }
+            });
+
+        })();
+    </script>
+</body>
+</html>
