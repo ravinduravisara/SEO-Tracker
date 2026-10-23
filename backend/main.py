@@ -1052,36 +1052,76 @@ def get_sales_pipeline_stats(
 
 
 
-_DASHBOARD_STATS_CACHE: dict[str, Any] = {"timestamp": 0.0, "data": None}
+_DASHBOARD_STATS_CACHE: dict[str, Any] = {"timestamp": 0.0, "data": None, "refreshing": False}
 _DASHBOARD_STATS_LOCK = threading.Lock()
+_OLLAMA_STATUS_CACHE: dict[str, Any] = {"timestamp": 0.0, "ready": False}
+_OLLAMA_LOCK = threading.Lock()
 
 
-@app.get("/api/dashboard/stats")
-def get_dashboard_stats(db: Session = Depends(get_db), current_admin: AdminUser = Depends(require_permission("dashboard.view"))):
-    now_ts = time.time()
+def _check_ollama_status_fast() -> bool:
+    now = time.time()
+    with _OLLAMA_LOCK:
+        if now - _OLLAMA_STATUS_CACHE["timestamp"] < 60.0:
+            return _OLLAMA_STATUS_CACHE["ready"]
+    ready = False
+    try:
+        base = OLLAMA_URL.rsplit("/api/", 1)[0].rstrip("/")
+        tags = requests.get(base + "/api/tags", timeout=0.4)
+        ready = tags.ok and any(str(m.get("name", "")).split(":")[0] == OLLAMA_MODEL.split(":")[0] for m in (tags.json().get("models") or []))
+    except Exception:
+        pass
+    with _OLLAMA_LOCK:
+        _OLLAMA_STATUS_CACHE["timestamp"] = now
+        _OLLAMA_STATUS_CACHE["ready"] = ready
+    return ready
+
+
+def invalidate_dashboard_cache():
+    """Immediately invalidate in-memory dashboard stats so the next request gets fresh data."""
     with _DASHBOARD_STATS_LOCK:
-        if _DASHBOARD_STATS_CACHE["data"] is not None and (now_ts - _DASHBOARD_STATS_CACHE["timestamp"] < 15.0):
-            return _DASHBOARD_STATS_CACHE["data"]
+        _DASHBOARD_STATS_CACHE["timestamp"] = 0.0
 
-    clients = db.query(Client).all()
-    total_clients = len(clients)
-    total_websites = db.query(Website).count()
-    # Defer heavy result_json to avoid downloading multi-megabyte payloads on every refresh
-    audits = db.query(Audit).defer("result_json").order_by(Audit.created_at.desc()).all()
+
+def _compute_dashboard_stats() -> dict[str, Any]:
+    # Execute independent count and aggregate queries in parallel to eliminate cloud round-trip delay
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        f_clients = executor.submit(lambda: SessionLocal().query(Client).all())
+        f_websites = executor.submit(lambda: SessionLocal().query(Website).count())
+        f_audits_meta = executor.submit(lambda: SessionLocal().query(Audit).defer("result_json").order_by(Audit.created_at.desc()).all())
+        f_reports_pub = executor.submit(lambda: SessionLocal().query(PublicReport).filter(PublicReport.status == "PUBLISHED").count())
+        f_reports_tot = executor.submit(lambda: SessionLocal().query(PublicReport).count())
+        f_leads_tot = executor.submit(lambda: SessionLocal().query(SEOLead).count())
+        f_leads_new = executor.submit(lambda: SessionLocal().query(SEOLead).filter(SEOLead.status == "NEW").count())
+        f_scans_cnt = executor.submit(lambda: SessionLocal().query(PublicScan).count())
+        f_hist_scans = executor.submit(lambda: SessionLocal().query(Audit).filter(Audit.client_id == None).count())
+        f_ollama = executor.submit(_check_ollama_status_fast)
+
+        clients = f_clients.result()
+        total_clients = len(clients)
+        total_websites = f_websites.result()
+        audits = f_audits_meta.result()
+        reports_published = f_reports_pub.result()
+        reports_total = f_reports_tot.result()
+        leads_total = f_leads_tot.result()
+        leads_new = f_leads_new.result()
+        try:
+            public_scans_recorded = f_scans_cnt.result()
+        except Exception:
+            public_scans_recorded = 0
+        historical_public = f_hist_scans.result()
+        ollama_ready = f_ollama.result()
+
     total_audits = len(audits)
     scores = [a.score for a in audits if a.score is not None]
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0
     excellent = sum(1 for s in scores if s >= 90)
     needs_imp = sum(1 for s in scores if s < 70)
-    
-    reports_published = db.query(PublicReport).filter(PublicReport.status == "PUBLISHED").count()
-    reports_total = db.query(PublicReport).count()
 
     # Load full audit results only for the latest 10 audits for dashboard metrics
     recent_ids = [a.id for a in audits[:10]]
     recent_map: dict[int, Audit] = {}
     if recent_ids:
-        for a in db.query(Audit).filter(Audit.id.in_(recent_ids)).all():
+        for a in SessionLocal().query(Audit).filter(Audit.id.in_(recent_ids)).all():
             recent_map[a.id] = a
 
     parsed: list[tuple[Audit, dict[str, Any]]] = []
@@ -1128,20 +1168,13 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_admin: AdminUser 
 
     week_ago = datetime.utcnow() - timedelta(days=7)
     month_ago = datetime.utcnow() - timedelta(days=30)
-    leads_total = db.query(SEOLead).count()
-    leads_new = db.query(SEOLead).filter(SEOLead.status == "NEW").count()
-    try:
-        public_scans_recorded = db.query(PublicScan).count()
-    except Exception:
-        public_scans_recorded = 0
-    historical_public = db.query(Audit).filter(Audit.client_id == None).count()
     public_scans_total = max(public_scans_recorded, historical_public, leads_total)
 
     # Batch fetch client names for recent audits in 1 query
     client_ids = {a.client_id for a, _ in parsed[:8] if a.client_id}
     client_name_map = {}
     if client_ids:
-        for c in db.query(Client).filter(Client.id.in_(client_ids)).all():
+        for c in SessionLocal().query(Client).filter(Client.id.in_(client_ids)).all():
             client_name_map[c.id] = c.name
 
     recent_audits = []
@@ -1164,13 +1197,6 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_admin: AdminUser 
         })
 
     integ = integrations.status()
-    ollama_ready = False
-    try:
-        base = OLLAMA_URL.rsplit("/api/", 1)[0].rstrip("/")
-        tags = requests.get(base + "/api/tags", timeout=0.8)
-        ollama_ready = tags.ok and any(str(m.get("name", "")).split(":")[0] == OLLAMA_MODEL.split(":")[0] for m in (tags.json().get("models") or []))
-    except (requests.RequestException, ValueError):
-        pass
 
     result_data = {
         "websites_audited": len(latest_by_host),
@@ -1213,8 +1239,33 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_admin: AdminUser 
     with _DASHBOARD_STATS_LOCK:
         _DASHBOARD_STATS_CACHE["timestamp"] = time.time()
         _DASHBOARD_STATS_CACHE["data"] = result_data
+        _DASHBOARD_STATS_CACHE["refreshing"] = False
 
     return result_data
+
+
+@app.get("/api/dashboard/stats")
+def get_dashboard_stats(db: Session = Depends(get_db), current_admin: AdminUser = Depends(require_permission("dashboard.view"))):
+    now_ts = time.time()
+    with _DASHBOARD_STATS_LOCK:
+        data = _DASHBOARD_STATS_CACHE["data"]
+        age = now_ts - _DASHBOARD_STATS_CACHE["timestamp"]
+        refreshing = _DASHBOARD_STATS_CACHE.get("refreshing", False)
+
+    # 1. Fresh cache hit (< 60s) -> return immediately
+    if data is not None and age < 60.0:
+        return data
+
+    # 2. Stale-While-Revalidate (< 300s) -> return immediately and refresh in background
+    if data is not None and age < 300.0:
+        if not refreshing:
+            with _DASHBOARD_STATS_LOCK:
+                _DASHBOARD_STATS_CACHE["refreshing"] = True
+            threading.Thread(target=_compute_dashboard_stats, daemon=True).start()
+        return data
+
+    # 3. Cache expired or initial hit -> compute in parallel
+    return _compute_dashboard_stats()
 
 
 @app.get("/api/clients")
@@ -1291,6 +1342,7 @@ def create_client(client_data: ClientCreate = Body(...), db: Session = Depends(g
         db.commit()
 
     record_activity(db, "CLIENT_CREATED", f"Client #{new_client.id} ({new_client.name})", f"Target: {client_data.target_url}", user=current_admin)
+    invalidate_dashboard_cache()
 
     return {
         "id": new_client.id,
@@ -1309,29 +1361,46 @@ def get_client(client_id: int, db: Session = Depends(get_db), current_admin: Adm
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    websites = [{"id": w.id, "url": w.url, "name": w.name} for w in client.websites]
-    audits = []
-    for a in sorted(client.audits, key=lambda x: x.created_at or datetime.min, reverse=True):
-        audits.append({
+    # Fast batch queries: fetch websites, audits (defer heavy result_json), and public reports
+    websites = db.query(Website).filter(Website.client_id == client.id).all()
+    audits = db.query(Audit).defer("result_json").filter(Audit.client_id == client.id).order_by(Audit.created_at.desc()).all()
+    reports = db.query(PublicReport).filter(PublicReport.client_id == client.id).order_by(PublicReport.created_at.desc()).all()
+
+    # Index reports by audit_id for zero-query mapping
+    reports_by_audit = defaultdict(list)
+    for r in reports:
+        if r.audit_id:
+            reports_by_audit[r.audit_id].append(r)
+
+    # Index audits by id for zero-query report lookup
+    audits_by_id = {a.id: a for a in audits}
+
+    websites_out = [{"id": w.id, "url": w.url, "name": w.name} for w in websites]
+
+    audits_out = []
+    for a in audits:
+        a_reps = reports_by_audit.get(a.id, [])
+        audits_out.append({
             "id": a.id,
             "job_id": a.job_id,
             "target_url": a.target_url,
             "score": a.score,
             "status": a.status,
             "created_at": a.created_at.isoformat() if a.created_at else None,
-            "report_token": a.public_reports[0].token if a.public_reports else None,
-            "report_status": a.public_reports[0].status if a.public_reports else None
+            "report_token": a_reps[0].token if a_reps else None,
+            "report_status": a_reps[0].status if a_reps else None
         })
 
-    reports = []
-    for r in client.public_reports:
-        reports.append({
+    reports_out = []
+    for r in reports:
+        a = audits_by_id.get(r.audit_id)
+        reports_out.append({
             "id": r.id,
             "token": r.token,
             "status": r.status,
             "audit_id": r.audit_id,
-            "score": r.audit.score if r.audit else 0,
-            "target_url": r.audit.target_url if r.audit else "",
+            "score": a.score if a else 0,
+            "target_url": a.target_url if a else "",
             "public_url": f"/report/{r.token}",
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "published_at": r.published_at.isoformat() if r.published_at else None
@@ -1344,10 +1413,10 @@ def get_client(client_id: int, db: Session = Depends(get_db), current_admin: Adm
         "email": client.email or "",
         "phone": client.phone or "",
         "status": client.status,
-        "websites": websites,
-        "target_url": websites[0]["url"] if websites else "",
-        "audits": audits,
-        "reports": reports,
+        "websites": websites_out,
+        "target_url": websites_out[0]["url"] if websites_out else "",
+        "audits": audits_out,
+        "reports": reports_out,
         "created_at": client.created_at.isoformat() if client.created_at else None
     }
 
@@ -1370,6 +1439,7 @@ def update_client(client_id: int, req: ClientUpdate = Body(...), db: Session = D
 
     db.commit()
     db.refresh(client)
+    invalidate_dashboard_cache()
     record_activity(db, "CLIENT_UPDATED", f"Client #{client.id} ({client.name})", "Updated client information", user=current_admin)
     return {"status": "success", "id": client.id}
 
@@ -1382,6 +1452,7 @@ def delete_client(client_id: int, db: Session = Depends(get_db), current_admin: 
     name = client.name
     db.delete(client)
     db.commit()
+    invalidate_dashboard_cache()
     record_activity(db, "CLIENT_DELETED", f"Client #{client_id} ({name})", "Deleted client profile and associated websites", user=current_admin)
     return {"status": "success", "message": "Client deleted"}
 
@@ -1580,6 +1651,7 @@ def save_audit(req: AuditSaveRequest = Body(...), db: Session = Depends(get_db),
     db.add(new_audit)
     db.commit()
     db.refresh(new_audit)
+    invalidate_dashboard_cache()
 
     record_activity(db, "AUDIT_SAVED", f"Audit #{new_audit.id}", f"Target: {target_url}, Score: {score}", user=current_admin)
     return {"status": "success", "audit_id": new_audit.id, "score": score, "target_url": target_url}
@@ -1664,6 +1736,7 @@ def generate_public_report(req: ReportGenerateRequest = Body(...), db: Session =
     db.add(new_report)
     db.commit()
     db.refresh(new_report)
+    invalidate_dashboard_cache()
 
     record_activity(db, "REPORT_GENERATED", f"Report #{new_report.id} ({token[:8]}...)", f"Audit #{audit.id}", user=current_admin)
 
@@ -1698,6 +1771,7 @@ def update_report_status(report_id: int, req: ReportStatusRequest = Body(...), d
 
     db.commit()
     db.refresh(report)
+    invalidate_dashboard_cache()
 
     record_activity(db, "REPORT_STATUS_CHANGED", f"Report #{report.id}", f"Status set to {new_status}", user=current_admin)
     return {"status": "success", "id": report.id, "token": report.token, "report_status": report.status}
@@ -1770,16 +1844,24 @@ def list_scheduled_audits(
     db: Session = Depends(get_db),
     current_admin: AdminUser = Depends(require_permission("audits.view"))
 ):
-    """List all scheduled recurring audits."""
+    """List all scheduled recurring audits with zero N+1 latency."""
     items = db.query(ScheduledAudit).order_by(ScheduledAudit.created_at.desc()).all()
+    if not items:
+        return []
+
+    w_ids = list({s.website_id for s in items if s.website_id})
+    c_ids = list({s.client_id for s in items if s.client_id})
+    websites_map = {w.id: w.url for w in db.query(Website).filter(Website.id.in_(w_ids)).all()} if w_ids else {}
+    clients_map = {c.id: c.name for c in db.query(Client).filter(Client.id.in_(c_ids)).all()} if c_ids else {}
+
     out = []
     for s in items:
         out.append({
             "id": s.id,
             "website_id": s.website_id,
-            "website_url": s.website.url if s.website else "",
+            "website_url": websites_map.get(s.website_id, ""),
             "client_id": s.client_id,
-            "client_name": s.client.name if s.client else "",
+            "client_name": clients_map.get(s.client_id, ""),
             "frequency": s.frequency,
             "status": s.status,
             "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None,
@@ -5720,6 +5802,7 @@ def create_lead(req: LeadCreateRequest = Body(...), request: Request = None, db:
     db.add(new_lead)
     db.commit()
     db.refresh(new_lead)
+    invalidate_dashboard_cache()
 
     return {
         "status": "success",
@@ -5730,9 +5813,14 @@ def create_lead(req: LeadCreateRequest = Body(...), request: Request = None, db:
 
 
 @app.get("/api/leads")
-@app.get("/api/leads")
 def list_leads(db: Session = Depends(get_db), current_admin: AdminUser = Depends(require_permission("leads.view"))):
     leads = db.query(SEOLead).order_by(SEOLead.created_at.desc()).all()
+    if not leads:
+        return []
+
+    client_ids = list({l.client_id for l in leads if l.client_id})
+    clients_map = {c.id: c.name for c in db.query(Client).filter(Client.id.in_(client_ids)).all()} if client_ids else {}
+
     result = []
     for l in leads:
         result.append({
@@ -5746,7 +5834,7 @@ def list_leads(db: Session = Depends(get_db), current_admin: AdminUser = Depends
             "status": l.status,
             "source": l.source,
             "client_id": l.client_id,
-            "client_name": l.client.name if l.client else None,
+            "client_name": clients_map.get(l.client_id),
             "message": l.message or "",
             "created_at": l.created_at.isoformat() if l.created_at else None,
             "updated_at": l.updated_at.isoformat() if l.updated_at else None,
@@ -5899,6 +5987,7 @@ def update_lead_status(
     lead.timeline_json = json.dumps(timeline)
     db.commit()
     db.refresh(lead)
+    invalidate_dashboard_cache()
 
     record_activity(db, "LEAD_STATUS_CHANGED", f"Lead #{lead.id} ({lead.name})", f"Status: {new_status}", user=current_admin)
     return {"status": "success", "id": lead.id, "lead_status": lead.status, "timeline": timeline}
@@ -5965,6 +6054,7 @@ def convert_lead_to_client(
     lead.timeline_json = json.dumps(timeline)
     db.commit()
     db.refresh(lead)
+    invalidate_dashboard_cache()
 
     record_activity(db, "LEAD_CONVERTED", f"Lead #{lead.id} ({lead.name})", f"Converted to Client #{client.id} ({client.name})", user=current_admin)
 

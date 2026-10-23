@@ -54,6 +54,9 @@ if IS_MONGO:
         if _mongo_client is None:
             _mongo_client = pymongo.MongoClient(
                 DB_PATH,
+                maxPoolSize=50,
+                minPoolSize=5,
+                maxIdleTimeMS=60000,
                 serverSelectionTimeoutMS=10000,
                 connectTimeoutMS=10000,
                 socketTimeoutMS=45000,
@@ -236,6 +239,79 @@ if IS_MONGO:
                     instance._rel_cache = {}
                 instance._rel_cache[self.name] = value
 
+        def _batch_load(self, siblings: list):
+            """Eagerly resolve relationships across all sibling instances in a single bulk query (eliminates N+1)."""
+            if not siblings:
+                return
+            target_cls = _MODEL_REGISTRY.get(self.target_model_name)
+            if not target_cls:
+                return
+
+            session = None
+            for s in siblings:
+                if getattr(s, "_session", None):
+                    session = s._session
+                    break
+            session = session or MongoSession._active_session or MongoSession()
+            q = session.query(target_cls)
+
+            from collections import defaultdict
+            if self._is_list(siblings[0]):
+                fk = self.foreign_key or f"{siblings[0].__tablename__.rstrip('s')}_id"
+                if not hasattr(target_cls, fk):
+                    if hasattr(target_cls, "client_id") and siblings[0].__tablename__ == "clients":
+                        fk = "client_id"
+                    elif hasattr(target_cls, "website_id") and siblings[0].__tablename__ == "websites":
+                        fk = "website_id"
+                    elif hasattr(target_cls, "lead_id") and siblings[0].__tablename__ == "seo_leads":
+                        fk = "lead_id"
+                    elif hasattr(target_cls, "audit_id") and siblings[0].__tablename__ == "audits":
+                        fk = "audit_id"
+                    elif hasattr(target_cls, "user_id") and siblings[0].__tablename__ == "admin_users":
+                        fk = "user_id"
+                    elif hasattr(target_cls, "invited_by_id") and siblings[0].__tablename__ == "admin_users":
+                        fk = "invited_by_id"
+
+                sibling_ids = [s.id for s in siblings if getattr(s, "id", None) is not None]
+                if sibling_ids and hasattr(target_cls, fk):
+                    res_q = q.filter(getattr(target_cls, fk).in_(sibling_ids))
+                    if self.order_by:
+                        res_q = res_q.order_by(self.order_by)
+                    all_targets = res_q.all()
+                    grouped = defaultdict(list)
+                    for t in all_targets:
+                        t_fk = getattr(t, fk, None)
+                        if t_fk is not None:
+                            grouped[t_fk].append(t)
+                    for s in siblings:
+                        if not hasattr(s, "_rel_cache"):
+                            s._rel_cache = {}
+                        s._rel_cache[self.name] = grouped.get(s.id, [])
+            else:
+                fk = self.foreign_key or f"{target_cls.__tablename__.rstrip('s')}_id"
+                if not hasattr(siblings[0].__class__, fk):
+                    if hasattr(siblings[0].__class__, "client_id") and target_cls.__tablename__ == "clients":
+                        fk = "client_id"
+                    elif hasattr(siblings[0].__class__, "website_id") and target_cls.__tablename__ == "websites":
+                        fk = "website_id"
+                    elif hasattr(siblings[0].__class__, "audit_id") and target_cls.__tablename__ == "audits":
+                        fk = "audit_id"
+                    elif hasattr(siblings[0].__class__, "admin_id") and target_cls.__tablename__ == "admin_users":
+                        fk = "admin_id"
+                    elif hasattr(siblings[0].__class__, "invited_by_id") and target_cls.__tablename__ == "admin_users":
+                        fk = "invited_by_id"
+                    elif hasattr(siblings[0].__class__, "lead_id") and target_cls.__tablename__ == "seo_leads":
+                        fk = "lead_id"
+
+                fks = list({getattr(s, fk, None) for s in siblings if getattr(s, fk, None) is not None})
+                if fks and hasattr(target_cls, "id"):
+                    all_targets = q.filter(target_cls.id.in_(fks)).all()
+                    target_map = {getattr(t, "id"): t for t in all_targets}
+                    for s in siblings:
+                        if not hasattr(s, "_rel_cache"):
+                            s._rel_cache = {}
+                        s._rel_cache[self.name] = target_map.get(getattr(s, fk, None))
+
         def __get__(self, instance, owner):
             if instance is None:
                 return self
@@ -243,6 +319,16 @@ if IS_MONGO:
                 instance._rel_cache = {}
             if self.name in instance._rel_cache:
                 return instance._rel_cache[self.name]
+
+            # Fast-path auto-batch preloading across siblings
+            siblings = getattr(instance, "_siblings", None)
+            if siblings and len(siblings) > 1:
+                try:
+                    self._batch_load(siblings)
+                    if self.name in instance._rel_cache:
+                        return instance._rel_cache[self.name]
+                except Exception as b_err:
+                    logger.debug(f"Auto-batch relationship load fallback: {b_err}")
 
             target_cls = _MODEL_REGISTRY.get(self.target_model_name)
             if not target_cls:
@@ -400,6 +486,16 @@ if IS_MONGO:
                 return None
             return self._doc_to_instance(doc)
 
+        def prefetch(self, *relations):
+            if not hasattr(self, "_prefetch_fields"):
+                self._prefetch_fields = set()
+            self._prefetch_fields.update(relations)
+            return self
+
+        def options(self, *args):
+            # Compatibility helper for SQLAlchemy-style joinedload / selectinload
+            return self
+
         def all(self):
             col = self._get_collection()
             kwargs = {"allow_disk_use": True}
@@ -412,10 +508,24 @@ if IS_MONGO:
                 cur = cur.skip(self._offset)
             if self._limit is not None:
                 cur = cur.limit(self._limit)
-            return [self._doc_to_instance(doc) for doc in cur]
+            instances = [self._doc_to_instance(doc) for doc in cur]
+            if len(instances) > 1:
+                for inst in instances:
+                    inst._siblings = instances
+            if hasattr(self, "_prefetch_fields") and self._prefetch_fields and instances:
+                for rel_name in self._prefetch_fields:
+                    rel_attr = getattr(self.model_cls, rel_name, None)
+                    if isinstance(rel_attr, Relationship):
+                        rel_attr._batch_load(instances)
+            return instances
 
         def count(self) -> int:
             col = self._get_collection()
+            if not self.filter_spec:
+                try:
+                    return col.estimated_document_count()
+                except Exception:
+                    pass
             return col.count_documents(self.filter_spec)
 
         def delete(self) -> int:

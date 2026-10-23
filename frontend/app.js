@@ -184,7 +184,7 @@ class SEOAdminApp {
             return;
         }
 
-        await this.checkHealth();
+        this.checkHealth();
         const initialView = urlParams.get("view") || "dashboard";
         this.navigate(initialView, false);
     }
@@ -401,7 +401,10 @@ class SEOAdminApp {
         $("pageBreadcrumb").textContent = target.breadcrumb;
 
         // View-specific data fetching
-        if (view === "dashboard") this.loadDashboardStats();
+        if (view === "dashboard") {
+            this.loadDashboardStats();
+            this.loadClients();
+        }
         else if (view === "clients") this.loadClients();
         else if (view === "audits") this.loadAudits();
         else if (view === "leads") this.loadLeads();
@@ -441,58 +444,76 @@ class SEOAdminApp {
        DASHBOARD & KPI STATS
     -------------------------------------------------------------- */
     async loadDashboardStats() {
+        // 1. Fast-path: Instant zero-delay cache render
+        try {
+            const cached = localStorage.getItem("esupport_dashboard_stats_cache");
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                this.renderDashboardStats(parsed);
+            }
+        } catch (_) {}
+
+        // 2. Fetch fresh stats in background and update smoothly
         try {
             const stats = await jsonFetch(`${API_BASE}/dashboard/stats`);
-            if ($("kpiClients")) $("kpiClients").textContent = fmt(stats.total_clients);
-            if ($("kpiAudits")) $("kpiAudits").textContent = fmt(stats.total_audits);
-            if ($("kpiAvgScore")) $("kpiAvgScore").textContent = `${Math.round(stats.avg_score || 0)}%`;
-            if ($("kpiPublished")) $("kpiPublished").textContent = fmt(stats.reports_published);
-            if ($("kpiLeads")) $("kpiLeads").textContent = fmt(stats.leads_new);
-            if ($("kpiLeadsLabel")) $("kpiLeadsLabel").textContent = `${fmt(stats.leads_new)} New (${fmt(stats.leads_total)} total)`;
-            if ($("kpiPublicChecks")) $("kpiPublicChecks").textContent = fmt(stats.public_scans_total || stats.total_audits || 0);
-            if ($("kpiPublicChecksSub")) $("kpiPublicChecksSub").textContent = `Checks on /seo-check page`;
-            if ($("kpiAuditsSub")) $("kpiAuditsSub").textContent = `Across ${fmt(stats.websites_audited || stats.total_websites || 1)} unique websites`;
-            if ($("kpiScoreSub")) $("kpiScoreSub").textContent = `${fmt(stats.excellent_websites)} Excellent • ${fmt(stats.needs_improvement)} Needs Attention`;
-
-            if ($("kpiExcellent")) $("kpiExcellent").textContent = fmt(stats.excellent_websites);
-            if ($("kpiNeedsImp")) $("kpiNeedsImp").textContent = fmt(stats.needs_improvement);
-            if ($("kpiWebsites")) $("kpiWebsites").textContent = fmt(stats.websites_audited);
-            if ($("kpiPages")) $("kpiPages").textContent = fmt(stats.pages_crawled);
-            if ($("kpiLinks")) $("kpiLinks").textContent = fmt(safe(stats.links_checked) + safe(stats.resources_checked));
-            if ($("kpiBroken")) $("kpiBroken").textContent = fmt(stats.broken_links);
-            if ($("kpiCritical")) $("kpiCritical").textContent = fmt(stats.open_critical_issues);
-
-            this.renderDashboardInsights(stats);
-
-            // Populate recent audits table in dashboard
-            const recentAuditsBody = $("dashRecentAuditsBody");
-            if (recentAuditsBody) {
-                if (stats.recent_audits && stats.recent_audits.length) {
-                    recentAuditsBody.innerHTML = stats.recent_audits.map(a => {
-                        const score = safe(a.score);
-                        const color = getScoreColor(score);
-                        const when = a.created_at ? new Date(a.created_at + (a.created_at.endsWith("Z") ? "" : "Z")).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
-                        return `
-                            <tr>
-                                <td><b>${esc(a.target_url)}</b></td>
-                                <td><span class="pill" style="background:${color}20; color:${color}; border:1px solid ${color}40;">${score.toFixed(0)}%</span></td>
-                                <td title="${a.elapsed_seconds != null ? "Crawled in " + esc(a.elapsed_seconds) + " s" : ""}">${fmt(a.pages_crawled)}</td>
-                                <td style="color:${a.critical ? "var(--danger)" : "inherit"}; font-weight:${a.critical ? 700 : 400};">${fmt(a.critical)}</td>
-                                <td style="color:${a.warnings ? "var(--warning)" : "inherit"};">${fmt(a.warnings)}</td>
-                                <td>${esc(a.client_name)}</td>
-                                <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">${esc(when)}</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm" onclick="app.loadSavedAudit(${a.id})">Inspect</button>
-                                </td>
-                            </tr>
-                        `;
-                    }).join("");
-                } else {
-                    recentAuditsBody.innerHTML = `<tr><td colspan="8" class="empty-state">No audits completed yet.</td></tr>`;
-                }
-            }
+            this.renderDashboardStats(stats);
+            try {
+                localStorage.setItem("esupport_dashboard_stats_cache", JSON.stringify(stats));
+            } catch (_) {}
         } catch (e) {
             console.error("Dashboard stats error:", e);
+        }
+    }
+
+    renderDashboardStats(stats) {
+        if (!stats) return;
+        if ($("kpiClients")) $("kpiClients").textContent = fmt(stats.total_clients);
+        if ($("kpiAudits")) $("kpiAudits").textContent = fmt(stats.total_audits);
+        if ($("kpiAvgScore")) $("kpiAvgScore").textContent = `${Math.round(stats.avg_score || 0)}%`;
+        if ($("kpiPublished")) $("kpiPublished").textContent = fmt(stats.reports_published);
+        if ($("kpiLeads")) $("kpiLeads").textContent = fmt(stats.leads_new);
+        if ($("kpiLeadsLabel")) $("kpiLeadsLabel").textContent = `${fmt(stats.leads_new)} New (${fmt(stats.leads_total)} total)`;
+        if ($("kpiPublicChecks")) $("kpiPublicChecks").textContent = fmt(stats.public_scans_total || stats.total_audits || 0);
+        if ($("kpiPublicChecksSub")) $("kpiPublicChecksSub").textContent = `Checks on /seo-check page`;
+        if ($("kpiAuditsSub")) $("kpiAuditsSub").textContent = `Across ${fmt(stats.websites_audited || stats.total_websites || 1)} unique websites`;
+        if ($("kpiScoreSub")) $("kpiScoreSub").textContent = `${fmt(stats.excellent_websites)} Excellent • ${fmt(stats.needs_improvement)} Needs Attention`;
+
+        if ($("kpiExcellent")) $("kpiExcellent").textContent = fmt(stats.excellent_websites);
+        if ($("kpiNeedsImp")) $("kpiNeedsImp").textContent = fmt(stats.needs_improvement);
+        if ($("kpiWebsites")) $("kpiWebsites").textContent = fmt(stats.websites_audited);
+        if ($("kpiPages")) $("kpiPages").textContent = fmt(stats.pages_crawled);
+        if ($("kpiLinks")) $("kpiLinks").textContent = fmt(safe(stats.links_checked) + safe(stats.resources_checked));
+        if ($("kpiBroken")) $("kpiBroken").textContent = fmt(stats.broken_links);
+        if ($("kpiCritical")) $("kpiCritical").textContent = fmt(stats.open_critical_issues);
+
+        this.renderDashboardInsights(stats);
+
+        // Populate recent audits table in dashboard
+        const recentAuditsBody = $("dashRecentAuditsBody");
+        if (recentAuditsBody) {
+            if (stats.recent_audits && stats.recent_audits.length) {
+                recentAuditsBody.innerHTML = stats.recent_audits.map(a => {
+                    const score = safe(a.score);
+                    const color = getScoreColor(score);
+                    const when = a.created_at ? new Date(a.created_at + (a.created_at.endsWith("Z") ? "" : "Z")).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
+                    return `
+                        <tr>
+                            <td><b>${esc(a.target_url)}</b></td>
+                            <td><span class="pill" style="background:${color}20; color:${color}; border:1px solid ${color}40;">${score.toFixed(0)}%</span></td>
+                            <td title="${a.elapsed_seconds != null ? "Crawled in " + esc(a.elapsed_seconds) + " s" : ""}">${fmt(a.pages_crawled)}</td>
+                            <td style="color:${a.critical ? "var(--danger)" : "inherit"}; font-weight:${a.critical ? 700 : 400};">${fmt(a.critical)}</td>
+                            <td style="color:${a.warnings ? "var(--warning)" : "inherit"};">${fmt(a.warnings)}</td>
+                            <td>${esc(a.client_name)}</td>
+                            <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">${esc(when)}</td>
+                            <td>
+                                <button class="btn btn-secondary btn-sm" onclick="app.loadSavedAudit(${a.id})">Inspect</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join("");
+            } else {
+                recentAuditsBody.innerHTML = `<tr><td colspan="8" class="empty-state">No audits completed yet.</td></tr>`;
+            }
         }
     }
 
@@ -546,35 +567,40 @@ class SEOAdminApp {
        CLIENT MANAGEMENT
     -------------------------------------------------------------- */
     async loadClients() {
+        if (this.state.clients && this.state.clients.length) {
+            this.renderClientsTable(this.state.clients);
+            this.renderRecentClientsWidget(this.state.clients);
+        }
         try {
             this.state.clients = await jsonFetch(`${API_BASE}/clients`);
             this.renderClientsTable(this.state.clients);
+            this.renderRecentClientsWidget(this.state.clients);
             this.populateClientSelects();
-
-            // Populate Dashboard Recent Clients table
-            const dashClientsBody = $("dashRecentClientsBody");
-            if (dashClientsBody) {
-                if (this.state.clients.length) {
-                    dashClientsBody.innerHTML = this.state.clients.slice(0, 5).map(c => {
-                        const score = c.latest_score !== null ? safe(c.latest_score) : null;
-                        const scoreHtml = score !== null 
-                            ? `<span class="pill" style="background:${getScoreColor(score)}20; color:${getScoreColor(score)}; border:1px solid ${getScoreColor(score)}40;">${score.toFixed(0)}%</span>`
-                            : '<span class="pill pill-disabled">No Audit</span>';
-                        return `
-                            <tr>
-                                <td><b>${esc(c.name)}</b></td>
-                                <td><span style="color:var(--text-muted); font-size:12px;">${esc(c.target_url || "N/A")}</span></td>
-                                <td>${scoreHtml}</td>
-                                <td><button class="btn btn-secondary btn-sm" onclick="app.viewClientDetail(${c.id})">View</button></td>
-                            </tr>
-                        `;
-                    }).join("");
-                } else {
-                    dashClientsBody.innerHTML = `<tr><td colspan="4" class="empty-state">No clients added yet.</td></tr>`;
-                }
-            }
         } catch (e) {
             console.error("Load clients error:", e);
+        }
+    }
+
+    renderRecentClientsWidget(clients) {
+        const dashClientsBody = $("dashRecentClientsBody");
+        if (!dashClientsBody || !clients) return;
+        if (clients.length) {
+            dashClientsBody.innerHTML = clients.slice(0, 5).map(c => {
+                const score = c.latest_score !== null ? safe(c.latest_score) : null;
+                const scoreHtml = score !== null 
+                    ? `<span class="pill" style="background:${getScoreColor(score)}20; color:${getScoreColor(score)}; border:1px solid ${getScoreColor(score)}40;">${score.toFixed(0)}%</span>`
+                    : '<span class="pill pill-disabled">No Audit</span>';
+                return `
+                    <tr>
+                        <td><b>${esc(c.name)}</b></td>
+                        <td><span style="color:var(--text-muted); font-size:12px;">${esc(c.target_url || "N/A")}</span></td>
+                        <td>${scoreHtml}</td>
+                        <td><button class="btn btn-secondary btn-sm" onclick="app.viewClientDetail(${c.id})">View</button></td>
+                    </tr>
+                `;
+            }).join("");
+        } else {
+            dashClientsBody.innerHTML = `<tr><td colspan="4" class="empty-state">No clients added yet.</td></tr>`;
         }
     }
 
@@ -1018,43 +1044,50 @@ class SEOAdminApp {
        AUDIT HISTORY & REPORT LOADING
     -------------------------------------------------------------- */
     async loadAudits() {
+        if (this.state.audits && this.state.audits.length) {
+            this.renderAuditsTable(this.state.audits);
+        }
         try {
-            const audits = await jsonFetch(`${API_BASE}/audits`);
-            const tbody = $("auditsTableBody");
-            if (!tbody) return;
-
-            if (!audits || !audits.length) {
-                tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No audits in history.</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = audits.map(a => {
-                const score = safe(a.score);
-                const color = getScoreColor(score);
-                const d = a.created_at ? new Date(a.created_at).toLocaleDateString() : "-";
-                const repBadge = a.has_report
-                    ? `<span class="pill pill-success">${esc(a.report_status || "PUBLISHED")}</span>`
-                    : `<span class="pill pill-disabled">None</span>`;
-
-                return `
-                    <tr>
-                        <td>${d}</td>
-                        <td><b>${esc(a.target_url)}</b></td>
-                        <td>${esc(a.client_name)}</td>
-                        <td><span class="pill" style="background:${color}20; color:${color}; border:1px solid ${color}40;">${score.toFixed(0)}%</span></td>
-                        <td>${repBadge}</td>
-                        <td>
-                            <div style="display:flex; gap:6px;">
-                                <button class="btn btn-secondary btn-sm" onclick="app.loadSavedAudit(${a.id})">Review Report</button>
-                                <button class="btn btn-primary btn-sm" onclick="app.generateReport(${a.id}, ${a.client_id || 'null'})">Create Public Link</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join("");
+            this.state.audits = await jsonFetch(`${API_BASE}/audits`);
+            this.renderAuditsTable(this.state.audits);
         } catch (e) {
             console.error("Load audits error:", e);
         }
+    }
+
+    renderAuditsTable(audits) {
+        const tbody = $("auditsTableBody");
+        if (!tbody) return;
+
+        if (!audits || !audits.length) {
+            tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No audits in history.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = audits.map(a => {
+            const score = safe(a.score);
+            const color = getScoreColor(score);
+            const d = a.created_at ? new Date(a.created_at).toLocaleDateString() : "-";
+            const repBadge = a.has_report
+                ? `<span class="pill pill-success">${esc(a.report_status || "PUBLISHED")}</span>`
+                : `<span class="pill pill-disabled">None</span>`;
+
+            return `
+                <tr>
+                    <td>${d}</td>
+                    <td><b>${esc(a.target_url)}</b></td>
+                    <td>${esc(a.client_name)}</td>
+                    <td><span class="pill" style="background:${color}20; color:${color}; border:1px solid ${color}40;">${score.toFixed(0)}%</span></td>
+                    <td>${repBadge}</td>
+                    <td>
+                        <div style="display:flex; gap:6px;">
+                            <button class="btn btn-secondary btn-sm" onclick="app.loadSavedAudit(${a.id})">Review Report</button>
+                            <button class="btn btn-primary btn-sm" onclick="app.generateReport(${a.id}, ${a.client_id || 'null'})">Create Public Link</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join("");
     }
 
     async loadSavedAudit(auditId) {
@@ -1075,49 +1108,56 @@ class SEOAdminApp {
        PUBLIC REPORT MANAGEMENT
     -------------------------------------------------------------- */
     async loadReports() {
+        if (this.state.reports && this.state.reports.length) {
+            this.renderReportsTable(this.state.reports);
+        }
         try {
-            const reports = await jsonFetch(`${API_BASE}/reports`);
-            const tbody = $("reportsTableBody");
-            if (!tbody) return;
-
-            if (!reports || !reports.length) {
-                tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No public reports generated yet.</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = reports.map(r => {
-                const isPub = r.status === "PUBLISHED";
-                const d = r.created_at ? new Date(r.created_at).toLocaleDateString() : "-";
-                return `
-                    <tr>
-                        <td>
-                            <b>${esc(r.client_name)}</b>
-                            <div style="font-size:12px; color:var(--text-muted);">${esc(r.target_url)}</div>
-                        </td>
-                        <td><b>${safe(r.score).toFixed(0)}%</b></td>
-                        <td>
-                            <span class="pill ${isPub ? 'pill-success' : 'pill-disabled'}">${esc(r.status)}</span>
-                        </td>
-                        <td><span style="font-size:12px; color:var(--text-muted);">${d}</span></td>
-                        <td><code style="font-size:11px; background:#F1F5F9; padding:2px 6px; border-radius:4px;">${esc(r.token.substring(0, 12))}...</code></td>
-                        <td>
-                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                <button class="btn btn-secondary btn-sm" onclick="app.openPreview('${r.token}')">Preview</button>
-                                <button class="btn btn-secondary btn-sm" onclick="app.copyReportLink('${r.token}')">Copy Link</button>
-                                <button class="btn btn-secondary btn-sm" onclick="window.open('/report/${r.token}', '_blank')">Client View</button>
-                                <button class="btn btn-secondary btn-sm" style="background:#0F172A; color:#fff; border-color:#0F172A;" onclick="window.open('/api/reports/public/${r.token}/comprehensive', '_blank')" title="View 30-Section Full Consultancy Report">30-Sec View</button>
-                                <button class="btn btn-secondary btn-sm" onclick="window.open('/api/reports/public/${r.token}/comprehensive/pdf', '_blank')" title="Download 30-Section Consultancy PDF">PDF</button>
-                                <button class="btn btn-sm ${isPub ? 'btn-danger' : 'btn-success'}" onclick="app.toggleReportStatus(${r.id}, '${r.status}')">
-                                    ${isPub ? 'Disable' : 'Publish'}
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join("");
+            this.state.reports = await jsonFetch(`${API_BASE}/reports`);
+            this.renderReportsTable(this.state.reports);
         } catch (e) {
             console.error("Load reports error:", e);
         }
+    }
+
+    renderReportsTable(reports) {
+        const tbody = $("reportsTableBody");
+        if (!tbody) return;
+
+        if (!reports || !reports.length) {
+            tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No public reports generated yet.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = reports.map(r => {
+            const isPub = r.status === "PUBLISHED";
+            const d = r.created_at ? new Date(r.created_at).toLocaleDateString() : "-";
+            return `
+                <tr>
+                    <td>
+                        <b>${esc(r.client_name)}</b>
+                        <div style="font-size:12px; color:var(--text-muted);">${esc(r.target_url)}</div>
+                    </td>
+                    <td><b>${safe(r.score).toFixed(0)}%</b></td>
+                    <td>
+                        <span class="pill ${isPub ? 'pill-success' : 'pill-disabled'}">${esc(r.status)}</span>
+                    </td>
+                    <td><span style="font-size:12px; color:var(--text-muted);">${d}</span></td>
+                    <td><code style="font-size:11px; background:#F1F5F9; padding:2px 6px; border-radius:4px;">${esc(r.token.substring(0, 12))}...</code></td>
+                    <td>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button class="btn btn-secondary btn-sm" onclick="app.openPreview('${r.token}')">Preview</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.copyReportLink('${r.token}')">Copy Link</button>
+                            <button class="btn btn-secondary btn-sm" onclick="window.open('/report/${r.token}', '_blank')">Client View</button>
+                            <button class="btn btn-secondary btn-sm" style="background:#0F172A; color:#fff; border-color:#0F172A;" onclick="window.open('/api/reports/public/${r.token}/comprehensive', '_blank')" title="View 30-Section Full Consultancy Report">30-Sec View</button>
+                            <button class="btn btn-secondary btn-sm" onclick="window.open('/api/reports/public/${r.token}/comprehensive/pdf', '_blank')" title="Download 30-Section Consultancy PDF">PDF</button>
+                            <button class="btn btn-sm ${isPub ? 'btn-danger' : 'btn-success'}" onclick="app.toggleReportStatus(${r.id}, '${r.status}')">
+                                ${isPub ? 'Disable' : 'Publish'}
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join("");
     }
 
     async generateReport(auditId, clientId = null) {
@@ -1203,90 +1243,97 @@ class SEOAdminApp {
        SEO LEADS MANAGEMENT (ADMIN ONLY)
     -------------------------------------------------------------- */
     async loadLeads() {
+        if (this.state.leads && this.state.leads.length) {
+            this.renderLeadsTable(this.state.leads);
+        }
         try {
             const leads = await jsonFetch(`${API_BASE}/leads`);
             this.state.leads = leads || [];
-
-            // Calculate KPI counts
-            const total = this.state.leads.length;
-            const newCount = this.state.leads.filter(l => (l.status || "").toUpperCase() === "NEW").length;
-            const contacted = this.state.leads.filter(l => (l.status || "").toUpperCase() === "CONTACTED").length;
-            const converted = this.state.leads.filter(l => (l.status || "").toUpperCase() === "CONVERTED").length;
-
-            if ($("kpiLeadsTotal")) $("kpiLeadsTotal").textContent = fmt(total);
-            if ($("kpiLeadsNew")) $("kpiLeadsNew").textContent = fmt(newCount);
-            if ($("kpiLeadsContacted")) $("kpiLeadsContacted").textContent = fmt(contacted);
-            if ($("kpiLeadsConverted")) $("kpiLeadsConverted").textContent = fmt(converted);
-
-            const tbody = $("leadsTableBody");
-            if (!tbody) return;
-
-            if (!leads || !leads.length) {
-                tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No public SEO scan leads recorded yet.</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = leads.map(l => {
-                const d = l.created_at ? new Date(l.created_at).toLocaleString() : "-";
-                const st = (l.status || "NEW").toUpperCase();
-                let statusBadgeClass = "pill-disabled";
-                if (st === "NEW") statusBadgeClass = "pill-primary";
-                else if (st === "CONTACTED") statusBadgeClass = "pill-warning";
-                else if (st === "QUALIFIED") statusBadgeClass = "pill-info";
-                else if (st === "CONVERTED") statusBadgeClass = "pill-success";
-                else if (st === "CLOSED") statusBadgeClass = "pill-disabled";
-
-                const score = safe(l.initial_score);
-                const scoreColor = getScoreColor(score);
-                const scoreLabel = getScoreLabel(score);
-
-                const cleanPhone = (l.phone || "").replace(/[^0-9]/g, "");
-
-                return `
-                    <tr>
-                        <td>
-                            <b>${esc(l.name)}</b>
-                            <div style="font-size:12px; color:var(--text-muted);">${esc(l.company || "Individual")}</div>
-                        </td>
-                        <td>
-                            <a href="${esc(l.website)}" target="_blank" rel="noopener" style="color:var(--primary); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
-                                ${esc(l.website)} ↗
-                            </a>
-                        </td>
-                        <td>
-                            <div><a href="mailto:${esc(l.email)}" style="font-size:12px; color:var(--text); text-decoration:none;">${esc(l.email)}</a></div>
-                            <div style="font-size:11px; color:var(--text-muted);">${esc(l.phone || "No phone")}</div>
-                        </td>
-                        <td>
-                            <span class="pill" style="background:${scoreColor}15; color:${scoreColor}; font-weight:700; border:1px solid ${scoreColor}30;">
-                                ${score}/100 • ${scoreLabel}
-                            </span>
-                        </td>
-                        <td><span style="font-size:12px; color:var(--text-muted);">${d}</span></td>
-                        <td>
-                            <span class="pill ${statusBadgeClass}">${esc(st)}</span>
-                        </td>
-                        <td>
-                            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-                                <button class="btn btn-secondary btn-sm" onclick="app.viewLeadDetail(${l.id})">View</button>
-                                ${cleanPhone ? `
-                                    <a href="https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello ${l.name}, following up on your eSupport SEO score check for ${l.website}`)}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none; color:#10B981; border-color:#10B98140;" title="Contact on WhatsApp">
-                                        WhatsApp
-                                    </a>
-                                ` : ''}
-                                ${st !== "CONVERTED" ? `
-                                    <button class="btn btn-primary btn-sm" onclick="app.convertLead(${l.id})">Create Client</button>
-                                ` : `
-                                    <button class="btn btn-secondary btn-sm" onclick="app.viewClientDetail(${l.client_id})" title="View Client #${l.client_id}">Client #${l.client_id}</button>
-                                `}
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join("");
+            this.renderLeadsTable(this.state.leads);
         } catch (e) {
             console.error("Load leads error:", e);
         }
+    }
+
+    renderLeadsTable(leads) {
+        if (!leads) return;
+        // Calculate KPI counts
+        const total = leads.length;
+        const newCount = leads.filter(l => (l.status || "").toUpperCase() === "NEW").length;
+        const contacted = leads.filter(l => (l.status || "").toUpperCase() === "CONTACTED").length;
+        const converted = leads.filter(l => (l.status || "").toUpperCase() === "CONVERTED").length;
+
+        if ($("kpiLeadsTotal")) $("kpiLeadsTotal").textContent = fmt(total);
+        if ($("kpiLeadsNew")) $("kpiLeadsNew").textContent = fmt(newCount);
+        if ($("kpiLeadsContacted")) $("kpiLeadsContacted").textContent = fmt(contacted);
+        if ($("kpiLeadsConverted")) $("kpiLeadsConverted").textContent = fmt(converted);
+
+        const tbody = $("leadsTableBody");
+        if (!tbody) return;
+
+        if (!leads.length) {
+            tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No public SEO scan leads recorded yet.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = leads.map(l => {
+            const d = l.created_at ? new Date(l.created_at).toLocaleString() : "-";
+            const st = (l.status || "NEW").toUpperCase();
+            let statusBadgeClass = "pill-disabled";
+            if (st === "NEW") statusBadgeClass = "pill-primary";
+            else if (st === "CONTACTED") statusBadgeClass = "pill-warning";
+            else if (st === "QUALIFIED") statusBadgeClass = "pill-info";
+            else if (st === "CONVERTED") statusBadgeClass = "pill-success";
+            else if (st === "CLOSED") statusBadgeClass = "pill-disabled";
+
+            const score = safe(l.initial_score);
+            const scoreColor = getScoreColor(score);
+            const scoreLabel = getScoreLabel(score);
+
+            const cleanPhone = (l.phone || "").replace(/[^0-9]/g, "");
+
+            return `
+                <tr>
+                    <td>
+                        <b>${esc(l.name)}</b>
+                        <div style="font-size:12px; color:var(--text-muted);">${esc(l.company || "Individual")}</div>
+                    </td>
+                    <td>
+                        <a href="${esc(l.website)}" target="_blank" rel="noopener" style="color:var(--primary); font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                            ${esc(l.website)} ↗
+                        </a>
+                    </td>
+                    <td>
+                        <div><a href="mailto:${esc(l.email)}" style="font-size:12px; color:var(--text); text-decoration:none;">${esc(l.email)}</a></div>
+                        <div style="font-size:11px; color:var(--text-muted);">${esc(l.phone || "No phone")}</div>
+                    </td>
+                    <td>
+                        <span class="pill" style="background:${scoreColor}15; color:${scoreColor}; font-weight:700; border:1px solid ${scoreColor}30;">
+                            ${score}/100 • ${scoreLabel}
+                        </span>
+                    </td>
+                    <td><span style="font-size:12px; color:var(--text-muted);">${d}</span></td>
+                    <td>
+                        <span class="pill ${statusBadgeClass}">${esc(st)}</span>
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                            <button class="btn btn-secondary btn-sm" onclick="app.viewLeadDetail(${l.id})">View</button>
+                            ${cleanPhone ? `
+                                <a href="https://wa.me/${cleanPhone}?text=${encodeURIComponent(`Hello ${l.name}, following up on your eSupport SEO score check for ${l.website}`)}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none; color:#10B981; border-color:#10B98140;" title="Contact on WhatsApp">
+                                    WhatsApp
+                                </a>
+                            ` : ''}
+                            ${st !== "CONVERTED" ? `
+                                <button class="btn btn-primary btn-sm" onclick="app.convertLead(${l.id})">Create Client</button>
+                            ` : `
+                                <button class="btn btn-secondary btn-sm" onclick="app.viewClientDetail(${l.client_id})" title="View Client #${l.client_id}">Client #${l.client_id}</button>
+                            `}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join("");
     }
 
     async viewLeadDetail(leadId) {
