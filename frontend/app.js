@@ -556,7 +556,7 @@ class SEOAdminApp {
                     <b style="font-size:22px; color:var(--primary);">${fmt(stats.audits_last_30_days)}</b><div style="font-size:12px; color:var(--text-muted);">Audits, last 30 days</div>
                 </div>
             </div>
-            ${source(ds.pagespeed_mode === "local_lighthouse" ? "Google Lighthouse (local, no key)" : "Google PageSpeed / Core Web Vitals", ds.pagespeed, "Set PAGESPEED_API_KEY in .env for real-user Core Web Vitals")}
+            ${source("Google PageSpeed / Core Web Vitals", ds.pagespeed, ds.pagespeed_mode === "local_lighthouse" ? "Connected via local Lighthouse engine. Optional: set PAGESPEED_API_KEY in .env for Google Cloud API." : "Connected via Google PageSpeed Insights API.")}
             ${source("Google Search Console", ds.search_console, "Set GSC_SERVICE_ACCOUNT_FILE in .env")}
             ${source("Open PageRank (backlinks)", ds.openpagerank, "Set OPENPAGERANK_API_KEY in .env")}
             ${source(`Ollama AI (${ds.ollama_model || "model"})`, ds.ollama, "Run: ollama pull " + (ds.ollama_model || "gemma3"))}
