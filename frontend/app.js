@@ -364,8 +364,11 @@ class SEOAdminApp {
             }
         }
 
-        // Close mobile sidebar on navigation
-        $("adminSidebar").classList.remove("open");
+        // Close mobile sidebar and backdrop on navigation
+        const sb = $("adminSidebar");
+        const bd = $("sidebarBackdrop");
+        if (sb) sb.classList.remove("open");
+        if (bd) bd.classList.remove("active");
 
         // Update active class on sidebar items
         document.querySelectorAll(".nav-item").forEach(item => {
@@ -419,7 +422,10 @@ class SEOAdminApp {
     }
 
     toggleSidebar() {
-        $("adminSidebar").classList.toggle("open");
+        const sb = $("adminSidebar");
+        const bd = $("sidebarBackdrop");
+        if (sb) sb.classList.toggle("open");
+        if (bd) bd.classList.toggle("active");
     }
 
     async checkHealth() {
@@ -1791,8 +1797,8 @@ class SEOAdminApp {
         }
         else if (tab === "issues") {
             container.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                    <h3>SEO Issues Master Table (${fmt(issues.length)})</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                    <h3 style="margin:0;">SEO Issues Master Table (${fmt(issues.length)})</h3>
                     <button class="btn btn-secondary btn-sm" onclick="app.downloadCsv('issues')">Export Issues CSV</button>
                 </div>
                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Every issue comes from a failed or partially-passed check (see Checks &amp; Evidence). Severity orders the work; it does not deduct extra points.</div>
@@ -1825,8 +1831,8 @@ class SEOAdminApp {
         }
         else if (tab === "pages") {
             container.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                    <h3>Page-by-Page Audit (${fmt(pages.length)})</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                    <h3 style="margin:0;">Page-by-Page Audit (${fmt(pages.length)})</h3>
                     <button class="btn btn-secondary btn-sm" onclick="app.downloadCsv('pages')">Export Pages CSV</button>
                 </div>
                 <div class="table-container">
@@ -1856,8 +1862,8 @@ class SEOAdminApp {
         else if (tab === "recommendations") {
             const devPlan = recs.developer_plan || recs.priorities || [];
             container.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                    <h3>Developer Action Plan (${fmt(devPlan.length)})</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                    <h3 style="margin:0;">Developer Action Plan (${fmt(devPlan.length)})</h3>
                     <button class="btn btn-secondary btn-sm" onclick="app.downloadSpecialPdf('developer')">Download Developer PDF</button>
                 </div>
                 <div class="grid" style="gap:16px;">
@@ -1927,8 +1933,8 @@ class SEOAdminApp {
         }
         else if (tab === "raw") {
             container.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <h3>Raw Audit JSON</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                    <h3 style="margin:0;">Raw Audit JSON</h3>
                     <button class="btn btn-secondary btn-sm" onclick="app.downloadRawJson()">Download JSON File</button>
                 </div>
                 <pre style="background:#0F172A; color:#E2E8F0; padding:18px; border-radius:10px; font-family:monospace; font-size:12px; max-height:600px; overflow:auto;">${esc(JSON.stringify(audit, null, 2))}</pre>

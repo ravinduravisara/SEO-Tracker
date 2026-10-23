@@ -34,6 +34,12 @@ fi
 
 PYTHON=".venv/bin/python"
 
+# Verify dependencies
+if ! "$PYTHON" -c "import uvicorn, fastapi" >/dev/null 2>&1; then
+  echo "Installing required dependencies into .venv..."
+  "$PYTHON" -m pip install -r requirements.txt
+fi
+
 PORT=${PORT:-8000}
 echo ""
 echo "=========================================================="

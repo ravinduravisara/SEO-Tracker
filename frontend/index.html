@@ -22,12 +22,15 @@
 <div class="layout" id="appLayout">
     <!-- ADMIN SIDEBAR -->
     <aside class="sidebar" id="adminSidebar">
-        <div class="sidebar-header" style="display:flex; align-items:center; gap:12px;">
-            <img src="/static/assets/esupport-logo.png" alt="eSupport Logo" style="height:36px; width:auto; object-fit:contain; border-radius:6px;">
-            <div>
-                <div class="sidebar-brand-name">eSupport SEO</div>
-                <div class="sidebar-brand-sub">Platform v10.4.0</div>
+        <div class="sidebar-header" style="display:flex; align-items:center; gap:12px; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <img src="/static/assets/esupport-logo.png" alt="eSupport Logo" style="height:36px; width:auto; object-fit:contain; border-radius:6px;">
+                <div>
+                    <div class="sidebar-brand-name">eSupport SEO</div>
+                    <div class="sidebar-brand-sub">Platform v10.4.0</div>
+                </div>
             </div>
+            <button class="sidebar-close-btn" onclick="app.toggleSidebar()" aria-label="Close sidebar">&times;</button>
         </div>
 
         <nav class="sidebar-nav" id="sidebarNav">
@@ -102,6 +105,7 @@
             <button class="btn btn-secondary btn-xs" onclick="app.handleLogout()" title="Sign Out" style="margin-left:auto; padding:4px 8px; font-size:11px;">Logout</button>
         </div>
     </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="app.toggleSidebar()"></div>
 
     <!-- MAIN CONTENT AREA -->
     <main class="main-content">
@@ -221,18 +225,18 @@
 
             <!-- QUICK AUDIT RUNNER -->
             <div class="card" style="margin-bottom:28px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div class="audit-runner-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
                     <div>
                         <h2 style="margin:0; font-size:18px;">Live Website SEO Audit Runner</h2>
                         <div style="font-size:13px; color:var(--text-muted); margin-top:2px;">Real-time crawling, HTTP/HTML verification, and automated technical analysis.</div>
                     </div>
-                    <div style="display:flex; gap:8px;">
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button class="btn btn-secondary btn-sm" onclick="app.runPreflight()" id="preflightBtn">Test Live Site</button>
                         <button class="btn btn-primary btn-sm" onclick="app.startAudit()" id="runAuditBtn">Run Full Audit</button>
                     </div>
                 </div>
 
-                <div class="grid" style="grid-template-columns: 2fr 1fr 1fr; gap:12px; margin-bottom:12px;">
+                <div class="grid audit-runner-grid" style="gap:12px; margin-bottom:12px;">
                     <div class="form-group" style="margin:0;">
                         <input id="auditUrlInput" class="form-input" type="url" placeholder="https://example.com" value="">
                     </div>
@@ -324,9 +328,9 @@
                         <h2 style="margin:0; font-size:20px;">Client Management</h2>
                         <div style="font-size:13px; color:var(--text-muted);">Manage client profiles, websites, historical audits, and generated reports.</div>
                     </div>
-                    <div style="display:flex; gap:12px;">
-                        <input id="clientSearchInput" class="form-input" type="text" placeholder="Search clients..." style="width:220px;" onkeyup="app.filterClients()">
-                        <button class="btn btn-primary" onclick="app.openClientModal()">+ Add New Client</button>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; width:100%; max-width:480px;">
+                        <input id="clientSearchInput" class="form-input" type="text" placeholder="Search clients..." style="flex:1; min-width:140px;" onkeyup="app.filterClients()">
+                        <button class="btn btn-primary" onclick="app.openClientModal()" style="white-space:nowrap;">+ Add New Client</button>
                     </div>
                 </div>
 
@@ -370,7 +374,7 @@
                             <span>📞 <span id="cdPhone">-</span></span>
                         </div>
                     </div>
-                    <div style="display:flex; gap:8px;">
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button class="btn btn-secondary btn-sm" onclick="app.auditCurrentClient()">Run New Audit</button>
                         <button class="btn btn-primary btn-sm" onclick="app.generateReportForClient()">Generate Public Report</button>
                     </div>
@@ -378,7 +382,7 @@
             </div>
 
             <!-- CLIENT AUDIT HISTORY & REPORTS -->
-            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:24px;">
+            <div class="grid grid-2col">
                 <div class="card">
                     <h3 style="margin-top:0; font-size:16px;">Client Audit History</h3>
                     <div class="table-container">
@@ -486,7 +490,7 @@
                             <h2 id="techTargetUrl" style="margin:4px 0; font-size:24px;">https://example.com</h2>
                             <div style="font-size:13px; color:var(--text-muted);" id="techAuditMeta">-</div>
                         </div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <div class="tech-header-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
                             <button class="btn btn-primary btn-sm" onclick="app.downloadSpecialPdf('client')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Client PDF (2-3 Pages)</button>
                             <button class="btn btn-secondary btn-sm" onclick="app.generateReportFromCurrentAudit()">Generate Client Web Link</button>
                             <button class="btn btn-secondary btn-sm" style="background:#0F172A; color:#fff; border-color:#0F172A;" onclick="app.downloadSpecialPdf('comprehensive')">30-Section Comprehensive PDF</button>
@@ -528,9 +532,9 @@
                 <h2 style="margin:0 0 8px 0; font-size:20px;">Source Code ZIP Intelligence</h2>
                 <div style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Upload a ZIP archive containing website source code (Next.js, React, Vue, HTML) for static SEO code analysis.</div>
                 
-                <div style="display:flex; gap:12px; align-items:center; margin-bottom:20px;">
-                    <input type="file" id="sourceZipInput" accept=".zip" class="form-input" style="max-width:340px;">
-                    <button class="btn btn-primary" onclick="app.runSourceAudit()">Analyze ZIP Source</button>
+                <div style="display:flex; gap:12px; align-items:center; margin-bottom:20px; flex-wrap:wrap;">
+                    <input type="file" id="sourceZipInput" accept=".zip" class="form-input" style="max-width:100%; flex:1; min-width:200px;">
+                    <button class="btn btn-primary" onclick="app.runSourceAudit()" style="white-space:nowrap;">Analyze ZIP Source</button>
                 </div>
                 <div id="sourceAuditResults" class="hidden"></div>
             </div>
@@ -570,7 +574,7 @@
                     </div>
                 </div>
 
-                <div class="table-wrap">
+                <div class="table-container">
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -599,9 +603,9 @@
                         <h2 style="margin:0; font-size:20px;">Team Members &amp; Access Control</h2>
                         <div style="font-size:13px; color:var(--text-muted);">Manage platform administrators, sales team, and SEO analysts with role-based permissions.</div>
                     </div>
-                    <div style="display:flex; gap:12px;">
-                        <input id="userSearchInput" class="form-input" type="text" placeholder="Search team members..." style="width:220px;" onkeyup="app.filterUsers()">
-                        <button class="btn btn-primary" onclick="app.openInviteUserModal()">+ Invite Team Member</button>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; width:100%; max-width:480px;">
+                        <input id="userSearchInput" class="form-input" type="text" placeholder="Search team members..." style="flex:1; min-width:140px;" onkeyup="app.filterUsers()">
+                        <button class="btn btn-primary" onclick="app.openInviteUserModal()" style="white-space:nowrap;">+ Invite Team Member</button>
                     </div>
                 </div>
 
@@ -663,7 +667,7 @@
 
         <!-- VIEW: MY PROFILE -->
         <div id="viewProfile" class="admin-view">
-            <div class="grid" style="grid-template-columns: 1fr 1fr; gap:24px;">
+            <div class="grid grid-2col">
                 <!-- PROFILE INFORMATION -->
                 <div class="card">
                     <h2 style="margin:0 0 16px 0; font-size:18px;">My Account Profile</h2>
@@ -974,16 +978,16 @@
 <!-- MODAL: REPORT PREVIEW (IFRAME) -->
 <div id="previewModal" class="modal-overlay hidden">
     <div class="modal-content modal-large">
-        <div class="modal-header">
+        <div class="modal-header" style="flex-wrap:wrap; gap:12px;">
             <div>
                 <h2 id="previewModalTitle">Client Report Preview</h2>
                 <div style="font-size:12px; color:var(--text-muted);">Exact view rendered for the client. No admin tools or controls are exposed.</div>
             </div>
-            <div style="display:flex; gap:8px; align-items:center;">
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                 <button class="btn btn-success btn-sm" id="previewDownloadPdfBtn" onclick="app.downloadPreviewPdf()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Client PDF (2-3 Pages)</button>
                 <button class="btn btn-secondary btn-sm" id="previewCopyLinkBtn" onclick="app.copyPreviewLink()">Copy Link</button>
                 <button class="btn btn-primary btn-sm" id="previewOpenNewTabBtn" onclick="app.openPreviewTab()">Open in New Tab</button>
-                <button class="modal-close" onclick="app.closePreviewModal()" style="margin-left:12px;">&times;</button>
+                <button class="modal-close" onclick="app.closePreviewModal()" style="margin-left:auto;">&times;</button>
             </div>
         </div>
         <div class="modal-body" style="padding:0; flex:1;">

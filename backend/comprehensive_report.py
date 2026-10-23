@@ -777,6 +777,8 @@ def build_comprehensive_html(audit: dict[str, Any]) -> str:
             padding: 36px 32px;
             margin-bottom: 32px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }}
         .section-header {{
             display: flex;
@@ -890,6 +892,85 @@ def build_comprehensive_html(audit: dict[str, Any]) -> str:
         }}
         .btn-download:hover {{ background: #1D4ED8; }}
         
+        @media (max-width: 768px) {{
+            .report-container {{
+                padding: 16px 12px 60px;
+            }}
+            .cover-card {{
+                padding: 32px 20px;
+                border-radius: 16px;
+            }}
+            .report-title {{
+                font-size: 26px;
+            }}
+            .report-subtitle {{
+                font-size: 14px;
+                margin-bottom: 24px;
+            }}
+            .score-hero-card {{
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                gap: 16px;
+                padding: 20px 16px;
+            }}
+            .score-dial {{
+                border-right: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+                padding-right: 0;
+                padding-bottom: 16px;
+                width: 100%;
+            }}
+            .section-card {{
+                padding: 24px 16px;
+                border-radius: 14px;
+                margin-bottom: 24px;
+            }}
+            .section-header {{
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }}
+            .section-title {{
+                font-size: 18px;
+            }}
+            .meta-grid {{
+                grid-template-columns: 1fr;
+            }}
+            .kpi-row {{
+                grid-template-columns: repeat(2, 1fr);
+            }}
+            table {{
+                min-width: 480px;
+            }}
+            .no-print {{
+                flex-direction: column;
+                align-items: stretch !important;
+                gap: 12px;
+            }}
+            .no-print > div {{
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                gap: 8px;
+            }}
+            .btn-download {{
+                width: 100%;
+                justify-content: center;
+                box-sizing: border-box;
+                text-align: center;
+            }}
+        }}
+
+        @media (max-width: 480px) {{
+            .kpi-row {{
+                grid-template-columns: 1fr;
+            }}
+            .report-title {{
+                font-size: 22px;
+            }}
+        }}
+
         @media print {{
             body {{ background: white; }}
             .report-container {{ max-width: 100%; padding: 0; }}
