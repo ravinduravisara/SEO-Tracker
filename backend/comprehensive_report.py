@@ -238,10 +238,6 @@ def extract_report_data(audit: dict[str, Any]) -> dict[str, Any]:
     host = urlparse(target).hostname or "website.com"
     clean_host = host.lower().replace("www.", "")
 
-    # Preserve exact calibrated benchmark if the target is VoltEdge
-    if "voltedge" in clean_host:
-        return VOLTEDGE_DATA
-
     # Ensure deterministic engine payload is available
     eng = audit.get("seo_engine")
     if not eng or not isinstance(eng, dict) or not eng.get("categories"):

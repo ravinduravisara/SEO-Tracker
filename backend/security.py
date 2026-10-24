@@ -127,14 +127,14 @@ def bootstrap_admin_account(db: Session):
 
     initial_pw = os.getenv("ADMIN_INITIAL_PASSWORD", "").strip()
     if not initial_pw:
-        # Default bootstrap password for initial setup
-        initial_pw = "eSupport@SEO2026!Admin"
+        # Generate secure random bootstrap password if none configured
+        initial_pw = secrets.token_urlsafe(16)
         logger.warning(
             "====================================================================\n"
-            "SECURITY: Created initial Super Admin account:\n"
+            "SECURITY: Generated initial Super Admin bootstrap credentials:\n"
             "  Email: %s\n"
             "  Password: %s\n"
-            "Please change this password after your initial login.\n"
+            "Set ADMIN_INITIAL_PASSWORD in environment to customize.\n"
             "====================================================================",
             admin_email, initial_pw
         )

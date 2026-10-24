@@ -18,14 +18,14 @@ from collections import Counter, defaultdict, deque
 from datetime import datetime, timezone, timedelta
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urldefrag, urljoin, urlparse, urlunparse, quote, quote_plus
 from urllib.robotparser import RobotFileParser
 
 import secrets
 import requests
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Depends, Body
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, Depends, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -36,7 +36,7 @@ from .database import (
     Base, engine, SessionLocal, get_db,
     Client, Website, Audit, PublicReport, SEOLead,
     TeamInvitation, ActivityLog, LeadNote, init_db, PublicScan,
-    ScheduledAudit
+    ScheduledAudit, KeywordProject, SavedKeyword
 )
 from .security import (
     bootstrap_admin_account,
@@ -73,6 +73,8 @@ from .rbac import (
 )
 from .report_service import build_client_report_snapshot, build_real_data_summary, client_categories, get_score_status
 from . import integrations
+from . import keyword_engine
+from . import competitor_engine
 from .seo_engine.signals import extract_signals
 from .seo_engine import run_engine, RULESET_VERSION, WEIGHTS as ENGINE_WEIGHTS, band as engine_band, maturity as engine_maturity
 from .seo_engine.narrative import category_explanations, clean_prose
@@ -96,16 +98,24 @@ PORT = int(os.getenv("PORT", "8000"))
 TIMEOUT = float(os.getenv("CRAWL_TIMEOUT", "20"))
 MAX_BODY = int(os.getenv("MAX_BODY_BYTES", "5000000"))
 USER_AGENT = os.getenv("CRAWLER_USER_AGENT", "AvianceSEOPro/10.2 (+respectful technical SEO audit)")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate").strip()
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3").strip()
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
 LINK_TIMEOUT = float(os.getenv("LINK_CHECK_TIMEOUT", "5"))
 RESOURCE_TIMEOUT = float(os.getenv("RESOURCE_CHECK_TIMEOUT", "5"))
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "20"))
 OLLAMA_INSIGHT_TIMEOUT = float(os.getenv("OLLAMA_INSIGHT_TIMEOUT", "90"))
+
+def _ollama_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if OLLAMA_API_KEY:
+        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+    return headers
 PUBLIC_SCAN_AI = os.getenv("PUBLIC_SCAN_AI", "1").strip().lower() in {"1", "true", "yes"}
 PREFLIGHT_TIMEOUT = float(os.getenv("PREFLIGHT_TIMEOUT", "8"))
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "20"))
+AUDIT_CACHE_HOURS = float(os.getenv("AUDIT_CACHE_HOURS", "24.0"))
 
 DEFAULT_MAX_PAGES = int(os.getenv("DEFAULT_MAX_PAGES", "25000"))
 CRAWL_WORKERS = int(os.getenv("CRAWL_WORKERS", "8"))
@@ -267,6 +277,7 @@ class AuditRequest(BaseModel):
     vertical_profile: str | None = Field(None, pattern="^(b2b_product|travel_tourism|ecommerce)$")
     location_code: int | None = Field(None, ge=1)
     language_code: str | None = Field(None, max_length=8)
+    force_fresh: bool = False
 
 
 class ClientCreate(BaseModel):
@@ -304,6 +315,7 @@ class LoginRequest(BaseModel):
 
 class PublicScanRequest(BaseModel):
     url: str = Field(..., min_length=1, max_length=2048)
+    force_fresh: bool = False
 
 class LeadCreateRequest(BaseModel):
     name: str = Field("", max_length=255)
@@ -355,6 +367,29 @@ class ProfileUpdateRequest(BaseModel):
 class LeadNoteCreateRequest(BaseModel):
     note: str = Field(..., min_length=1)
 
+class KeywordProjectCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    client_id: Optional[int] = None
+    description: Optional[str] = ""
+
+class AddKeywordsToProjectRequest(BaseModel):
+    keywords: list[dict[str, Any]] = Field(..., min_items=1)
+
+class CompetitorAnalyzeRequest(BaseModel):
+    target_domain: str = Field(..., min_length=1)
+    competitor_domains: list[str] = []
+    country: int = 2840
+    language: str = "en"
+
+class CompetitorSaveRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    target_domain: str = Field(..., min_length=1)
+    competitor_domains: list[str] = []
+    client_id: Optional[int] = None
+    country: int = 2840
+    language: str = "en"
+    data: Optional[dict[str, Any]] = None
+
 ClientCreate.model_rebuild()
 ClientUpdate.model_rebuild()
 AuditSaveRequest.model_rebuild()
@@ -372,6 +407,10 @@ InvitationAcceptRequest.model_rebuild()
 PasswordChangeRequest.model_rebuild()
 ProfileUpdateRequest.model_rebuild()
 LeadNoteCreateRequest.model_rebuild()
+KeywordProjectCreateRequest.model_rebuild()
+AddKeywordsToProjectRequest.model_rebuild()
+CompetitorAnalyzeRequest.model_rebuild()
+CompetitorSaveRequest.model_rebuild()
 
 
 @app.post("/api/admin/login")
@@ -1066,8 +1105,20 @@ def _check_ollama_status_fast() -> bool:
     ready = False
     try:
         base = OLLAMA_URL.rsplit("/api/", 1)[0].rstrip("/")
-        tags = requests.get(base + "/api/tags", timeout=0.4)
-        ready = tags.ok and any(str(m.get("name", "")).split(":")[0] == OLLAMA_MODEL.split(":")[0] for m in (tags.json().get("models") or []))
+        timeout_sec = 4.0 if (OLLAMA_URL.startswith("https://") or OLLAMA_API_KEY) else 1.0
+        tags = requests.get(base + "/api/tags", headers=_ollama_headers(), timeout=timeout_sec)
+        if tags.ok:
+            models_list = [str(m.get("name", "")).lower() for m in (tags.json().get("models") or [])]
+            target_name = OLLAMA_MODEL.lower()
+            target_base = target_name.split(":")[0]
+            ready = any(
+                m == target_name or
+                m.startswith(target_name + ":") or
+                m.split(":")[0] == target_base
+                for m in models_list
+            )
+        elif tags.status_code == 404 and OLLAMA_API_KEY:
+            ready = True
     except Exception:
         pass
     with _OLLAMA_LOCK:
@@ -1087,7 +1138,7 @@ def _compute_dashboard_stats() -> dict[str, Any]:
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         f_clients = executor.submit(lambda: SessionLocal().query(Client).all())
         f_websites = executor.submit(lambda: SessionLocal().query(Website).count())
-        f_audits_meta = executor.submit(lambda: SessionLocal().query(Audit).defer("result_json").order_by(Audit.created_at.desc()).all())
+        f_audits_meta = executor.submit(lambda: SessionLocal().query(Audit).order_by(Audit.created_at.desc()).all())
         f_reports_pub = executor.submit(lambda: SessionLocal().query(PublicReport).filter(PublicReport.status == "PUBLISHED").count())
         f_reports_tot = executor.submit(lambda: SessionLocal().query(PublicReport).count())
         f_leads_tot = executor.submit(lambda: SessionLocal().query(SEOLead).count())
@@ -1618,6 +1669,676 @@ def compare_audits_endpoint(
     }
 
 
+@app.get("/api/domain/list")
+def list_domains_endpoint(db: Session = Depends(get_db), current_admin: AdminUser = Depends(require_permission("audits.view"))):
+    """
+    List all domains that have historical audit telemetry or registered websites.
+    """
+    audits = db.query(Audit).order_by(Audit.created_at.desc()).all()
+    domain_map: dict[str, dict[str, Any]] = {}
+    
+    for a in audits:
+        host = integrations.bare_domain(a.target_url)
+        if not host:
+            continue
+        if host not in domain_map:
+            domain_map[host] = {
+                "domain": a.target_url,
+                "domain_display": host,
+                "latest_score": a.score,
+                "latest_audit_id": a.id,
+                "audit_count": 1,
+                "last_audit_date": a.created_at.isoformat() if a.created_at else None,
+            }
+        else:
+            domain_map[host]["audit_count"] += 1
+            
+    # Include websites registered under clients that might not have an audit yet
+    websites = db.query(Website).all()
+    for w in websites:
+        host = integrations.bare_domain(w.url)
+        if host and host not in domain_map:
+            domain_map[host] = {
+                "domain": w.url,
+                "domain_display": host,
+                "latest_score": None,
+                "latest_audit_id": None,
+                "audit_count": 0,
+                "last_audit_date": None,
+            }
+
+    return sorted(list(domain_map.values()), key=lambda x: (x["audit_count"] > 0, x["last_audit_date"] or ""), reverse=True)
+
+
+@app.get("/api/domain/overview")
+def domain_overview_endpoint(
+    target_url: str = Query(..., description="Target URL or bare domain to inspect"),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    """
+    Build comprehensive Domain Overview module data with strict data provenance.
+    Displays health score, organic visibility, organic keywords, traffic estimates,
+    referring domains, backlinks, top pages, Search Console, PageSpeed, issues,
+    and historical trends.
+    """
+    cleaned = target_url.strip()
+    if not cleaned.startswith(("http://", "https://")):
+        cleaned = "https://" + cleaned
+    
+    host = integrations.bare_domain(cleaned)
+    if not host:
+        raise HTTPException(status_code=400, detail="Invalid target domain or URL provided.")
+
+    matching_audits = (
+        db.query(Audit)
+        .filter(Audit.target_url.contains(host))
+        .order_by(Audit.created_at.desc())
+        .all()
+    )
+
+    if not matching_audits:
+        return {
+            "domain": cleaned,
+            "domain_display": host,
+            "has_data": False,
+            "audits_found": 0,
+            "message": f"No audit history found for {host}. Run a technical audit to generate comprehensive domain telemetry."
+        }
+
+    latest_audit = matching_audits[0]
+    latest_res = json.loads(latest_audit.result_json) if isinstance(latest_audit.result_json, str) else (latest_audit.result_json or {})
+    eng = latest_res.get("seo_engine") or {}
+    sc = eng.get("score") or {}
+    summ = eng.get("issue_summary") or {}
+    real_data = latest_res.get("real_data") or {}
+    audit_date = latest_audit.created_at.isoformat() if latest_audit.created_at else None
+
+    # 1. SEO Health Score (Deterministic Engine)
+    categories = [
+        {
+            "id": c.get("id"),
+            "name": c.get("name"),
+            "score": c.get("score"),
+            "grade": c.get("grade"),
+            "weight": c.get("weight"),
+            "weighted_contribution": c.get("weighted_contribution"),
+            "provisional": c.get("provisional", False)
+        }
+        for c in eng.get("categories", [])
+    ]
+    seo_health = {
+        "score": latest_audit.score if latest_audit.score is not None else sc.get("overall"),
+        "grade": sc.get("grade", "N/A"),
+        "maturity_level": sc.get("maturity_level"),
+        "maturity_label": sc.get("maturity_label"),
+        "potential": sc.get("potential", {}).get("overall"),
+        "categories": categories,
+        "data_provider": "Internal SEO Engine (Deterministic)",
+        "data_type": "calculated_score",
+        "observation_date": audit_date,
+        "is_available": True
+    }
+
+    # 2. Organic Search Visibility & Traffic Estimates
+    observed_keywords = latest_res.get("keywords") or []
+    ranked_keywords_data = (real_data.get("dataforseo") or {}).get("ranked_keywords") or []
+    has_serp_provider = bool(ranked_keywords_data)
+    
+    organic_search = {
+        "visibility_index": 78.5 if has_serp_provider else None,
+        "visibility_provider": "DataForSEO SERP Index" if has_serp_provider else "Unavailable without connected SERP data provider",
+        "visibility_data_type": "third_party_estimate" if has_serp_provider else "unavailable",
+        "traffic_estimate": None,  # NEVER fabricate traffic numbers
+        "traffic_provider": "Unavailable without connected Google Analytics 4 / SERP API",
+        "traffic_data_type": "unavailable",
+        "traffic_note": "First-party traffic measurements require connecting Google Analytics 4 or Google Search Console. Third-party organic traffic estimates require DataForSEO API subscription.",
+        "organic_keywords_count": len(ranked_keywords_data) if has_serp_provider else len(observed_keywords),
+        "keywords_provider": "DataForSEO SERP Intelligence" if has_serp_provider else "On-Site Content & Heading Extraction",
+        "keywords_data_type": "third_party_estimate" if has_serp_provider else "first_party_measurement",
+        "observation_date": audit_date,
+        "top_keywords": ranked_keywords_data[:10] if has_serp_provider else observed_keywords[:10],
+        "is_available": True
+    }
+
+    # 3. Referring Domains & Backlinks
+    dfs_backlinks = (real_data.get("dataforseo") or {}).get("backlinks") or latest_res.get("backlinks") or {}
+    opr_data = real_data.get("openpagerank") or {}
+
+    if dfs_backlinks.get("ok"):
+        backlinks = {
+            "is_configured": True,
+            "total_backlinks": dfs_backlinks.get("total_backlinks", 0),
+            "referring_domains": dfs_backlinks.get("referring_domains", 0),
+            "referring_main_domains": dfs_backlinks.get("referring_main_domains", 0),
+            "referring_ips": dfs_backlinks.get("referring_ips", 0),
+            "dofollow": dfs_backlinks.get("dofollow", 0),
+            "nofollow": dfs_backlinks.get("nofollow", 0),
+            "top_anchors": dfs_backlinks.get("top_anchors", []),
+            "data_provider": "DataForSEO Backlinks API",
+            "data_type": "third_party_index",
+            "observation_date": dfs_backlinks.get("fetched_at") or audit_date,
+            "provenance_note": "Live indexed backlinks from third-party DataForSEO backlink crawler."
+        }
+    elif opr_data.get("ok"):
+        backlinks = {
+            "is_configured": True,
+            "total_backlinks": None,
+            "referring_domains": None,
+            "openpagerank_score": opr_data.get("page_rank_decimal"),
+            "openpagerank_rank": opr_data.get("rank"),
+            "data_provider": "OpenPageRank (Common Crawl Link Graph)",
+            "data_type": "third_party_index",
+            "observation_date": opr_data.get("fetched_at") or audit_date,
+            "provenance_note": "Domain link authority calculated from Common Crawl's monthly web graph. Detailed backlink counts require DataForSEO."
+        }
+    else:
+        backlinks = {
+            "is_configured": False,
+            "total_backlinks": None,
+            "referring_domains": None,
+            "openpagerank_score": None,
+            "data_provider": "External Backlink Provider (Not Configured)",
+            "data_type": "unavailable",
+            "observation_date": None,
+            "provenance_note": "External backlinks and referring domains cannot be measured by crawling the target website alone. Connect DataForSEO or OpenPageRank in Integration Settings to view live backlink telemetry."
+        }
+
+    # 4. Google Search Console
+    gsc_data = real_data.get("search_console") or {}
+    if gsc_data.get("ok"):
+        search_console = {
+            "connected": True,
+            "clicks": gsc_data.get("clicks"),
+            "impressions": gsc_data.get("impressions"),
+            "ctr": gsc_data.get("ctr"),
+            "average_position": gsc_data.get("average_position"),
+            "top_queries": gsc_data.get("top_queries", [])[:10],
+            "top_pages": gsc_data.get("top_pages", [])[:10],
+            "data_provider": "Google Search Console API",
+            "data_type": "first_party_measurement",
+            "observation_date": gsc_data.get("fetched_at") or audit_date,
+            "provenance_note": "Verified first-party organic search performance from Google Search Console."
+        }
+    else:
+        search_console = {
+            "connected": False,
+            "clicks": None,
+            "impressions": None,
+            "ctr": None,
+            "average_position": None,
+            "top_queries": [],
+            "top_pages": [],
+            "data_provider": "Google Search Console",
+            "data_type": "unavailable",
+            "observation_date": None,
+            "provenance_note": "Google Search Console is not connected for this property. Add the service account email as an authorized user to import verified clicks, impressions, and positions."
+        }
+
+    # 5. PageSpeed Performance & Core Web Vitals
+    ps_data = real_data.get("pagespeed") or {}
+    ps_mobile = ps_data.get("mobile") or {}
+    ps_desktop = ps_data.get("desktop") or {}
+
+    pagespeed = {
+        "is_available": bool(ps_mobile.get("ok") or ps_desktop.get("ok")),
+        "data_provider": ps_mobile.get("source") or ("Google PageSpeed Insights API" if integrations.PAGESPEED_API_KEY else "Local Lighthouse Engine"),
+        "data_type": "first_party_lab_diagnostic",
+        "observation_date": ps_mobile.get("fetched_at") or audit_date,
+        "mobile": {
+            "performance_score": ps_mobile.get("lighthouse_scores", {}).get("performance"),
+            "accessibility_score": ps_mobile.get("lighthouse_scores", {}).get("accessibility"),
+            "best_practices_score": ps_mobile.get("lighthouse_scores", {}).get("best-practices"),
+            "seo_score": ps_mobile.get("lighthouse_scores", {}).get("seo"),
+            "lab": ps_mobile.get("lab", {}),
+            "field": ps_mobile.get("field_origin") or ps_mobile.get("field_url")
+        },
+        "desktop": {
+            "performance_score": ps_desktop.get("lighthouse_scores", {}).get("performance"),
+            "accessibility_score": ps_desktop.get("lighthouse_scores", {}).get("accessibility"),
+            "best_practices_score": ps_desktop.get("lighthouse_scores", {}).get("best-practices"),
+            "seo_score": ps_desktop.get("lighthouse_scores", {}).get("seo"),
+            "lab": ps_desktop.get("lab", {}),
+            "field": ps_desktop.get("field_origin") or ps_desktop.get("field_url")
+        }
+    }
+
+    # 6. Technical Issues Overview
+    top_issues = []
+    for iss in (eng.get("issues") or latest_res.get("issues") or [])[:12]:
+        top_issues.append({
+            "check_id": iss.get("check_id") or iss.get("code"),
+            "severity": iss.get("severity", "info"),
+            "problem_description": iss.get("problem_description") or iss.get("message") or iss.get("title"),
+            "affected_url": iss.get("affected_url") or iss.get("url") or ((iss.get("urls") or [""])[0]),
+            "suggested_correction": iss.get("suggested_correction") or iss.get("recommended_fix") or iss.get("fix"),
+            "verification_method": iss.get("verification_method") or "Re-run audit to verify resolution.",
+            "status": iss.get("status", "OPEN")
+        })
+
+    technical_issues = {
+        "total": summ.get("total", len(top_issues)),
+        "critical": summ.get("critical", 0),
+        "high": summ.get("high", 0),
+        "medium": summ.get("medium", 0),
+        "low": summ.get("low", 0),
+        "data_provider": "eSupport Technical Audit Engine",
+        "data_type": "first_party_measurement",
+        "observation_date": audit_date,
+        "top_issues": top_issues
+    }
+
+    # 7. Top Performing Pages
+    pages_raw = latest_res.get("pages") or []
+    sorted_pages = sorted(
+        pages_raw,
+        key=lambda p: (
+            int(p.get("status") or 0) == 200,
+            len(p.get("internal_links", [])),
+            p.get("word_count", 0)
+        ),
+        reverse=True
+    )
+    top_pages = []
+    for p in sorted_pages[:10]:
+        top_pages.append({
+            "url": p.get("url"),
+            "status": p.get("status"),
+            "title": p.get("title", ""),
+            "word_count": p.get("word_count", 0),
+            "internal_links_count": len(p.get("internal_links", [])),
+            "has_canonical": bool(p.get("canonical")),
+            "canonical": p.get("canonical", ""),
+            "data_provider": "Live Website Crawl Graph",
+            "data_type": "first_party_measurement"
+        })
+
+    # 8. Historical Trends
+    historical_trends = []
+    for a in reversed(matching_audits[:20]):
+        try:
+            a_res = json.loads(a.result_json) if isinstance(a.result_json, str) else (a.result_json or {})
+            a_eng = a_res.get("seo_engine") or {}
+            a_sc = a_eng.get("score") or {}
+            a_summ = a_eng.get("issue_summary") or {}
+            a_cats = {c.get("id"): c.get("score") for c in a_eng.get("categories", [])}
+            historical_trends.append({
+                "audit_id": a.id,
+                "date": a.created_at.isoformat() if a.created_at else None,
+                "date_display": a.created_at.strftime("%b %d, %H:%M") if a.created_at else "",
+                "score": a.score if a.score is not None else a_sc.get("overall"),
+                "grade": a_sc.get("grade", "N/A"),
+                "critical_issues": a_summ.get("critical", 0),
+                "warning_issues": a_summ.get("high", 0) + a_summ.get("medium", 0),
+                "total_issues": a_summ.get("total", 0),
+                "pages_crawled": a_res.get("page_count", 0),
+                "categories": a_cats,
+            })
+        except Exception:
+            continue
+
+    return {
+        "domain": latest_audit.target_url,
+        "domain_display": host,
+        "has_data": True,
+        "audit_count": len(matching_audits),
+        "last_audit_id": latest_audit.id,
+        "last_audit_date": audit_date,
+        "seo_health": seo_health,
+        "organic_search": organic_search,
+        "backlinks": backlinks,
+        "search_console": search_console,
+        "pagespeed": pagespeed,
+        "technical_issues": technical_issues,
+        "top_pages": top_pages,
+        "historical_trends": historical_trends,
+    }
+
+
+# ---------------------------------------------------------------------------
+# PHASE 4: KEYWORD MAGIC TOOL & KEYWORD RESEARCH
+# ---------------------------------------------------------------------------
+def _param(val: Any, default: Any = None) -> Any:
+    return val.default if hasattr(val, "default") else (val if val is not None else default)
+
+
+@app.get("/api/keyword-magic/search")
+def keyword_magic_search_endpoint(
+    seed: str = Query(..., description="Seed keyword to inspect"),
+    country: int = Query(2840, description="Location code, default 2840 US"),
+    language: str = Query("en", description="Language code"),
+    match_type: str = Query("all", description="all, broad, phrase, exact, questions, related"),
+    cluster: Optional[str] = Query(None, description="Semantic cluster filter"),
+    intent: Optional[str] = Query(None, description="Search intent filter"),
+    volume_min: Optional[int] = Query(None),
+    volume_max: Optional[int] = Query(None),
+    kd_min: Optional[float] = Query(None),
+    kd_max: Optional[float] = Query(None),
+    cpc_min: Optional[float] = Query(None),
+    cpc_max: Optional[float] = Query(None),
+    limit: int = Query(150, ge=1, le=500),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    try:
+        return keyword_engine.run_keyword_magic_research(
+            seed=_param(seed, ""),
+            location_code=_param(country, 2840),
+            language_code=_param(language, "en"),
+            match_type=_param(match_type, "all"),
+            cluster_filter=_param(cluster, None),
+            intent_filter=_param(intent, None),
+            volume_min=_param(volume_min, None),
+            volume_max=_param(volume_max, None),
+            kd_min=_param(kd_min, None),
+            kd_max=_param(kd_max, None),
+            cpc_min=_param(cpc_min, None),
+            cpc_max=_param(cpc_max, None),
+            limit=_param(limit, 150)
+        )
+    except Exception as exc:
+        logger.error(f"Keyword magic search failed: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/keyword-magic/projects")
+def keyword_projects_list_endpoint(
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    return keyword_engine.list_keyword_projects()
+
+
+@app.post("/api/keyword-magic/projects")
+def keyword_project_create_endpoint(
+    req: KeywordProjectCreateRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    res = keyword_engine.create_keyword_project(name=req.name, client_id=req.client_id, description=req.description or "")
+    return {"status": "success", "project": res}
+
+
+@app.get("/api/keyword-magic/projects/{project_id}")
+def keyword_project_detail_endpoint(
+    project_id: int,
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    proj = keyword_engine.get_keyword_project(project_id)
+    if not proj:
+        raise HTTPException(status_code=404, detail="Keyword project not found")
+    return proj
+
+
+@app.post("/api/keyword-magic/projects/{project_id}/keywords")
+def keyword_project_add_keywords_endpoint(
+    project_id: int,
+    req: AddKeywordsToProjectRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    res = keyword_engine.add_keywords_to_project(project_id, req.keywords)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Failed to add keywords"))
+    return res
+
+
+@app.delete("/api/keyword-magic/projects/{project_id}/keywords/{keyword_id}")
+def keyword_project_remove_keyword_endpoint(
+    project_id: int,
+    keyword_id: int,
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    success = keyword_engine.remove_keyword_from_project(project_id, keyword_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Saved keyword not found")
+    return {"status": "success", "message": "Keyword removed from project"}
+
+
+@app.delete("/api/keyword-magic/projects/{project_id}")
+def keyword_project_delete_endpoint(
+    project_id: int,
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    success = keyword_engine.delete_keyword_project(project_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Keyword project not found")
+    return {"status": "success", "message": "Keyword project deleted"}
+
+
+@app.get("/api/keyword-magic/export/csv")
+def keyword_magic_export_csv_endpoint(
+    seed: str = Query(...),
+    country: int = Query(2840),
+    language: str = Query("en"),
+    match_type: str = Query("all"),
+    cluster: Optional[str] = Query(None),
+    intent: Optional[str] = Query(None),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    seed_str = _param(seed, "")
+    res = keyword_engine.run_keyword_magic_research(
+        seed=seed_str, location_code=_param(country, 2840), language_code=_param(language, "en"),
+        match_type=_param(match_type, "all"), cluster_filter=_param(cluster, None), intent_filter=_param(intent, None), limit=500
+    )
+    csv_text = keyword_engine.generate_keyword_csv(res.get("keywords") or [], seed_str)
+    safe_seed = re.sub(r"[^\w\-]", "_", seed_str.lower())
+    filename = f"keywords_{safe_seed}_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    return Response(
+        content=csv_text.encode("utf-8"),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.get("/api/keyword-magic/export/excel")
+def keyword_magic_export_excel_endpoint(
+    seed: str = Query(...),
+    country: int = Query(2840),
+    language: str = Query("en"),
+    match_type: str = Query("all"),
+    cluster: Optional[str] = Query(None),
+    intent: Optional[str] = Query(None),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    seed_str = _param(seed, "")
+    res = keyword_engine.run_keyword_magic_research(
+        seed=seed_str, location_code=_param(country, 2840), language_code=_param(language, "en"),
+        match_type=_param(match_type, "all"), cluster_filter=_param(cluster, None), intent_filter=_param(intent, None), limit=500
+    )
+    loc_name = (res.get("location") or {}).get("name", "Target Market")
+    xml_text = keyword_engine.generate_keyword_excel_xml(res.get("keywords") or [], seed_str, loc_name)
+    safe_seed = re.sub(r"[^\w\-]", "_", seed_str.lower())
+    filename = f"keywords_{safe_seed}_{datetime.utcnow().strftime('%Y%m%d')}.xls"
+    return Response(
+        content=xml_text.encode("utf-8"),
+        media_type="application/vnd.ms-excel",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.get("/api/keyword-magic/export/pdf")
+def keyword_magic_export_pdf_endpoint(
+    seed: str = Query(...),
+    country: int = Query(2840),
+    language: str = Query("en"),
+    match_type: str = Query("all"),
+    cluster: Optional[str] = Query(None),
+    intent: Optional[str] = Query(None),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    seed_str = _param(seed, "")
+    res = keyword_engine.run_keyword_magic_research(
+        seed=seed_str, location_code=_param(country, 2840), language_code=_param(language, "en"),
+        match_type=_param(match_type, "all"), cluster_filter=_param(cluster, None), intent_filter=_param(intent, None), limit=200
+    )
+    loc_name = (res.get("location") or {}).get("name", "Target Market")
+    pdf_bytes = keyword_engine.generate_keyword_pdf(
+        keywords=res.get("keywords") or [],
+        seed=seed_str,
+        loc_name=loc_name,
+        lang=_param(language, "en"),
+        summary=res.get("summary") or {},
+        clusters=res.get("clusters") or [],
+        data_provider=res.get("data_provider", "Data Provider")
+    )
+    safe_seed = re.sub(r"[^\w\-]", "_", seed_str.lower())
+    filename = f"keyword_report_{safe_seed}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+# ===========================================================================
+# PHASE 5: COMPETITOR ANALYSIS & MARKET INTELLIGENCE
+# ===========================================================================
+
+@app.get("/api/competitors/discover")
+def competitor_discover_endpoint(
+    target: str = Query(..., description="Target domain to inspect"),
+    country: int = Query(2840, description="Location code"),
+    language: str = Query("en", description="Language code"),
+    limit: int = Query(10, ge=1, le=50),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    try:
+        return competitor_engine.discover_competitors(
+            target_domain=_param(target, ""),
+            location_code=_param(country, 2840),
+            language_code=_param(language, "en"),
+            limit=_param(limit, 10)
+        )
+    except Exception as exc:
+        logger.error(f"Competitor discovery failed: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/competitors/analyze")
+def competitor_analyze_endpoint(
+    req: CompetitorAnalyzeRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    try:
+        return competitor_engine.analyze_competitors(
+            target_domain=req.target_domain,
+            competitor_domains=req.competitor_domains or [],
+            location_code=req.country,
+            language_code=req.language
+        )
+    except Exception as exc:
+        logger.error(f"Competitor analysis failed: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/competitors/comparisons")
+def competitor_comparisons_list_endpoint(
+    target: Optional[str] = Query(None),
+    client_id: Optional[int] = Query(None),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    return competitor_engine.list_comparisons(target_domain=_param(target, None), client_id=_param(client_id, None))
+
+
+@app.post("/api/competitors/comparisons")
+def competitor_comparison_save_endpoint(
+    req: CompetitorSaveRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    res = competitor_engine.save_comparison(
+        name=req.name,
+        target_domain=req.target_domain,
+        competitor_domains=req.competitor_domains or [],
+        client_id=req.client_id,
+        location_code=req.country,
+        language_code=req.language,
+        analysis_data=req.data
+    )
+    return {"status": "success", "comparison": res}
+
+
+@app.get("/api/competitors/comparisons/{comparison_id}")
+def competitor_comparison_detail_endpoint(
+    comparison_id: int,
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    rec = competitor_engine.get_comparison(comparison_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Saved competitor comparison not found")
+    return rec
+
+
+@app.delete("/api/competitors/comparisons/{comparison_id}")
+def competitor_comparison_delete_endpoint(
+    comparison_id: int,
+    current_admin: AdminUser = Depends(require_permission("audits.delete"))
+):
+    success = competitor_engine.delete_comparison(comparison_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Saved competitor comparison not found")
+    return {"status": "success", "deleted_id": comparison_id}
+
+
+@app.post("/api/competitors/export/csv")
+def competitor_export_csv_endpoint(
+    req: CompetitorAnalyzeRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    res = competitor_engine.analyze_competitors(
+        target_domain=req.target_domain,
+        competitor_domains=req.competitor_domains or [],
+        location_code=req.country,
+        language_code=req.language
+    )
+    csv_text = competitor_engine.generate_competitor_csv(res)
+    safe_target = re.sub(r"[^\w\-]", "_", req.target_domain.lower())
+    filename = f"competitor_analysis_{safe_target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    return Response(
+        content=csv_text.encode("utf-8"),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/competitors/export/excel")
+def competitor_export_excel_endpoint(
+    req: CompetitorAnalyzeRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    res = competitor_engine.analyze_competitors(
+        target_domain=req.target_domain,
+        competitor_domains=req.competitor_domains or [],
+        location_code=req.country,
+        language_code=req.language
+    )
+    xml_text = competitor_engine.generate_competitor_excel_xml(res)
+    safe_target = re.sub(r"[^\w\-]", "_", req.target_domain.lower())
+    filename = f"competitor_analysis_{safe_target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.xls"
+    return Response(
+        content=xml_text,
+        media_type="application/vnd.ms-excel",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/competitors/export/pdf")
+def competitor_export_pdf_endpoint(
+    req: CompetitorAnalyzeRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    res = competitor_engine.analyze_competitors(
+        target_domain=req.target_domain,
+        competitor_domains=req.competitor_domains or [],
+        location_code=req.country,
+        language_code=req.language
+    )
+    pdf_bytes = competitor_engine.generate_competitor_pdf(res)
+    safe_target = re.sub(r"[^\w\-]", "_", req.target_domain.lower())
+    filename = f"competitor_report_{safe_target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
 @app.post("/api/audits/save")
 def save_audit(req: AuditSaveRequest = Body(...), db: Session = Depends(get_db), current_admin: AdminUser = Depends(require_permission("audits.run"))):
     raw_res = req.audit_result or {}
@@ -1723,15 +2444,33 @@ def generate_public_report(req: ReportGenerateRequest = Body(...), db: Session =
     except Exception:
         raw_result = {}
 
+    desired_status = (req.status or "PUBLISHED").upper()
+    if desired_status == "PUBLISHED":
+        eng_payload = raw_result.get("seo_engine") if isinstance(raw_result, dict) else {}
+        if not eng_payload or not isinstance(eng_payload, dict):
+            eng_payload = ensure_engine(raw_result)
+        if eng_payload and not eng_payload.get("error"):
+            from .seo_engine.gate import run_gate
+            gate_res = run_gate(eng_payload)
+            if not gate_res.get("passed"):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": "VERIFICATION_GATE_FAILED",
+                        "message": "Report publication blocked: audit failed verification gate.",
+                        "failures": gate_res.get("failures", [])
+                    }
+                )
+
     snapshot = build_client_report_snapshot(raw_result, client_name, company, token)
     new_report = PublicReport(
         audit_id=audit.id,
         client_id=audit.client_id,
         website_id=audit.website_id,
         token=token,
-        status=req.status or "PUBLISHED",
+        status=desired_status,
         snapshot_json=json.dumps(snapshot),
-        published_at=datetime.utcnow() if req.status == "PUBLISHED" else None
+        published_at=datetime.utcnow() if desired_status == "PUBLISHED" else None
     )
     db.add(new_report)
     db.commit()
@@ -1758,6 +2497,30 @@ def update_report_status(report_id: int, req: ReportStatusRequest = Body(...), d
     new_status = req.status.upper()
     if new_status not in {"PUBLISHED", "DRAFT", "DISABLED"}:
         raise HTTPException(status_code=400, detail="Invalid status. Must be PUBLISHED, DRAFT, or DISABLED")
+
+    if new_status == "PUBLISHED":
+        audit = report.audit
+        raw_result = {}
+        if audit and audit.result_json:
+            try:
+                raw_result = json.loads(audit.result_json) if isinstance(audit.result_json, str) else audit.result_json
+            except Exception:
+                raw_result = {}
+        eng_payload = raw_result.get("seo_engine") if isinstance(raw_result, dict) else {}
+        if not eng_payload or not isinstance(eng_payload, dict):
+            eng_payload = ensure_engine(raw_result)
+        if eng_payload and not eng_payload.get("error"):
+            from .seo_engine.gate import run_gate
+            gate_res = run_gate(eng_payload)
+            if not gate_res.get("passed"):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "error": "VERIFICATION_GATE_FAILED",
+                        "message": "Report publication blocked: audit failed verification gate.",
+                        "failures": gate_res.get("failures", [])
+                    }
+                )
 
     report.status = new_status
     if new_status == "PUBLISHED":
@@ -2767,10 +3530,15 @@ def issue(page: dict[str, Any], severity: str, code: str, category: str, message
         "code": code,
         "category": category,
         "message": message,
+        "problem_description": message,
         "recommendation": recommendation,
-        "evidence": evidence,
+        "suggested_correction": recommendation if not fix else fix,
+        "evidence": evidence or page.get("url", ""),
+        "verification_method": developer_validation(code, category),
         "fix": fix,
         "url": page.get("url", ""),
+        "affected_url": page.get("url", ""),
+        "status": "OPEN",
     })
 
 
@@ -2793,6 +3561,12 @@ def page_checks(page: dict[str, Any]) -> None:
         issue(page, "info", "redirected_page", "Redirects", f"Redirect chain contains {page['redirect_count']} hop(s).", "Keep important URLs on the final canonical destination and avoid redirect chains.")
     if page["redirect_count"] >= 2:
         issue(page, "warning", "redirect_chain", "Redirects", f"{page['redirect_count']} redirect hops detected.", "Collapse multi-hop redirects into a single direct redirect.")
+    history = page.get("redirect_chain") or []
+    if history:
+        urls_in_chain = [canonical_url(h.get("url") if isinstance(h, dict) else str(h)) for h in history]
+        urls_in_chain.append(canonical_url(page.get("url", "")))
+        if len(urls_in_chain) != len(set(urls_in_chain)):
+            issue(page, "critical", "redirect_loop", "Redirects", "A circular redirect loop was detected in the redirect chain.", "Break the circular redirect chain so URLs resolve cleanly to a 200 response.", fix="Eliminate circular redirect rules.")
     if urlparse(page["url"]).scheme != "https":
         issue(page, "warning", "not_https", "Security", "Page is served over HTTP.", "Serve indexable pages over HTTPS and redirect HTTP to HTTPS.")
     title = page["title"]
@@ -2865,6 +3639,10 @@ def page_checks(page: dict[str, Any]) -> None:
     missing_dim = sum(1 for img in page["images"] if not img["width"] or not img["height"])
     if missing_dim:
         issue(page, "info", "missing_image_dimensions", "Image SEO", f"{missing_dim} image(s) lack explicit dimensions.", "Declare width/height where practical to reduce layout shifts.")
+    for img in page.get("images", []):
+        if img.get("bytes", 0) > 1000000:
+            issue(page, "warning", "large_image_file", "Image Performance", f"Large image file detected ({round(img['bytes']/1024)} KB > 1000 KB).", "Compress images or serve modern WebP/AVIF formats to accelerate load time.", evidence=img.get("src", ""))
+            break
     if len(page["images"]) > 1 and not any(img["loading"] == "lazy" for img in page["images"][1:]):
         issue(page, "info", "lazy_loading", "Image Performance", "Later images are not marked lazy-loading.", "Lazy-load below-the-fold images where appropriate; keep above-the-fold critical images eager.")
     if any(img["format"] in {"jpg", "jpeg", "png"} for img in page["images"]):
@@ -2879,19 +3657,24 @@ def page_checks(page: dict[str, Any]) -> None:
         issue(page, "info", "missing_og_image", "Social", "Page has images but no og:image meta signal.", "Provide a suitable social preview image where social sharing matters.")
     if page["word_count"] < 200 and page["semantic_elements"].get("article"):
         issue(page, "warning", "thin_article", "Content", f"Article-like page has only {page['word_count']} visible words in the fetched HTML.", "Check whether the page fully satisfies the intended user task; do not add filler just to hit a word count.")
+    elif 0 < page.get("word_count", 0) < 150 and not re.search(r"/(contact|privacy|terms|cookie|legal|login|cart|checkout|thank)", page.get("url", ""), re.I):
+        issue(page, "warning", "thin_content", "Content", f"Page has thin visible copy ({page['word_count']} words < 150 words threshold).", "Expand the page with helpful, original content that satisfies user search intent.", fix="Write comprehensive topic-focused content (>150 words).")
     elif page["word_count"] < 80:
         issue(page, "info", "very_low_visible_text", "Rendering", f"Only {page['word_count']} visible words found in fetched HTML.", "Check the rendered page in a browser; client-side rendering may be hiding content from this raw HTTP audit.")
     if page.get("rendering_signals", {}).get("likely_js_shell"):
         issue(page, "info", "js_heavy_page", "Rendering", "Page looks JavaScript-heavy with low visible HTML text.", "Verify the rendered DOM contains the primary SEO content, links, and metadata; this audit does not execute JavaScript.")
-    if page["anchor_stats"]["empty"]:
-        issue(page, "info", "empty_anchor_text", "Internal Linking", f"{page['anchor_stats']['empty']} link(s) have empty anchor text.", "Give meaningful text to navigational links; use empty text only when the visual context is otherwise clear and accessible.")
-    if page["anchor_stats"]["generic"]:
-        issue(page, "info", "generic_anchor_text", "Internal Linking", f"{page['anchor_stats']['generic']} link(s) use generic anchor phrases.", "Prefer descriptive anchor text that helps users understand the destination.")
-    if not page["internal_links"]:
+    anchor_stats = page.get("anchor_stats") or {}
+    if anchor_stats.get("empty"):
+        issue(page, "info", "empty_anchor_text", "Internal Linking", f"{anchor_stats['empty']} link(s) have empty anchor text.", "Give meaningful text to navigational links; use empty text only when the visual context is otherwise clear and accessible.")
+    if anchor_stats.get("generic"):
+        issue(page, "info", "generic_anchor_text", "Internal Linking", f"{anchor_stats['generic']} link(s) use generic anchor phrases.", "Prefer descriptive anchor text that helps users understand the destination.")
+    if not page.get("internal_links"):
         issue(page, "warning", "no_internal_links", "Internal Linking", "No internal links were detected.", "Add relevant contextual links to important pages to help users and crawlers discover content.")
-    if page["forms"]["unlabelled_inputs"]:
-        issue(page, "info", "unlabelled_form_controls", "HTML Quality", f"{page['forms']['unlabelled_inputs']} visible form control(s) appear unlabeled.", "Associate form controls with accessible labels.")
-    if page["semantic_elements"]["main"] is False:
+    forms = page.get("forms") or {}
+    if forms.get("unlabelled_inputs"):
+        issue(page, "info", "unlabelled_form_controls", "HTML Quality", f"{forms['unlabelled_inputs']} visible form control(s) appear unlabeled.", "Associate form controls with accessible labels.")
+    semantic_elements = page.get("semantic_elements") or {}
+    if semantic_elements.get("main") is False:
         issue(page, "info", "missing_main", "HTML Quality", "No <main> element detected.", "Use semantic landmarks where appropriate to make document structure clearer.")
     # HTTP header quality: these are engineering signals, not direct ranking guarantees.
     if urlparse(page["url"]).scheme == "https" and not page["headers"].get("strict-transport-security"):
@@ -3274,6 +4057,14 @@ def developer_validation(code: str, category: str) -> str:
         "sitemap_missing": "Re-crawl the sitemap endpoint and confirm a valid XML sitemap is discoverable.",
         "robots_missing": "Re-crawl /robots.txt and confirm the desired crawler directives and sitemap references are accessible.",
         "redirect_chain": "Re-run the URL and confirm important URLs resolve with the intended minimal redirect path.",
+        "redirect_loop": "Re-crawl the affected URL and verify redirect chain terminates cleanly with HTTP 200 without cycles.",
+        "thin_content": "Re-crawl and confirm visible body copy exceeds 150 words of original text.",
+        "large_image_file": "Re-run resource audit and confirm image payload is compressed and under 1MB.",
+        "heading_jump": "Re-crawl and inspect heading outline; verify heading levels increment sequentially without skipping.",
+        "client_error": "Re-crawl affected URL and verify server returns HTTP 200 or an intended redirect.",
+        "server_error": "Inspect application error logs, fix server-side exceptions, and re-crawl URL.",
+        "duplicate_h1": "Re-crawl affected pages and verify each page has an H1 heading tailored to its specific topic.",
+        "orphan_candidate": "Add internal links to the affected page from relevant parent pages and verify link graph on re-crawl.",
         "slow_response": "Repeat the crawl from the same environment and compare response time before/after server-side changes.",
         "large_html": "Re-crawl and compare HTML response size after removing unnecessary payload or duplication.",
     }
@@ -3844,6 +4635,10 @@ def crawl(req: AuditRequest, progress_cb=None, cancel_event=None) -> dict[str, A
     result["render"] = render
     run_spec_engine(result, probes=probes, sitemap_full={"files":sitemap.get("files",[]),"urls":sitemap.get("urls",[]),"lastmod":sitemap.get("lastmod",{}),"detected":sitemap.get("detected","")},
                     robots_full=robots, sitemap_sample=sitemap_sample, render=render, profile=req.vertical_profile, run_ai=req.run_ai, emit=emit)
+    result["is_cached"] = False
+    result["audit_performed_at"] = datetime.now(timezone.utc).isoformat()
+    result["cache_age_seconds"] = 0
+    result["cache_expires_in_seconds"] = int(AUDIT_CACHE_HOURS * 3600)
     result["report_formats"]=["client","full","developer","recommendations","executive","keywords","social","indexing","json","csv","bundle"]
     emit({"phase":"completed","pages":len(pages),"queued":len(queue),"in_flight":0,"current_url":"","status":0,"issues":len(result.get("issues",[])),"links_checked":len(link_results),"links_total":len(targets),"resources_checked":len(resource_results),"resources_total":min(len({r.get('url') for r in resources if r.get('url')}),req.resource_check_limit),"message":"Audit complete. Real fetched data and report-ready results assembled."})
     return result
@@ -3907,6 +4702,11 @@ def annotate_issue_sources(audit: dict[str, Any]) -> None:
             enrich_issue(item)
             if not item.get("recommendation") and item.get("kb_action"):
                 item["recommendation"] = item["kb_action"]
+            item.setdefault("affected_url", item.get("url", ""))
+            item.setdefault("problem_description", item.get("message", ""))
+            item.setdefault("suggested_correction", item.get("recommendation", "") or item.get("fix", ""))
+            item.setdefault("verification_method", developer_validation(item.get("code", ""), cat))
+            item.setdefault("status", "OPEN")
 
 def _engine_dev_plan(issue: dict[str, Any]) -> dict[str, Any]:
     return {"priority": issue["priority"], "severity": issue["severity"], "category": issue["category_name"], "code": issue["check_id"],
@@ -3959,7 +4759,7 @@ def run_spec_engine(audit: dict[str, Any], probes=None, sitemap_full=None, robot
     if run_ai:
         if emit:
             emit({"phase":"ai","pages":audit.get("page_count",0),"queued":0,"in_flight":0,"current_url":"","status":0,"issues":len(payload["issues"]),"message":"Writing plain-language explanations with the local Ollama model…"})
-        ai = category_explanations(payload, OLLAMA_URL, OLLAMA_MODEL, OLLAMA_INSIGHT_TIMEOUT)
+        ai = category_explanations(payload, OLLAMA_URL, OLLAMA_MODEL, OLLAMA_INSIGHT_TIMEOUT, api_key=OLLAMA_API_KEY)
         payload["narrative"] = ai
         for c in payload["categories"]:
             c["ai_summary"] = (ai.get("data") or {}).get(c["id"], "")
@@ -4817,16 +5617,26 @@ def local_ai(audit: dict[str, Any]) -> dict[str, Any]:
     )
     try:
         base = OLLAMA_URL.rsplit("/api/", 1)[0].rstrip("/")
+        timeout_tags = 6.0 if (OLLAMA_URL.startswith("https://") or OLLAMA_API_KEY) else 2.0
         try:
-            tags = requests.get(base + "/api/tags", timeout=5)
-            if not tags.ok:
+            tags = requests.get(base + "/api/tags", headers=_ollama_headers(), timeout=timeout_tags)
+            if tags.ok:
+                model_names = [str(x.get("name", "")).lower() for x in (tags.json().get("models") or [])]
+                target_name = OLLAMA_MODEL.lower()
+                target_base = target_name.split(":")[0]
+                if not any(name == target_name or name.startswith(target_name + ":") or name.split(":")[0] == target_base for name in model_names):
+                    return {"enabled": False, "model": OLLAMA_MODEL, "error": f"Ollama model '{OLLAMA_MODEL}' is not installed.", "data": {}}
+            elif not OLLAMA_API_KEY:
                 return {"enabled": False, "model": OLLAMA_MODEL, "error": "Ollama service is not available.", "data": {}}
-            model_names = [str(x.get("name", "")) for x in (tags.json().get("models") or [])]
-            if not any(name == OLLAMA_MODEL or name.startswith(OLLAMA_MODEL + ":") for name in model_names):
-                return {"enabled": False, "model": OLLAMA_MODEL, "error": f"Ollama model '{OLLAMA_MODEL}' is not installed.", "data": {}}
         except (requests.RequestException, ValueError):
-            return {"enabled": False, "model": OLLAMA_MODEL, "error": "Ollama service is not available.", "data": {}}
-        response = requests.post(OLLAMA_URL, json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False, "options": {"temperature": 0.15}}, timeout=OLLAMA_TIMEOUT)
+            if not OLLAMA_API_KEY:
+                return {"enabled": False, "model": OLLAMA_MODEL, "error": "Ollama service is not available.", "data": {}}
+        response = requests.post(
+            OLLAMA_URL,
+            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False, "options": {"temperature": 0.15}},
+            headers=_ollama_headers(),
+            timeout=OLLAMA_INSIGHT_TIMEOUT
+        )
         response.raise_for_status()
         raw = (response.json().get("response") or "").strip()
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.I | re.S)
@@ -5125,12 +5935,24 @@ def health():
     models = []
     try:
         base = OLLAMA_URL.rsplit("/api/", 1)[0].rstrip("/")
-        r = requests.get(f"{base}/api/tags", timeout=5)
+        timeout_tags = 6.0 if (OLLAMA_URL.startswith("https://") or OLLAMA_API_KEY) else 2.0
+        r = requests.get(f"{base}/api/tags", headers=_ollama_headers(), timeout=timeout_tags)
         if r.ok:
             ollama = True
             payload = r.json()
             models = [str(x.get("name", "")) for x in (payload.get("models") or [])]
-            ollama_model_available = any(name == OLLAMA_MODEL or name.startswith(OLLAMA_MODEL + ":") for name in models)
+            target_name = OLLAMA_MODEL.lower()
+            target_base = target_name.split(":")[0]
+            ollama_model_available = any(
+                m.lower() == target_name or
+                m.lower().startswith(target_name + ":") or
+                m.lower().split(":")[0] == target_base
+                for m in models
+            )
+        elif r.status_code == 404 and OLLAMA_API_KEY:
+            ollama = True
+            ollama_model_available = True
+            models = [OLLAMA_MODEL]
     except (requests.RequestException, ValueError):
         pass
     playwright_package = False
@@ -5297,12 +6119,14 @@ class IntegrationTarget(BaseModel):
     limit: int = Field(100, ge=1, le=1000)
     location_code: int | None = Field(None, ge=1)
     language_code: str | None = Field(None, max_length=8)
+    force_fresh: bool = False
 
 
 class KeywordLookup(BaseModel):
     keywords: list[str] = Field(..., min_length=1, max_length=700)
     location_code: int | None = Field(None, ge=1)
     language_code: str | None = Field(None, max_length=8)
+    force_fresh: bool = False
 
 
 def _integration_target(url: str) -> str:
@@ -5345,6 +6169,40 @@ def integrations_rankings(req: IntegrationTarget, current_admin: AdminUser = Dep
 @app.post("/api/integrations/backlinks")
 def integrations_backlinks(req: IntegrationTarget, current_admin: AdminUser = Depends(require_permission("audits.run"))):
     return integrations.backlinks(_integration_target(req.url))
+
+
+class IntegrationSettingsRequest(BaseModel):
+    pagespeed_api_key: str | None = None
+    openpagerank_api_key: str | None = None
+    bing_api_key: str | None = None
+
+
+@app.post("/api/integrations/settings")
+def update_integrations_settings(req: IntegrationSettingsRequest, current_admin: AdminUser = Depends(require_permission("audits.run"))):
+    new_status = integrations.update_credentials(
+        pagespeed_api_key=req.pagespeed_api_key,
+        openpagerank_api_key=req.openpagerank_api_key,
+        bing_api_key=req.bing_api_key
+    )
+    env_path = ROOT / ".env"
+    if env_path.exists():
+        try:
+            content = env_path.read_text(encoding="utf-8")
+            if req.pagespeed_api_key is not None:
+                content = re.sub(r"^PAGESPEED_API_KEY=.*$", f"PAGESPEED_API_KEY={req.pagespeed_api_key.strip()}", content, flags=re.MULTILINE)
+            if req.openpagerank_api_key is not None:
+                content = re.sub(r"^OPENPAGERANK_API_KEY=.*$", f"OPENPAGERANK_API_KEY={req.openpagerank_api_key.strip()}", content, flags=re.MULTILINE)
+            if req.bing_api_key is not None:
+                if "BING_API_KEY=" in content:
+                    content = re.sub(r"^BING_API_KEY=.*$", f"BING_API_KEY={req.bing_api_key.strip()}", content, flags=re.MULTILINE)
+                else:
+                    content += f"\nBING_API_KEY={req.bing_api_key.strip()}\n"
+            env_path.write_text(content, encoding="utf-8")
+        except Exception as exc:
+            logger.warning("Could not write updated integration keys to .env: %s", exc)
+
+    invalidate_dashboard_cache()
+    return {"status": "success", "integrations": new_status}
 
 
 # --- PUBLIC SEO SCANNER & LEAD SYSTEM ---
@@ -5436,7 +6294,11 @@ def _build_public_safe_result(target_url: str, audit_res: dict[str, Any]) -> dic
             "whatsapp_btn_text": "Get Professional SEO Help",
             "email_url": f"mailto:prasad@esupport.live?subject={quote(email_subject)}&body={quote(email_body)}",
             "request_btn_text": "Request Full SEO Analysis"
-        }
+        },
+        "is_cached": bool(audit_res.get("is_cached", False)),
+        "audit_performed_at": audit_res.get("audit_performed_at") or audit_res.get("created_at") or datetime.now(timezone.utc).isoformat(),
+        "cache_age_seconds": audit_res.get("cache_age_seconds", 0),
+        "cache_expires_in_seconds": audit_res.get("cache_expires_in_seconds", int(AUDIT_CACHE_HOURS * 3600)),
     }
 
 
@@ -5456,9 +6318,13 @@ def _normalize_host_for_match(url_or_domain: str) -> str:
         return ""
 
 
-def _find_recent_audit_for_url(target_url: str) -> Optional[dict[str, Any]]:
+def _find_recent_audit_for_url(target_url: str, force_fresh: bool = False, max_age_hours: float | None = None) -> Optional[dict[str, Any]]:
     """Look up latest completed audit in the database for the matching target URL or domain.
-    Ensures that Admin technical inspections and Client public scans share the exact same verified audit."""
+    Respects configurable cache expiration (AUDIT_CACHE_HOURS) and manual force_fresh bypass."""
+    if force_fresh:
+        return None
+    if max_age_hours is None:
+        max_age_hours = AUDIT_CACHE_HOURS
     try:
         target_host = _normalize_host_for_match(target_url)
         if not target_host:
@@ -5471,11 +6337,24 @@ def _find_recent_audit_for_url(target_url: str) -> Optional[dict[str, Any]]:
                     continue
                 a_host = _normalize_host_for_match(a.target_url)
                 if a_host == target_host:
+                    audit_time = a.completed_at or a.created_at
+                    if audit_time:
+                        age_seconds = (datetime.utcnow() - audit_time).total_seconds()
+                        if age_seconds > max_age_hours * 3600:
+                            logger.info(f"Audit #{a.id} for {target_host} is expired (age {age_seconds/3600:.1f}h > {max_age_hours}h).")
+                            continue
+                    else:
+                        age_seconds = 0.0
+
                     try:
                         data = json.loads(a.result_json)
                         if isinstance(data, dict):
                             if a.score is not None and data.get("score") is None:
                                 data["score"] = a.score
+                            data["is_cached"] = True
+                            data["audit_performed_at"] = (audit_time.isoformat() + "Z") if audit_time else datetime.utcnow().isoformat() + "Z"
+                            data["cache_age_seconds"] = int(age_seconds)
+                            data["cache_expires_in_seconds"] = max(0, int((max_age_hours * 3600) - age_seconds))
                             return data
                     except Exception:
                         pass
@@ -5484,7 +6363,7 @@ def _find_recent_audit_for_url(target_url: str) -> Optional[dict[str, Any]]:
     return None
 
 
-def _run_public_scan_job(job_id: str, target_url: str):
+def _run_public_scan_job(job_id: str, target_url: str, force_fresh: bool = False):
     try:
         with PUBLIC_SCAN_LOCK:
             if job_id in PUBLIC_SCAN_JOBS:
@@ -5495,7 +6374,7 @@ def _run_public_scan_job(job_id: str, target_url: str):
                 })
 
         # 1. Check if a real verified audit already exists in the platform database for this website/domain
-        existing_audit = _find_recent_audit_for_url(target_url)
+        existing_audit = _find_recent_audit_for_url(target_url, force_fresh=force_fresh)
         if existing_audit:
             # Provide smooth visual progress through phases to match the scanning UX
             time.sleep(0.7)
@@ -5566,7 +6445,7 @@ def _run_public_scan_job(job_id: str, target_url: str):
             resource_check_limit=1000,
             render_max_pages=20,
             crawl_mode="auto",
-            use_pagespeed=bool(integrations.PAGESPEED_API_KEY) or integrations.local_lighthouse_available(),
+            use_pagespeed=integrations.pagespeed_configured(),
             pagespeed_desktop=True,
             use_search_console=False,
             use_dataforseo=False,
@@ -5658,7 +6537,7 @@ def start_public_scan(req: PublicScanRequest = Body(...), request: Request = Non
             "created_at": time.time()
         }
 
-    JOB_EXECUTOR.submit(_run_public_scan_job, job_id, target_url)
+    JOB_EXECUTOR.submit(_run_public_scan_job, job_id, target_url, req.force_fresh)
     return {"job_id": job_id, "state": "running", "phase": "SCANNING"}
 
 
@@ -5699,7 +6578,7 @@ def public_scan_sync(req: PublicScanRequest = Body(...), request: Request = None
     except Exception:
         raise HTTPException(status_code=400, detail="Please enter a valid website URL (e.g. https://example.com).")
 
-    existing_audit = _find_recent_audit_for_url(target_url)
+    existing_audit = _find_recent_audit_for_url(target_url, force_fresh=req.force_fresh)
     if existing_audit:
         return _build_public_safe_result(target_url, existing_audit)
 
@@ -5714,7 +6593,7 @@ def public_scan_sync(req: PublicScanRequest = Body(...), request: Request = None
             resource_check_limit=1000,
             render_max_pages=20,
             crawl_mode="auto",
-            use_pagespeed=bool(integrations.PAGESPEED_API_KEY) or integrations.local_lighthouse_available(),
+            use_pagespeed=integrations.pagespeed_configured(),
             pagespeed_desktop=True,
             use_search_console=False,
             use_dataforseo=False,

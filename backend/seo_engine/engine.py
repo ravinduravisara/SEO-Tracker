@@ -15,68 +15,9 @@ from .scoring import (CONFIDENCE_CAP_COEFF, CREDIT, RULESET_VERSION, WEIGHTS, ba
                       projected_category, round_half_up, score_site)
 from urllib.parse import urlparse
 
-BENCHMARK_CORPUS = {
-    "voltedgepower-solutions.com": {
-        "profile": "b2b_product", "overall": 47, "potential": 86,
-        "scores": {"technical": 62, "on_page": 52, "content": 42, "keyword": 45,
-                   "internal_linking": 45, "image": 38, "structured_data": 35, "mobile": 58,
-                   "page_experience": 55, "local": 35, "vertical": 32, "conversion": 55},
-        "potentials": {"technical": 88, "on_page": 88, "content": 82, "keyword": 85,
-                       "internal_linking": 86, "image": 82, "structured_data": 90,
-                       "mobile": 86, "page_experience": 82, "local": 86, "vertical": 84,
-                       "conversion": 88},
-    },
-    "gkips.com": {
-        "profile": "b2b_product", "overall": 29, "potential": 83,
-        "scores": {"technical": 28, "on_page": 24, "content": 25, "keyword": 26,
-                   "internal_linking": 20, "image": 10, "structured_data": 28, "mobile": 52,
-                   "page_experience": 50, "local": 42, "vertical": 22, "conversion": 20},
-        "potentials": {"technical": 82, "on_page": 85, "content": 78, "keyword": 82,
-                       "internal_linking": 84, "image": 80, "structured_data": 86,
-                       "mobile": 82, "page_experience": 78, "local": 88, "vertical": 82,
-                       "conversion": 86},
-    },
-    "ranjithautocables.com": {
-        "profile": "b2b_product", "overall": 33, "potential": 83,
-        "scores": {"technical": 42, "on_page": 38, "content": 28, "keyword": 34,
-                   "internal_linking": 35, "image": 15, "structured_data": 4, "mobile": 45,
-                   "page_experience": 45, "local": 25, "vertical": 30, "conversion": 32},
-        "potentials": {"technical": 85, "on_page": 86, "content": 78, "keyword": 82,
-                       "internal_linking": 84, "image": 78, "structured_data": 88,
-                       "mobile": 84, "page_experience": 80, "local": 86, "vertical": 82,
-                       "conversion": 86},
-    },
-    "dreamceylonvibetours.com": {
-        "profile": "travel_tourism", "overall": 16, "potential": 80,
-        "scores": {"technical": 22, "on_page": 18, "content": 8, "keyword": 12,
-                   "internal_linking": 5, "image": 8, "structured_data": 5, "mobile": 35,
-                   "page_experience": 35, "local": 15, "vertical": 8, "conversion": 10},
-        "potentials": {"technical": 82, "on_page": 84, "content": 76, "keyword": 78,
-                       "internal_linking": 80, "image": 76, "structured_data": 86,
-                       "mobile": 82, "page_experience": 74, "local": 80, "vertical": 80,
-                       "conversion": 84},
-    },
-    "helikroholidays.com": {
-        "profile": "travel_tourism", "overall": 40, "potential": 82,
-        "scores": {"technical": 66, "on_page": 22, "content": 42, "keyword": 22,
-                   "internal_linking": 40, "image": 12, "structured_data": 10, "mobile": 55,
-                   "page_experience": 55, "local": 32, "vertical": 45, "conversion": 55},
-        "potentials": {"technical": 84, "on_page": 86, "content": 80, "keyword": 78,
-                       "internal_linking": 82, "image": 78, "structured_data": 84,
-                       "mobile": 86, "page_experience": 78, "local": 72, "vertical": 84,
-                       "conversion": 84},
-    },
-    "wildoutside.travel": {
-        "profile": "travel_tourism", "overall": 37, "potential": 81,
-        "scores": {"technical": 60, "on_page": 30, "content": 40, "keyword": 35,
-                   "internal_linking": 50, "image": 15, "structured_data": 10, "mobile": 55,
-                   "page_experience": 35, "local": 12, "vertical": 45, "conversion": 35},
-        "potentials": {"technical": 86, "on_page": 86, "content": 80, "keyword": 78,
-                       "internal_linking": 82, "image": 78, "structured_data": 84,
-                       "mobile": 84, "page_experience": 70, "local": 70, "vertical": 86,
-                       "conversion": 80},
-    },
-}
+# Strict Zero-Fabrication Engine: No hardcoded benchmark overrides in production scoring.
+# All scores are strictly derived from actual crawl observations and verified checks.
+BENCHMARK_CORPUS: dict[str, Any] = {}
 
 ENGINE_VERSION = "1.0.0"
 SCHEMA_VERSION = "1.0"
@@ -165,22 +106,6 @@ def run_engine(audit: dict[str, Any], probes: Optional[dict] = None, sitemap_ful
     results = evaluate_all(ctx)
     site = score_site(results)
 
-    target_host = (urlparse(audit.get("target") or audit.get("url") or "").hostname or "").lower()
-    if target_host.startswith("www."):
-        target_host = target_host[4:]
-    bench = BENCHMARK_CORPUS.get(target_host)
-    if bench:
-        for cat in WEIGHTS:
-            if cat in bench["scores"]:
-                site["categories"][cat].score = bench["scores"][cat]
-        ws = sum(WEIGHTS[c] * bench["scores"][c] for c in WEIGHTS)
-        site["overall"] = bench["overall"]
-        site["grade"] = band(bench["overall"])
-        lvl, lbl = maturity(bench["overall"])
-        site["maturity_level"] = lvl
-        site["maturity_label"] = lbl
-        site["weighted_sum"] = ws
-
     defs: dict[str, dict] = {}
     for cat in WEIGHTS:
         for d in category_checks(cat, profile):
@@ -196,10 +121,7 @@ def run_engine(audit: dict[str, Any], probes: Optional[dict] = None, sitemap_ful
         measured = [r for r in cat_results if r.status not in ("UNMEASURED", "NOT_APPLICABLE")]
         passed = [r for r in measured if r.status == "PASS"]
         gaps = [defs[r.id]["name"] for r in measured if r.status in ("FAIL", "WARN")]
-        if bench and cat in bench.get("potentials", {}):
-            potentials[cat] = bench["potentials"][cat]
-        else:
-            potentials[cat] = projected_category(cat, cat_results, cs.score)
+        potentials[cat] = projected_category(cat, cat_results, cs.score)
         missing = [defs[r.id]["name"] for r in cat_results if r.status == "UNMEASURED"]
         if cs.score is None:
             summary = "UNSCORABLE: no check in this category could be measured with the available data."
@@ -250,11 +172,6 @@ def run_engine(audit: dict[str, Any], probes: Optional[dict] = None, sitemap_ful
     potential = None
     if overall is not None:
         potential = project_potential(potentials, overall)
-        if bench:
-            potential["overall"] = bench["potential"]
-            potential["grade"] = band(bench["potential"])
-            potential["improvement_absolute"] = bench["potential"] - bench["overall"]
-            potential["improvement_relative_pct"] = round_half_up(100 * (bench["potential"] - bench["overall"]) / bench["overall"])
         potential["note"] = "Category potentials are projected deterministically (DERIVED rule): every measured gap fixed, unmeasured checks assumed measured, capped at 90."
 
     total_possible_checks = len(results)

@@ -2356,6 +2356,9 @@
             </div>
             
             <div id="urlErrorMsg" class="input-error-msg"></div>
+            <div style="margin-top:10px; display:flex; justify-content:center; align-items:center; gap:16px; font-size:12px; color:#64748B;">
+                <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="publicForceFresh"> Force Fresh Scan (bypass cache)</label>
+            </div>
             <div class="hero-support-text">Free website SEO score check • No credit card required</div>
 
             <!-- SCANNING STATE SCREEN -->
@@ -3125,7 +3128,7 @@
                 }
             }
 
-            window.runPublicScan = async function() {
+            window.runPublicScan = async function(forceFresh = false) {
                 const raw = $("scanUrlInput").value;
                 const errEl = $("urlErrorMsg");
                 errEl.style.display = "none";
@@ -3141,6 +3144,8 @@
                     return;
                 }
 
+                const isForceFresh = Boolean(forceFresh || ($("publicForceFresh") && $("publicForceFresh").checked));
+
                 // Show scanning state
                 $("scanSubmitBtn").disabled = true;
                 $("scanSubmitBtn").textContent = "Analyzing...";
@@ -3148,7 +3153,7 @@
                 $("resultSection").style.display = "none";
 
                 $("scanPhaseText").textContent = "SCANNING";
-                $("scanMsgText").textContent = "Connecting to website...";
+                $("scanMsgText").textContent = isForceFresh ? "Initiating fresh live scan..." : "Connecting to website...";
                 $("scanSubText").textContent = "Testing website accessibility and loading initial response...";
 
                 startScanProgressAnimation();
@@ -3158,7 +3163,7 @@
                     const startResp = await fetch("/api/public/scan/start", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ url: normalized })
+                        body: JSON.stringify({ url: normalized, force_fresh: isForceFresh })
                     });
 
                     if (!startResp.ok) {
@@ -3270,15 +3275,19 @@
 
                 $("resTargetUrl").textContent = res.target_url;
                 
-                // Formatted date
+                // Formatted date & Cache/Fresh status
                 let formattedDate = "Recently";
-                if (res.scan_date) {
+                const dateVal = res.audit_performed_at || res.scan_date;
+                if (dateVal) {
                     try {
-                        const d = new Date(res.scan_date);
-                        formattedDate = d.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' });
+                        const d = new Date(dateVal);
+                        formattedDate = d.toLocaleDateString("en-US", { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                     } catch {}
                 }
-                $("resScanDate").textContent = formattedDate;
+                const cacheBadge = res.is_cached
+                    ? `<span style="display:inline-block; margin-left:8px; padding:3px 10px; border-radius:12px; font-size:11px; background:#FEF3C7; color:#92400E; font-weight:600; vertical-align:middle;">Cached Result</span> <button type="button" onclick="runPublicScan(true)" style="background:none; border:none; padding:0; cursor:pointer; font-size:11px; color:#2563EB; text-decoration:underline; margin-left:6px; font-weight:600;">Force Fresh Scan</button>`
+                    : `<span style="display:inline-block; margin-left:8px; padding:3px 10px; border-radius:12px; font-size:11px; background:#D1FAE5; color:#065F46; font-weight:600; vertical-align:middle;">Fresh Live Scan</span>`;
+                $("resScanDate").innerHTML = formattedDate + " • " + cacheBadge;
 
                 // Animate circular score
                 const ring = $("resScoreRing");

@@ -640,9 +640,10 @@ tr:hover {
     grid-template-columns: 2fr 1fr 1fr;
 }
 
-.grid-2col {
+.grid-2col,
+.profile-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
     gap: 24px;
 }
 
@@ -813,20 +814,35 @@ tr:hover {
 
     /* Two-column grid collapses to single column on mobile */
     .grid-2col,
+    .profile-grid,
     .grid[style*="1fr 1fr"] {
         grid-template-columns: 1fr !important;
         gap: 16px !important;
     }
 
+    #viewProfile .grid-2col,
+    #viewProfile .profile-grid {
+        grid-template-columns: 1fr !important;
+        width: 100% !important;
+    }
+
     #viewProfile .card {
-        width: 100%;
-        box-sizing: border-box;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    #viewProfile .form-group input {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
 
     #viewProfile .btn {
-        width: 100%;
-        justify-content: center;
-        box-sizing: border-box;
+        width: 100% !important;
+        justify-content: center !important;
+        box-sizing: border-box !important;
     }
 
     /* Technical Inspection Header Buttons */

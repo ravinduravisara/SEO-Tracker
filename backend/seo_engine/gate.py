@@ -68,18 +68,10 @@ def run_gate(payload: dict[str, Any], narrative_texts: Iterable[str] = ()) -> di
         by_cat.setdefault(ch["category"], []).append(CheckResult(ch["id"], ch["category"], ch["points_available"], ch["status"], ch.get("coverage")))
         if ch["status"] in ("UNMEASURED", "NOT_APPLICABLE") and ch["points_earned"] != 0:
             failures.append(f"{ch['id']}: unmeasured/not-applicable check earned points.")
-    from urllib.parse import urlparse
-    target_host = (urlparse(payload.get("audit", {}).get("target_url") or "").hostname or "").lower()
-    if target_host.startswith("www."):
-        target_host = target_host[4:]
-    from .engine import BENCHMARK_CORPUS
-    is_benchmark = target_host in BENCHMARK_CORPUS
-
-    if not is_benchmark:
-        for c in cats:
-            again = score_category(c["id"], by_cat.get(c["id"], [])).score
-            if again != c["score"]:
-                failures.append(f"{c['id']}: category score {c['score']} does not re-derive ({again}).")
+    for c in cats:
+        again = score_category(c["id"], by_cat.get(c["id"], [])).score
+        if again != c["score"]:
+            failures.append(f"{c['id']}: category score {c['score']} does not re-derive ({again}).")
 
     # Gate 3: potential re-derived.
     pot = score.get("potential")

@@ -8,9 +8,9 @@ from typing import Any, Optional, List, Dict, Union
 
 logger = logging.getLogger("esupport_db")
 
-# Database URI (Defaults to MongoDB Atlas)
-DEFAULT_MONGO_URI = "mongodb+srv://seoesupport_db_user:mFYxVnBKYtFspiij@cluster0.wvoxrnq.mongodb.net/seo_platform?retryWrites=true&w=majority"
-DB_PATH = os.getenv("DATABASE_URL", DEFAULT_MONGO_URI)
+# Database URI: defaults to local SQLite; MongoDB Atlas or PostgreSQL can be configured via DATABASE_URL env var
+DEFAULT_SQLITE_URI = "sqlite:///./seo_platform.db"
+DB_PATH = os.getenv("DATABASE_URL", DEFAULT_SQLITE_URI).strip()
 
 IS_MONGO = DB_PATH.startswith("mongodb://") or DB_PATH.startswith("mongodb+srv://")
 
@@ -33,13 +33,13 @@ if IS_MONGO:
         def _resilient_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
             try:
                 return _orig_getaddrinfo(host, port, family, type, proto, flags)
-            except socket.gaierror:
+            except socket.gaierror as orig_exc:
                 try:
                     ans = _custom_resolver.resolve(host, "A")
                     ip = str(ans[0])
                     return _orig_getaddrinfo(ip, port, family, type, proto, flags)
                 except Exception:
-                    raise
+                    raise orig_exc
         socket.getaddrinfo = _resilient_getaddrinfo
     except Exception as _dns_err:
         logger.warning(f"Could not configure custom DNS resolver: {_dns_err}")
@@ -885,6 +885,55 @@ class ScheduledAudit(Base):
     client = relationship("Client")
 
 
+class KeywordProject(Base):
+    __tablename__ = "keyword_projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id"), index=True, nullable=True)
+    description = Column(String, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+    keywords = relationship("SavedKeyword", back_populates="project", cascade="all, delete-orphan")
+
+
+class SavedKeyword(Base):
+    __tablename__ = "saved_keywords"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("keyword_projects.id"), index=True, nullable=False)
+    keyword = Column(String, nullable=False, index=True)
+    search_volume = Column(Integer, nullable=True)
+    cpc = Column(Float, nullable=True)
+    keyword_difficulty = Column(Float, nullable=True)
+    intent = Column(String, nullable=True)
+    competition = Column(Float, nullable=True)
+    cluster = Column(String, nullable=True)
+    source = Column(String, default="research")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("KeywordProject", back_populates="keywords")
+
+
+class CompetitorComparison(Base):
+    __tablename__ = "competitor_comparisons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    target_domain = Column(String, nullable=False, index=True)
+    competitor_domains = Column(String, default="[]")  # JSON serialized list of competitor domains
+    client_id = Column(Integer, ForeignKey("clients.id"), index=True, nullable=True)
+    market_country = Column(Integer, default=2840)
+    market_language = Column(String, default="en")
+    data_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+
+
 def init_db():
     if IS_MONGO:
         try:
@@ -915,6 +964,12 @@ def init_db():
                 db["activity_logs"].create_index("created_at")
                 db["public_scans"].create_index("id", unique=True)
                 db["scheduled_audits"].create_index("id", unique=True)
+                db["keyword_projects"].create_index("id", unique=True)
+                db["saved_keywords"].create_index("id", unique=True)
+                db["saved_keywords"].create_index("project_id")
+                db["saved_keywords"].create_index("keyword")
+                db["competitor_comparisons"].create_index("id", unique=True)
+                db["competitor_comparisons"].create_index("target_domain")
             except Exception as e:
                 logger.warning(f"Error ensuring MongoDB indexes: {e}")
 
@@ -922,7 +977,8 @@ def init_db():
             tables = [
                 "admin_users", "clients", "websites", "audits", "public_reports",
                 "team_invitations", "admin_sessions", "activity_logs", "lead_notes",
-                "seo_leads", "public_scans", "scheduled_audits"
+                "seo_leads", "public_scans", "scheduled_audits", "keyword_projects",
+                "saved_keywords", "competitor_comparisons"
             ]
             for t in tables:
                 try:

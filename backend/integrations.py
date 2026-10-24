@@ -102,6 +102,20 @@ def bing_configured() -> bool:
     return bool(BING_API_KEY)
 
 
+def update_credentials(*, pagespeed_api_key: str | None = None, openpagerank_api_key: str | None = None, bing_api_key: str | None = None) -> dict[str, Any]:
+    global PAGESPEED_API_KEY, OPENPAGERANK_API_KEY, BING_API_KEY
+    if pagespeed_api_key is not None:
+        PAGESPEED_API_KEY = pagespeed_api_key.strip()
+        os.environ["PAGESPEED_API_KEY"] = PAGESPEED_API_KEY
+    if openpagerank_api_key is not None:
+        OPENPAGERANK_API_KEY = openpagerank_api_key.strip()
+        os.environ["OPENPAGERANK_API_KEY"] = OPENPAGERANK_API_KEY
+    if bing_api_key is not None:
+        BING_API_KEY = bing_api_key.strip()
+        os.environ["BING_API_KEY"] = BING_API_KEY
+    return status()
+
+
 def status() -> dict[str, Any]:
     gsc_email = ""
     if gsc_configured():
@@ -109,10 +123,18 @@ def status() -> dict[str, Any]:
             gsc_email = _gsc_info().get("client_email", "")
         except Exception:
             gsc_email = ""
+    ps_mode = "api" if PAGESPEED_API_KEY else ("local_lighthouse" if local_lighthouse_available() else "api_public")
+    ps_note = (
+        "Connected via Google PageSpeed Insights API (Dedicated Key)."
+        if PAGESPEED_API_KEY
+        else ("Connected via local Lighthouse engine + Google PSI API."
+              if local_lighthouse_available()
+              else "Connected via Google PageSpeed Insights API (Public Quota). Optional: click Key to set custom API key.")
+    )
     return {
-        "pagespeed": {"configured": bool(PAGESPEED_API_KEY) or local_lighthouse_available(), "has_api_key": bool(PAGESPEED_API_KEY),
-                      "mode": "api" if PAGESPEED_API_KEY else "local_lighthouse" if local_lighthouse_available() else "none",
-                      "note": "Works without a key at a low shared quota; set PAGESPEED_API_KEY for reliable use."},
+        "pagespeed": {"configured": True, "has_api_key": bool(PAGESPEED_API_KEY),
+                      "mode": ps_mode,
+                      "note": ps_note},
         "search_console": {"configured": gsc_configured(), "service_account_email": gsc_email,
                            "note": "Add the service-account email as a user on each Search Console property."},
         "bing_webmaster": {"configured": bing_configured(),
@@ -122,6 +144,9 @@ def status() -> dict[str, Any]:
         "dataforseo": {"configured": dataforseo_configured(), "location_code": DATAFORSEO_LOCATION_CODE,
                        "language_code": DATAFORSEO_LANGUAGE_CODE,
                        "note": "Paid API: every uncached call costs credits. Backlinks needs a Backlinks API subscription."},
+        "ollama": {"configured": ollama_configured(), "model": OLLAMA_MODEL,
+                   "has_api_key": bool(OLLAMA_API_KEY),
+                   "note": f"Ollama model '{OLLAMA_MODEL}' connected."},
     }
 
 
@@ -230,8 +255,20 @@ _LIGHTHOUSE_LOCK = threading.Lock()  # one run at a time: Lighthouse is CPU-heav
 LIGHTHOUSE_CALIBRATION = LIGHTHOUSE_CLI.parents[3] / "benchmark.json"
 
 
+def _find_node() -> str | None:
+    for candidate in [shutil.which("node"), "/usr/local/bin/node", "/opt/homebrew/bin/node", "/usr/bin/node"]:
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
 def local_lighthouse_available() -> bool:
-    return LIGHTHOUSE_CLI.is_file() and shutil.which("node") is not None
+    return LIGHTHOUSE_CLI.is_file() and _find_node() is not None
+
+
+def pagespeed_configured() -> bool:
+    """Google PageSpeed Insights is always available via Google's free API endpoint or local Lighthouse engine."""
+    return True
 
 
 def _cpu_slowdown() -> float:
@@ -250,7 +287,8 @@ def _cpu_slowdown() -> float:
 def _local_lighthouse_call(url: str, strategy: str) -> dict[str, Any]:
     with tempfile.TemporaryDirectory() as tmp:
         out_file = Path(tmp) / "report.json"
-        cmd = ["node", str(LIGHTHOUSE_CLI), url, "--output=json", f"--output-path={out_file}", "--quiet",
+        node_bin = _find_node() or "node"
+        cmd = [node_bin, str(LIGHTHOUSE_CLI), url, "--output=json", f"--output-path={out_file}", "--quiet",
                "--only-categories=performance,seo,accessibility,best-practices", "--max-wait-for-load=45000",
                "--chrome-flags=--headless=new --no-sandbox --disable-gpu"]
         if strategy == "desktop":
@@ -277,14 +315,28 @@ def _local_lighthouse_call(url: str, strategy: str) -> dict[str, Any]:
 
 
 def pagespeed(url: str, strategy: str = "mobile") -> dict[str, Any]:
-    """PageSpeed Insights API when a key is set; otherwise the same Lighthouse engine run locally (free, no key)."""
-    use_local = not PAGESPEED_API_KEY and local_lighthouse_available()
-    try:
-        if use_local:
+    """PageSpeed Insights API when a key is set or available; otherwise local Lighthouse engine with resilient fallback."""
+    use_api_first = bool(PAGESPEED_API_KEY) or not local_lighthouse_available()
+    if use_api_first:
+        try:
+            return _cached("psi", [url, strategy], lambda: _psi_call(url, strategy))
+        except Exception as exc:
+            logger.warning("Google PageSpeed Insights API call failed, attempting local Lighthouse fallback: %s", exc)
+            if local_lighthouse_available():
+                try:
+                    return _cached("lighthouse_local", [url, strategy], lambda: _local_lighthouse_call(url, strategy))
+                except Exception as lh_exc:
+                    return {"ok": False, "strategy": strategy, "url": url, "error": f"PageSpeed API ({exc}) and Local Lighthouse ({lh_exc}) failed."}
+            return {"ok": False, "strategy": strategy, "url": url, "error": str(exc)}
+    else:
+        try:
             return _cached("lighthouse_local", [url, strategy], lambda: _local_lighthouse_call(url, strategy))
-        return _cached("psi", [url, strategy], lambda: _psi_call(url, strategy))
-    except (requests.RequestException, IntegrationError, ValueError, OSError, subprocess.TimeoutExpired) as exc:
-        return {"ok": False, "strategy": strategy, "url": url, "error": str(exc)}
+        except Exception as exc:
+            logger.warning("Local Lighthouse failed, attempting Google PageSpeed Insights API fallback: %s", exc)
+            try:
+                return _cached("psi", [url, strategy], lambda: _psi_call(url, strategy))
+            except Exception as psi_exc:
+                return {"ok": False, "strategy": strategy, "url": url, "error": f"Local Lighthouse ({exc}) and PageSpeed API ({psi_exc}) failed."}
 
 # ---------------------------------------------------------------------------
 # Google Search Console (Search Analytics API, service account)
@@ -396,6 +448,15 @@ def search_console(target_url: str, days: int = 28) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Open PageRank (free): link-authority score from the Common Crawl link graph
 # ---------------------------------------------------------------------------
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate").strip()
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3").strip()
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
+
+
+def ollama_configured() -> bool:
+    return bool(OLLAMA_URL)
+
+
 def openpagerank_configured() -> bool:
     return bool(OPENPAGERANK_API_KEY)
 
@@ -587,6 +648,89 @@ def ranked_keywords(target_url: str, limit: int = 100, location_code: int | None
         return _cached("dfs_rank", [domain, loc, limit], run)
     except (requests.RequestException, IntegrationError) as exc:
         return {"ok": False, "target": domain, "error": str(exc)}
+
+
+def competitors_domain(target_url: str, limit: int = 10, location_code: int | None = None, language_code: str | None = None) -> dict[str, Any]:
+    """Finds organic Google SERP competitors for a domain via DataForSEO Labs."""
+    domain = bare_domain(target_url)
+    loc = _loc(location_code, language_code)
+    limit = max(1, min(int(limit), 100))
+
+    def run() -> dict[str, Any]:
+        result, cost = _dfs_post("dataforseo_labs/google/competitors_domain/live", {
+            "target": domain, **loc, "limit": limit
+        })
+        r0 = result[0] if result else {}
+        items = r0.get("items") or []
+        rows = []
+        for it in items:
+            comp_domain = it.get("target") or it.get("full_domain") or ""
+            metrics = (it.get("metrics") or {}).get("organic") or {}
+            rows.append({
+                "domain": comp_domain,
+                "avg_position": metrics.get("avg_position"),
+                "estimated_traffic": metrics.get("etv"),
+                "organic_keywords_count": metrics.get("count"),
+                "shared_keywords": it.get("intersections") or 0,
+            })
+        return {
+            "ok": True,
+            "target": domain,
+            **loc,
+            "total_count": len(rows),
+            "competitors": rows,
+            "cost_usd": cost,
+            "source": "DataForSEO Labs - Google Competitors Domain",
+        }
+
+    try:
+        return _cached("dfs_comp", [domain, loc, limit], run)
+    except (requests.RequestException, IntegrationError) as exc:
+        return {"ok": False, "target": domain, "error": str(exc), "competitors": []}
+
+
+def domain_intersection(target1: str, target2: str, limit: int = 100, location_code: int | None = None, language_code: str | None = None) -> dict[str, Any]:
+    """Compares shared ranking keywords between two domains using DataForSEO Labs."""
+    d1 = bare_domain(target1)
+    d2 = bare_domain(target2)
+    loc = _loc(location_code, language_code)
+    limit = max(1, min(int(limit), 500))
+
+    def run() -> dict[str, Any]:
+        result, cost = _dfs_post("dataforseo_labs/google/domain_intersection/live", {
+            "target1": d1, "target2": d2, **loc, "limit": limit, "item_types": ["organic"]
+        })
+        r0 = result[0] if result else {}
+        items = r0.get("items") or []
+        rows = []
+        for it in items:
+            kd = it.get("keyword_data") or {}
+            first_domain_serp = (it.get("first_domain_serp_element") or {}).get("serp_item") or {}
+            second_domain_serp = (it.get("second_domain_serp_element") or {}).get("serp_item") or {}
+            rows.append({
+                "keyword": kd.get("keyword", ""),
+                "target1_position": first_domain_serp.get("rank_group"),
+                "target2_position": second_domain_serp.get("rank_group"),
+                "search_volume": (kd.get("keyword_info") or {}).get("search_volume"),
+                "keyword_difficulty": (kd.get("keyword_properties") or {}).get("keyword_difficulty"),
+                "cpc": (kd.get("keyword_info") or {}).get("cpc"),
+                "intent": (kd.get("search_intent_info") or {}).get("main_intent"),
+            })
+        return {
+            "ok": True,
+            "target1": d1,
+            "target2": d2,
+            **loc,
+            "total_count": len(rows),
+            "keywords": rows,
+            "cost_usd": cost,
+            "source": "DataForSEO Labs - Domain Intersection",
+        }
+
+    try:
+        return _cached("dfs_intersect", [d1, d2, loc, limit], run)
+    except (requests.RequestException, IntegrationError) as exc:
+        return {"ok": False, "target1": d1, "target2": d2, "error": str(exc), "keywords": []}
 
 
 def backlinks(target_url: str) -> dict[str, Any]:

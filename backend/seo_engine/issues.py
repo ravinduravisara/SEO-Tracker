@@ -29,8 +29,9 @@ def synthesise(results: list[CheckResult], defs: dict[str, dict[str, Any]], cate
         rows.append({
             "check_id": r.id,
             "check_name": d["name"],
-            "status": r.status,
+            "status": "OPEN",
             "title": f"{d['name']}: {r.evidence.get('statement', '')}".strip(),
+            "problem_description": f"{d['name']}: {r.evidence.get('statement', '')}".strip(),
             "category": r.category,
             "category_name": category_names.get(r.category, r.category),
             "severity": severity,
@@ -38,17 +39,20 @@ def synthesise(results: list[CheckResult], defs: dict[str, dict[str, Any]], cate
             "priority_diverges_from_severity": False,
             "priority_divergence_reason": None,
             "urls": r.evidence.get("urls", []),
+            "affected_url": (r.evidence.get("urls") or [""])[0],
             "seo_impact": d["reason"],
             "business_impact": d["reason"] if r.category in BUSINESS_CATEGORIES else "Indirect: affects how well the page can be found and understood.",
             "evidence": {"label": r.evidence_label, "statement": r.evidence.get("statement", ""), "values": r.evidence.get("values", {}),
                          "urls": r.evidence.get("urls", [])},
+            "suggested_correction": d["fix"],
             "recommended_fix": d["fix"],
+            "verification_method": f"Re-crawl affected URL(s) and verify check {r.id} ({d['name']}) passes.",
             "effort_minutes": effort or None,
             "needs_developer": bool(d.get("dev")),
             "quick_win": 0 < effort <= qw_max,
             "derived_from_checks": [r.id],
         })
-    rows.sort(key=lambda x: (SEV_RANK[x["severity"]], -WEIGHTS[x["category"]], x["check_id"]))
+    rows.sort(key=lambda x: (SEV_RANK.get(x["severity"], 3), -WEIGHTS.get(x["category"], 0), x["check_id"]))
     for i, row in enumerate(rows, 1):
         row["id"] = f"{i:02d}"
     return rows

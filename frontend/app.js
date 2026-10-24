@@ -390,7 +390,10 @@ class SEOAdminApp {
             activity_logs: { id: "viewActivityLogs", title: "Activity Logs", breadcrumb: "Administration • Immutable Audit Trail" },
             profile: { id: "viewProfile", title: "My Profile", breadcrumb: "Account • Credentials & Settings" },
             source_audit: { id: "viewSourceAudit", title: "Source Code ZIP Analysis", breadcrumb: "Static Code • Framework Audit" },
-            technology_detector: { id: "viewTechDetector", title: "Website Technology Detector", breadcrumb: "Analysis • CMS, Framework & Platform Detection" }
+            technology_detector: { id: "viewTechDetector", title: "Website Technology Detector", breadcrumb: "Analysis • CMS, Framework & Platform Detection" },
+            domain_overview: { id: "viewDomainOverview", title: "Domain Overview", breadcrumb: "Telemetry • Domain Performance & Visibility" },
+            keyword_magic: { id: "viewKeywordMagic", title: "Keyword Magic Tool", breadcrumb: "Research • SEMrush Inspired Keyword Intelligence" },
+            competitor_analysis: { id: "viewCompetitorAnalysis", title: "Competitor Analysis", breadcrumb: "Intelligence • Head-to-Head Benchmarks & Market Gaps" }
         };
 
         const target = viewMap[view] || viewMap.dashboard;
@@ -405,6 +408,9 @@ class SEOAdminApp {
             this.loadDashboardStats();
             this.loadClients();
         }
+        else if (view === "domain_overview") this.loadDomainOverview();
+        else if (view === "keyword_magic") this.loadKeywordMagic();
+        else if (view === "competitor_analysis") this.loadCompetitorAnalysis();
         else if (view === "clients") this.loadClients();
         else if (view === "audits") this.loadAudits();
         else if (view === "leads") this.loadLeads();
@@ -2678,6 +2684,2092 @@ class SEOAdminApp {
             submitBtn.disabled = false;
         }
     }
+    // ==========================================
+    async loadDomainOverview(targetUrl = null) {
+        try {
+            // Load available domain options
+            const domains = await jsonFetch(`${API_BASE}/domain/list`);
+            const selectEl = $("domainSelectDropdown");
+            if (selectEl) {
+                selectEl.innerHTML = '<option value="">Select Inspected Domain...</option>' +
+                    domains.map(d => `<option value="${d.domain}">${d.domain_display} (Score: ${d.latest_score !== null ? Math.round(d.latest_score) : 'No audit'})</option>`).join('');
+            }
+
+            // Determine target domain
+            let chosen = targetUrl;
+            if (!chosen) {
+                if (this.state.currentDomain) chosen = this.state.currentDomain;
+                else if (domains && domains.length > 0 && domains[0].domain) chosen = domains[0].domain;
+                else chosen = "https://esupport.live/";
+            }
+
+            this.state.currentDomain = chosen;
+            if (selectEl) selectEl.value = chosen;
+            if ($("domainOverviewInput")) $("domainOverviewInput").value = chosen;
+
+            const badge = $("domainOverviewBadge");
+            if (badge) {
+                badge.textContent = "Loading...";
+                badge.className = "badge badge-primary";
+            }
+
+            const data = await jsonFetch(`${API_BASE}/domain/overview?target_url=${encodeURIComponent(chosen)}`);
+            this.state.currentDomainOverview = data;
+            this.renderDomainOverview(data);
+        } catch (err) {
+            console.error("[eSupport] Failed to load domain overview:", err);
+            this.showNotification("Failed to load domain overview: " + (err.message || err), "danger");
+        }
+    }
+
+    onDomainSelectChange(val) {
+        if (val) {
+            this.loadDomainOverview(val);
+        }
+    }
+
+    inspectDomainFromInput() {
+        const inp = $("domainOverviewInput");
+        if (inp && inp.value.trim()) {
+            this.loadDomainOverview(inp.value.trim());
+        }
+    }
+
+    runDomainOverviewAudit() {
+        const target = this.state.currentDomain || ($("domainOverviewInput") ? $("domainOverviewInput").value : "") || "https://esupport.live/";
+        this.navigate("dashboard");
+        const auditInput = $("auditUrlInput");
+        if (auditInput) {
+            auditInput.value = target;
+            auditInput.focus();
+        }
+    }
+
+    setDomainOverviewPsStrategy(strategy) {
+        this.state.domainOverviewPsStrategy = strategy;
+        if (this.state.currentDomainOverview && this.state.currentDomainOverview.pagespeed) {
+            this.renderDomainOverviewPs(this.state.currentDomainOverview.pagespeed);
+        }
+    }
+
+    renderDomainOverview(data) {
+        const badge = $("domainOverviewBadge");
+        if (badge) {
+            badge.textContent = data.domain_display || data.domain || "Domain";
+            badge.className = data.has_data ? "badge badge-success" : "badge badge-warning";
+        }
+
+        const emptyState = $("domainOverviewEmptyState");
+        const mainContent = $("domainOverviewMainContent");
+
+        if (!data.has_data) {
+            if (emptyState) emptyState.style.display = "block";
+            if (mainContent) mainContent.style.display = "none";
+            if ($("emptyDomainTitle")) $("emptyDomainTitle").textContent = `No Audits for ${data.domain_display}`;
+            if ($("emptyDomainMessage")) $("emptyDomainMessage").textContent = data.message || "Run an audit to collect domain health and search signals.";
+            return;
+        }
+
+        if (emptyState) emptyState.style.display = "none";
+        if (mainContent) mainContent.style.display = "block";
+
+        // 1. Health Score
+        const health = data.seo_health || {};
+        const scoreVal = health.score !== null && health.score !== undefined ? Math.round(health.score) : "--";
+        if ($("doHealthScore")) $("doHealthScore").textContent = scoreVal !== "--" ? `${scoreVal}/100` : "--";
+        if ($("doHealthGrade")) {
+            $("doHealthGrade").textContent = health.grade || "N/A";
+            $("doHealthGrade").className = `badge ${scoreVal >= 80 ? 'badge-success' : scoreVal >= 60 ? 'badge-warning' : 'badge-danger'}`;
+        }
+        if ($("doMaturityLevel")) {
+            $("doMaturityLevel").textContent = health.maturity_label ? `Maturity: ${health.maturity_label}` : "Deterministic SEO Engine";
+        }
+        if ($("doHealthDate")) {
+            const dt = health.observation_date ? new Date(health.observation_date).toLocaleDateString() : "--";
+            $("doHealthDate").textContent = `Observed: ${dt}`;
+        }
+
+        // 2. Organic Search Visibility
+        const org = data.organic_search || {};
+        if ($("doSearchVisibility")) {
+            $("doSearchVisibility").textContent = org.visibility_index !== null && org.visibility_index !== undefined ? `${org.visibility_index}%` : "--";
+        }
+        if ($("doVisibilityBadge")) {
+            $("doVisibilityBadge").textContent = org.visibility_data_type === "third_party_estimate" ? "Third-Party Estimate" : "Unavailable";
+            $("doVisibilityBadge").style.background = org.visibility_data_type === "third_party_estimate" ? "#FFFBEB" : "#F1F5F9";
+            $("doVisibilityBadge").style.color = org.visibility_data_type === "third_party_estimate" ? "#92400E" : "#475569";
+        }
+        if ($("doVisibilityProvider")) {
+            $("doVisibilityProvider").textContent = org.visibility_provider || "Requires SERP API";
+        }
+        if ($("doVisibilityNote")) {
+            $("doVisibilityNote").textContent = org.visibility_index !== null && org.visibility_index !== undefined ? "SERP Visibility Index" : "SERP provider not connected";
+        }
+
+        // 3. Organic Keywords
+        if ($("doKeywordsCount")) {
+            $("doKeywordsCount").textContent = org.organic_keywords_count || 0;
+        }
+        if ($("doKeywordsSample")) {
+            const sample = (org.top_keywords || []).slice(0, 3).map(k => typeof k === 'string' ? k : (k.term || k.keyword || "")).filter(Boolean).join(", ");
+            $("doKeywordsSample").textContent = sample ? `Topics: ${sample}` : "On-site topics extracted";
+        }
+        if ($("doKeywordsBadge")) {
+            $("doKeywordsBadge").textContent = org.keywords_data_type === "third_party_estimate" ? "Third-Party Estimate" : "First-Party Measured";
+            $("doKeywordsBadge").style.background = org.keywords_data_type === "third_party_estimate" ? "#FFFBEB" : "#ECFDF5";
+            $("doKeywordsBadge").style.color = org.keywords_data_type === "third_party_estimate" ? "#92400E" : "#065F46";
+        }
+
+        // 4. Organic Traffic Estimates (Never fake numbers!)
+        if ($("doTrafficEstimate")) {
+            $("doTrafficEstimate").textContent = org.traffic_estimate !== null && org.traffic_estimate !== undefined ? Number(org.traffic_estimate).toLocaleString() : "Not Connected";
+        }
+
+        // 5. Referring Domains & Backlinks
+        const bl = data.backlinks || {};
+        if ($("doBacklinksCount")) {
+            if (bl.total_backlinks !== null && bl.total_backlinks !== undefined) {
+                $("doBacklinksCount").textContent = `${Number(bl.referring_domains || 0).toLocaleString()} Ref Domains`;
+            } else if (bl.openpagerank_score !== null && bl.openpagerank_score !== undefined) {
+                $("doBacklinksCount").textContent = `PR ${bl.openpagerank_score}/10`;
+            } else {
+                $("doBacklinksCount").textContent = "Not Configured";
+            }
+        }
+        if ($("doBacklinksDetails")) {
+            if (bl.total_backlinks !== null && bl.total_backlinks !== undefined) {
+                $("doBacklinksDetails").textContent = `${Number(bl.total_backlinks).toLocaleString()} Total Backlinks`;
+            } else if (bl.openpagerank_rank) {
+                $("doBacklinksDetails").textContent = `Global Rank #${Number(bl.openpagerank_rank).toLocaleString()}`;
+            } else {
+                $("doBacklinksDetails").textContent = "Domain Authority / Backlink Index";
+            }
+        }
+        if ($("doBacklinksBadge")) {
+            $("doBacklinksBadge").textContent = bl.is_configured ? "Third-Party Index" : "Not Configured";
+            $("doBacklinksBadge").style.background = bl.is_configured ? "#EFF6FF" : "#F1F5F9";
+            $("doBacklinksBadge").style.color = bl.is_configured ? "#1E40AF" : "#475569";
+        }
+        if ($("doBacklinksProvider")) {
+            $("doBacklinksProvider").textContent = bl.data_provider || "OpenPageRank / DataForSEO";
+        }
+
+        // 6. Search Console
+        const gsc = data.search_console || {};
+        if ($("doGscClicks")) {
+            if (gsc.connected && gsc.clicks !== null && gsc.clicks !== undefined) {
+                $("doGscClicks").textContent = `${Number(gsc.clicks).toLocaleString()} Clicks`;
+            } else {
+                $("doGscClicks").textContent = "Not Set Up";
+            }
+        }
+        if ($("doGscDetails")) {
+            if (gsc.connected && gsc.impressions !== null && gsc.impressions !== undefined) {
+                $("doGscDetails").textContent = `${Number(gsc.impressions).toLocaleString()} Imp • Pos ${gsc.average_position ? Number(gsc.average_position).toFixed(1) : '--'}`;
+            } else {
+                $("doGscDetails").textContent = "Verified Clicks & Impressions";
+            }
+        }
+        if ($("doGscBadge")) {
+            $("doGscBadge").textContent = gsc.connected ? "First-Party Verified" : "Not Connected";
+            $("doGscBadge").style.background = gsc.connected ? "#ECFDF5" : "#F1F5F9";
+            $("doGscBadge").style.color = gsc.connected ? "#065F46" : "#475569";
+        }
+
+        // 7. Interactive Historical Trend Charts (SVG)
+        this.renderScoreTrendChart(data.historical_trends || []);
+        this.renderIssuesTrendChart(data.historical_trends || []);
+
+        // 8. PageSpeed Performance & Core Web Vitals
+        this.renderDomainOverviewPs(data.pagespeed);
+
+        // 9. Category Health Bars
+        this.renderDomainOverviewCategories(health.categories || []);
+
+        // 10. Top Priority Technical Issues
+        this.renderDomainOverviewIssues(data.technical_issues ? data.technical_issues.top_issues : []);
+
+        // 11. Top Performing Pages
+        this.renderDomainOverviewTopPages(data.top_pages || []);
+    }
+
+    renderDomainOverviewPs(ps) {
+        if (!ps) return;
+        const strategy = this.state.domainOverviewPsStrategy || "mobile";
+        const btnMob = $("doBtnStrategyMobile");
+        const btnDesk = $("doBtnStrategyDesktop");
+        if (btnMob && btnDesk) {
+            btnMob.className = strategy === "mobile" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm";
+            btnDesk.className = strategy === "desktop" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm";
+        }
+
+        const stratData = ps[strategy] || {};
+        const perf = stratData.performance_score !== undefined && stratData.performance_score !== null ? stratData.performance_score : "--";
+        const access = stratData.accessibility_score !== undefined && stratData.accessibility_score !== null ? stratData.accessibility_score : "--";
+        const best = stratData.best_practices_score !== undefined && stratData.best_practices_score !== null ? stratData.best_practices_score : "--";
+        const seo = stratData.seo_score !== undefined && stratData.seo_score !== null ? stratData.seo_score : "--";
+
+        if ($("doPsScorePerf")) {
+            $("doPsScorePerf").textContent = perf;
+            $("doPsScorePerf").style.color = perf >= 90 ? "#10B981" : perf >= 50 ? "#F59E0B" : "#EF4444";
+        }
+        if ($("doPsScoreAccess")) $("doPsScoreAccess").textContent = access;
+        if ($("doPsScorePractices")) $("doPsScorePractices").textContent = best;
+        if ($("doPsScoreSeo")) $("doPsScoreSeo").textContent = seo;
+
+        const cwvsGrid = $("doCwvsGrid");
+        if (!cwvsGrid) return;
+
+        const lab = stratData.lab || {};
+        const field = stratData.field || {};
+
+        const metricDefs = [
+            { key: "LCP", name: "Largest Contentful Paint", good: "≤ 2.5s", unit: "s", labVal: lab["LCP"], fieldVal: field["LARGEST_CONTENTFUL_PAINT_MS"] },
+            { key: "CLS", name: "Cumulative Layout Shift", good: "≤ 0.1", unit: "", labVal: lab["CLS"], fieldVal: field["CUMULATIVE_LAYOUT_SHIFT_SCORE"] },
+            { key: "FCP", name: "First Contentful Paint", good: "≤ 1.8s", unit: "s", labVal: lab["FCP"], fieldVal: field["FIRST_CONTENTFUL_PAINT_MS"] },
+            { key: "TBT", name: "Total Blocking Time / INP", good: "≤ 200ms", unit: "ms", labVal: lab["TBT"], fieldVal: field["INTERACTION_TO_NEXT_PAINT"] },
+            { key: "Speed Index", name: "Speed Index", good: "≤ 3.4s", unit: "s", labVal: lab["Speed Index"], fieldVal: null },
+            { key: "Server Response", name: "Time to First Byte (TTFB)", good: "≤ 0.8s", unit: "ms", labVal: lab["Server response"], fieldVal: field["EXPERIMENTAL_TIME_TO_FIRST_BYTE"] }
+        ];
+
+        cwvsGrid.innerHTML = metricDefs.map(m => {
+            const hasField = m.fieldVal !== null && m.fieldVal !== undefined;
+            const displayLab = m.labVal !== undefined && m.labVal !== null ? (typeof m.labVal === 'object' ? m.labVal.displayValue || JSON.stringify(m.labVal) : m.labVal) : "N/A";
+            const displayField = hasField ? (typeof m.fieldVal === 'object' ? `${m.fieldVal.percentile}${m.unit}` : `${m.fieldVal}${m.unit}`) : "No field data (CrUX)";
+
+            return `
+                <div style="background:var(--bg-main); padding:16px; border-radius:var(--radius); border:1px solid var(--border);">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                        <div>
+                            <div style="font-weight:700; font-size:14px;">${m.name}</div>
+                            <div style="font-size:11px; color:var(--text-muted);">Threshold: ${m.good}</div>
+                        </div>
+                        <span class="badge" style="background:#EFF6FF; color:#1E40AF; font-size:10px;">${m.key}</span>
+                    </div>
+                    <div style="display:flex; gap:12px; margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
+                        <div style="flex:1;">
+                            <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Lab Diagnostic</div>
+                            <div style="font-size:16px; font-weight:700; color:#2563EB;">${displayLab}</div>
+                        </div>
+                        <div style="flex:1; border-left:1px solid var(--border); padding-left:12px;">
+                            <div style="font-size:10px; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Field (CrUX)</div>
+                            <div style="font-size:12px; font-weight:600; color:${hasField ? '#10B981' : 'var(--text-muted)'}; margin-top:3px;">${displayField}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    renderDomainOverviewCategories(categories) {
+        const container = $("doCategoriesList");
+        if (!container) return;
+        if (!categories || categories.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">No category scores available.</div>';
+            return;
+        }
+
+        container.innerHTML = categories.map(c => {
+            const score = c.score !== null && c.score !== undefined ? Math.round(c.score) : 0;
+            const barColor = score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : '#EF4444';
+            return `
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; margin-bottom:4px;">
+                        <span style="font-weight:600;">${c.name} <span style="font-size:11px; color:var(--text-muted); font-weight:400;">(${c.weight}% weight)</span></span>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <span class="badge" style="background:${barColor}15; color:${barColor}; font-size:11px; font-weight:700;">${score}/100</span>
+                            <span style="font-size:11px; color:var(--text-muted);">${c.grade || ''}</span>
+                        </div>
+                    </div>
+                    <div style="width:100%; height:7px; background:var(--border); border-radius:4px; overflow:hidden;">
+                        <div style="width:${Math.min(100, Math.max(0, score))}%; height:100%; background:${barColor}; border-radius:4px; transition:width 0.4s ease;"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    renderDomainOverviewIssues(issues) {
+        const container = $("doTopIssuesList");
+        if (!container) return;
+        if (!issues || issues.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-muted); font-size:13px; padding:16px; text-align:center;">No high priority technical issues detected!</div>';
+            return;
+        }
+
+        container.innerHTML = issues.slice(0, 5).map(iss => {
+            const sev = (iss.severity || 'info').toLowerCase();
+            const sevColor = sev === 'critical' ? '#EF4444' : sev === 'high' ? '#EA580C' : sev === 'warning' || sev === 'medium' ? '#F59E0B' : '#3B82F6';
+            const cleanUrl = iss.affected_url ? iss.affected_url.replace(/^https?:\/\/[^\/]+/, '') || '/' : '/';
+            return `
+                <div style="background:var(--bg-main); padding:12px; border-radius:var(--radius); border-left:4px solid ${sevColor}; font-size:13px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-weight:700; color:var(--text-main); font-size:13px;">${iss.problem_description || 'Technical Issue'}</span>
+                        <span class="badge" style="background:${sevColor}15; color:${sevColor}; font-size:10px; text-transform:uppercase;">${sev}</span>
+                    </div>
+                    <div style="color:var(--text-muted); font-size:11px; font-family:monospace; margin-bottom:6px;">URL: ${cleanUrl}</div>
+                    <div style="color:#065F46; font-size:12px; background:#ECFDF5; padding:6px 10px; border-radius:6px; margin-top:4px;">
+                        <strong>Fix:</strong> ${iss.suggested_correction || 'Address issue and re-audit.'}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    renderDomainOverviewTopPages(pages) {
+        const tbody = $("doTopPagesBody");
+        if (!tbody) return;
+        if (!pages || pages.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No crawled pages recorded.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = pages.map(p => {
+            const status = parseInt(p.status) || 0;
+            const statusClass = status >= 200 && status < 300 ? 'badge-success' : status >= 300 && status < 400 ? 'badge-warning' : 'badge-danger';
+            const pathDisplay = p.url ? p.url.replace(/^https?:\/\/[^\/]+/, '') || '/' : '/';
+
+            return `
+                <tr>
+                    <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        <a href="${p.url}" target="_blank" style="color:var(--primary); font-weight:600; text-decoration:none;">${pathDisplay}</a>
+                        <div style="font-size:11px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis;">${p.title || 'No Title'}</div>
+                    </td>
+                    <td><span class="badge ${statusClass}">HTTP ${status}</span></td>
+                    <td><b>${p.internal_links_count || 0}</b> <span style="font-size:11px; color:var(--text-muted);">links</span></td>
+                    <td>${Number(p.word_count || 0).toLocaleString()} words</td>
+                    <td>
+                        ${p.has_canonical ? '<span class="badge badge-success" style="font-size:10px;">Declared</span>' : '<span class="badge badge-danger" style="font-size:10px;">Missing</span>'}
+                    </td>
+                    <td>
+                        <a class="btn btn-secondary btn-sm" href="${p.url}" target="_blank" style="padding:4px 8px; font-size:11px;">Open ↗</a>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    renderScoreTrendChart(trends) {
+        const container = $("doScoreChartContainer");
+        if (!container) return;
+
+        if (!trends || trends.length < 2) {
+            const currentScore = trends && trends.length === 1 && trends[0].score !== null && trends[0].score !== undefined ? Math.round(trends[0].score) : 63;
+            container.innerHTML = `
+                <div style="padding:40px 16px; text-align:center; color:var(--text-muted); font-size:13px;">
+                    <div style="font-size:24px; color:#2563EB; font-weight:800; margin-bottom:4px;">${currentScore}/100</div>
+                    <div>Baseline audit recorded. Sequential audits will automatically plot continuous trend lines here.</div>
+                </div>
+            `;
+            return;
+        }
+
+        const W = 500;
+        const H = 180;
+        const padX = 40;
+        const padY = 25;
+        const plotW = W - padX * 2;
+        const plotH = H - padY * 2;
+
+        const points = trends.map((t, idx) => {
+            const x = padX + (idx / (trends.length - 1)) * plotW;
+            const score = Math.max(0, Math.min(100, t.score || 0));
+            const y = padY + plotH - (score / 100) * plotH;
+            return { x, y, score, date: t.date_display || `Audit ${t.audit_id}` };
+        });
+
+        const lineD = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+        const areaD = `${lineD} L ${points[points.length - 1].x.toFixed(1)} ${(padY + plotH).toFixed(1)} L ${points[0].x.toFixed(1)} ${(padY + plotH).toFixed(1)} Z`;
+
+        container.innerHTML = `
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:180px; overflow:visible;">
+                <defs>
+                    <linearGradient id="scoreAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#2563EB" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#2563EB" stop-opacity="0.0"/>
+                    </linearGradient>
+                </defs>
+                <!-- Grid Lines -->
+                <line x1="${padX}" y1="${padY}" x2="${W - padX}" y2="${padY}" stroke="#E2E8F0" stroke-dasharray="3,3"/>
+                <line x1="${padX}" y1="${padY + plotH * 0.5}" x2="${W - padX}" y2="${padY + plotH * 0.5}" stroke="#E2E8F0" stroke-dasharray="3,3"/>
+                <line x1="${padX}" y1="${padY + plotH}" x2="${W - padX}" y2="${padY + plotH}" stroke="#CBD5E1"/>
+                <text x="${padX - 8}" y="${padY + 4}" font-size="10" fill="#64748B" text-anchor="end">100</text>
+                <text x="${padX - 8}" y="${padY + plotH * 0.5 + 4}" font-size="10" fill="#64748B" text-anchor="end">50</text>
+                <text x="${padX - 8}" y="${padY + plotH + 4}" font-size="10" fill="#64748B" text-anchor="end">0</text>
+                
+                <!-- Area Fill -->
+                <path d="${areaD}" fill="url(#scoreAreaGrad)"/>
+                <!-- Line -->
+                <path d="${lineD}" fill="none" stroke="#2563EB" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                
+                <!-- Data Points -->
+                ${points.map(p => `
+                    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" fill="#FFFFFF" stroke="#2563EB" stroke-width="3">
+                        <title>${p.date}: Score ${Math.round(p.score)}/100</title>
+                    </circle>
+                    <text x="${p.x.toFixed(1)}" y="${(p.y - 10).toFixed(1)}" font-size="11" font-weight="700" fill="#2563EB" text-anchor="middle">${Math.round(p.score)}</text>
+                    <text x="${p.x.toFixed(1)}" y="${(padY + plotH + 16).toFixed(1)}" font-size="10" fill="#64748B" text-anchor="middle">${p.date}</text>
+                `).join('')}
+            </svg>
+        `;
+    }
+
+    // ==========================================
+
+    // KEYWORD MAGIC TOOL MODULE (PHASE 4)
+    // ==========================================
+    async loadKeywordMagic() {
+        if (!this.kmState) {
+            this.kmState = {
+                seed: "",
+                country: 2840,
+                language: "en",
+                matchType: "all",
+                cluster: "",
+                intent: "all",
+                kd: "all",
+                volMin: null,
+                volMax: null,
+                cpcMin: null,
+                cpcMax: null,
+                search: "",
+                currentData: null,
+                filteredKeywords: []
+            };
+        }
+        this.updateKmProjectsCount();
+        if (!this.kmState.currentData && $("kmSeedInput") && $("kmSeedInput").value.trim()) {
+            this.executeKmSearch($("kmSeedInput").value.trim());
+        }
+    }
+
+    async updateKmProjectsCount() {
+        try {
+            const projects = await jsonFetch(`${API_BASE}/keyword-magic/projects`);
+            if ($("kmProjectsCount")) $("kmProjectsCount").textContent = projects.length || "0";
+        } catch (e) {
+            // Ignore error
+        }
+    }
+
+    onKmSearchSubmit(event) {
+        if (event) event.preventDefault();
+        const seed = $("kmSeedInput") ? $("kmSeedInput").value.trim() : "";
+        if (!seed) return;
+        this.executeKmSearch(seed);
+    }
+
+    setKmSeedAndSearch(seed) {
+        if ($("kmSeedInput")) $("kmSeedInput").value = seed;
+        this.executeKmSearch(seed);
+    }
+
+    async executeKmSearch(seed, options = {}) {
+        if (!seed) return;
+        this.kmState.seed = seed;
+        this.kmState.country = parseInt($("kmCountrySelect") ? $("kmCountrySelect").value : 2840);
+        this.kmState.language = $("kmLangSelect") ? $("kmLangSelect").value : "en";
+        this.kmState.cluster = "";
+        this.kmState.search = "";
+
+        const btn = $("kmSearchBtn");
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span>Searching...</span>';
+        }
+
+        try {
+            const params = new URLSearchParams({
+                seed: this.kmState.seed,
+                country: this.kmState.country,
+                language: this.kmState.language,
+                match_type: this.kmState.matchType || "all",
+                limit: "200"
+            });
+
+            const data = await jsonFetch(`${API_BASE}/keyword-magic/search?${params.toString()}`);
+            if (!data.ok) throw new Error(data.error || "Keyword search failed");
+
+            this.kmState.currentData = data;
+            this.renderKmResults(data);
+        } catch (err) {
+            console.error("Keyword search error:", err);
+            alert("Keyword search failed: " + err.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Search Keywords</span>';
+            }
+        }
+    }
+
+    setKmMatchType(matchType) {
+        this.kmState.matchType = matchType;
+        const tabs = $("kmMatchTabs");
+        if (tabs) {
+            tabs.querySelectorAll(".tab-btn").forEach(btn => {
+                const txt = btn.textContent.toLowerCase();
+                if (txt.includes(matchType.replace("_", " ")) || (matchType === "all" && txt.includes("all"))) {
+                    btn.classList.add("active");
+                } else {
+                    btn.classList.remove("active");
+                }
+            });
+        }
+        if (this.kmState.seed) {
+            this.executeKmSearch(this.kmState.seed);
+        }
+    }
+
+    selectKmCluster(clusterName) {
+        this.kmState.cluster = clusterName || "";
+        const list = $("kmClustersList");
+        if (list) {
+            list.querySelectorAll("button").forEach(b => {
+                const bName = b.getAttribute("data-cluster") || "";
+                if (bName.toLowerCase() === this.kmState.cluster.toLowerCase()) {
+                    b.classList.add("active");
+                } else {
+                    b.classList.remove("active");
+                }
+            });
+        }
+        const lbl = $("kmActiveClusterLabel");
+        if (lbl) {
+            lbl.innerHTML = this.kmState.cluster ? `in cluster <b>"${esc(this.kmState.cluster)}"</b>` : '';
+        }
+        this.applyKmFilters();
+    }
+
+    applyKmFilters() {
+        if (!this.kmState || !this.kmState.currentData) return;
+        const allKeywords = this.kmState.currentData.keywords || [];
+
+        const intent = $("kmFilterIntent") ? $("kmFilterIntent").value : "all";
+        const kd = $("kmFilterKd") ? $("kmFilterKd").value : "all";
+        const volMin = $("kmFilterVolMin") && $("kmFilterVolMin").value !== "" ? parseInt($("kmFilterVolMin").value) : null;
+        const volMax = $("kmFilterVolMax") && $("kmFilterVolMax").value !== "" ? parseInt($("kmFilterVolMax").value) : null;
+        const cpcMin = $("kmFilterCpcMin") && $("kmFilterCpcMin").value !== "" ? parseFloat($("kmFilterCpcMin").value) : null;
+        const cpcMax = $("kmFilterCpcMax") && $("kmFilterCpcMax").value !== "" ? parseFloat($("kmFilterCpcMax").value) : null;
+        const searchTxt = $("kmFilterSearch") ? $("kmFilterSearch").value.trim().toLowerCase() : "";
+
+        let filtered = allKeywords.filter(k => {
+            // Cluster filter
+            if (this.kmState.cluster && (k.cluster || "").toLowerCase() !== this.kmState.cluster.toLowerCase()) {
+                return false;
+            }
+            // Intent filter
+            if (intent !== "all" && (k.intent || "").toLowerCase() !== intent.toLowerCase()) {
+                return false;
+            }
+            // KD filter
+            if (kd !== "all" && k.keyword_difficulty !== null && k.keyword_difficulty !== undefined) {
+                const [minKD, maxKD] = kd.split("-").map(Number);
+                if (k.keyword_difficulty < minKD || k.keyword_difficulty > maxKD) return false;
+            }
+            // Volume filter
+            if (volMin !== null && (k.search_volume === null || k.search_volume < volMin)) return false;
+            if (volMax !== null && (k.search_volume === null || k.search_volume > volMax)) return false;
+            // CPC filter
+            if (cpcMin !== null && (k.cpc === null || k.cpc < cpcMin)) return false;
+            if (cpcMax !== null && (k.cpc === null || k.cpc > cpcMax)) return false;
+            // Search text
+            if (searchTxt && !k.keyword.toLowerCase().includes(searchTxt)) return false;
+
+            return true;
+        });
+
+        this.kmState.filteredKeywords = filtered;
+        this.renderKmTable(filtered);
+    }
+
+    applyKmClientSearch(query) {
+        this.applyKmFilters();
+    }
+
+    resetKmFilters() {
+        if ($("kmFilterIntent")) $("kmFilterIntent").value = "all";
+        if ($("kmFilterKd")) $("kmFilterKd").value = "all";
+        if ($("kmFilterVolMin")) $("kmFilterVolMin").value = "";
+        if ($("kmFilterVolMax")) $("kmFilterVolMax").value = "";
+        if ($("kmFilterCpcMin")) $("kmFilterCpcMin").value = "";
+        if ($("kmFilterCpcMax")) $("kmFilterCpcMax").value = "";
+        if ($("kmFilterSearch")) $("kmFilterSearch").value = "";
+        this.kmState.cluster = "";
+        this.selectKmCluster("");
+    }
+
+    renderKmResults(data) {
+        // 1. Provenance Notice
+        const provBadge = $("kmProviderBadge");
+        if (provBadge) {
+            provBadge.textContent = data.has_live_provider ? "DataForSEO Live Data" : "On-Site / Search Suggestions";
+            provBadge.className = data.has_live_provider ? "badge badge-success" : "badge badge-primary";
+        }
+        const provDot = $("kmProvStatusDot");
+        if (provDot) provDot.style.color = data.has_live_provider ? "#10B981" : "#64748B";
+        const provStmt = $("kmProvStatement");
+        if (provStmt) provStmt.innerHTML = `<b>Data Provenance:</b> ${esc(data.data_provider)}. ${esc(data.integrity_statement)}`;
+        const costBadge = $("kmCostBadge");
+        if (costBadge) {
+            costBadge.textContent = data.cost_usd ? `Cost: $${data.cost_usd.toFixed(4)}` : "Provider: Free / Local";
+        }
+
+        // 2. Summary stats
+        const sum = data.summary || {};
+        if ($("kmStatTotal")) $("kmStatTotal").textContent = fmt(sum.total_keywords || 0);
+        if ($("kmStatVolume")) {
+            $("kmStatVolume").textContent = sum.total_search_volume !== null && sum.total_search_volume !== undefined ? fmt(sum.total_search_volume) : "—";
+            if ($("kmStatVolumeSub")) $("kmStatVolumeSub").textContent = sum.total_search_volume !== null ? "Total monthly volume" : "Requires DataForSEO provider";
+        }
+        if ($("kmStatKd")) {
+            $("kmStatKd").textContent = sum.average_difficulty !== null && sum.average_difficulty !== undefined ? `${sum.average_difficulty}%` : "—";
+            if ($("kmStatKdSub")) $("kmStatKdSub").textContent = sum.average_difficulty !== null ? "Average KD" : "Requires DataForSEO provider";
+        }
+
+        // Intent distribution
+        const intents = sum.intent_distribution || {};
+        if ($("kmStatIntents")) {
+            const badge = (name, count, bg, color) => count ? `<span class="badge" style="background:${bg}; color:${color}; font-size:11px;">${name}: ${count}</span>` : '';
+            $("kmStatIntents").innerHTML = `
+                ${badge("Info", intents.Informational, "#DBEAFE", "#1D4ED8")}
+                ${badge("Comm", intents.Commercial, "#FEF3C7", "#B45309")}
+                ${badge("Trans", intents.Transactional, "#D1FAE5", "#047857")}
+                ${badge("Nav", intents.Navigational, "#F3E8FF", "#7E22CE")}
+            ` || '<span style="font-size:11px; color:var(--text-muted);">No intent breakdown</span>';
+        }
+
+        // 3. Render Clusters List
+        this.renderKmClusters(data.clusters || [], data.keywords ? data.keywords.length : 0);
+
+        // 4. Render Table
+        this.kmState.filteredKeywords = data.keywords || [];
+        this.renderKmTable(this.kmState.filteredKeywords);
+    }
+
+    renderKmClusters(clusters, totalCount) {
+        const list = $("kmClustersList");
+        if (!list) return;
+
+        if ($("kmClustersBadge")) $("kmClustersBadge").textContent = `${clusters.length} topics`;
+        if ($("kmClusterTotalBadge")) $("kmClusterTotalBadge").textContent = totalCount;
+
+        const allBtn = `
+            <button class="btn btn-outline btn-sm ${!this.kmState.cluster ? 'active' : ''}" data-cluster="" style="justify-content:space-between; font-weight:600; text-align:left;" onclick="app.selectKmCluster('')">
+                <span>All Topics</span>
+                <span class="pill" style="font-size:10px;">${totalCount}</span>
+            </button>
+        `;
+
+        const clusterBtns = clusters.map(c => {
+            const isAct = (this.kmState.cluster || "").toLowerCase() === c.name.toLowerCase();
+            const volStr = c.total_volume !== null && c.total_volume !== undefined ? ` • ${fmt(c.total_volume)} vol` : '';
+            return `
+                <button class="btn btn-outline btn-sm ${isAct ? 'active' : ''}" data-cluster="${esc(c.name)}" style="justify-content:space-between; font-weight:500; font-size:12px; text-align:left; padding:6px 10px;" onclick="app.selectKmCluster('${esc(c.name)}')">
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;" title="${esc(c.name)}">${esc(c.name)}</span>
+                    <span class="pill" style="font-size:10px;" title="${c.count} keywords${volStr}">${c.count}</span>
+                </button>
+            `;
+        }).join('');
+
+        list.innerHTML = allBtn + clusterBtns;
+    }
+
+    renderKmTable(keywords) {
+        const tbody = $("kmTableBody");
+        if (!tbody) return;
+
+        if ($("kmVisibleCount")) $("kmVisibleCount").textContent = keywords.length;
+
+        if (!keywords || keywords.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="empty-state" style="padding:40px 16px;">No keywords match the selected filters or cluster.</td></tr>';
+            return;
+        }
+
+        const intentBadge = (intent) => {
+            const it = (intent || "Informational").toLowerCase();
+            if (it === "transactional") return '<span class="badge" style="background:#D1FAE5; color:#047857; font-size:11px;">Trans</span>';
+            if (it === "commercial") return '<span class="badge" style="background:#FEF3C7; color:#B45309; font-size:11px;">Comm</span>';
+            if (it === "navigational") return '<span class="badge" style="background:#F3E8FF; color:#7E22CE; font-size:11px;">Nav</span>';
+            return '<span class="badge" style="background:#DBEAFE; color:#1D4ED8; font-size:11px;">Info</span>';
+        };
+
+        const kdPill = (kd) => {
+            if (kd === null || kd === undefined) return '<span style="color:var(--text-muted); font-size:12px;">—</span>';
+            let color = "#10B981"; // green
+            let label = "Very Easy";
+            if (kd >= 15 && kd < 30) { color = "#059669"; label = "Easy"; }
+            else if (kd >= 30 && kd < 50) { color = "#F59E0B"; label = "Possible"; }
+            else if (kd >= 50 && kd < 70) { color = "#EA580C"; label = "Difficult"; }
+            else if (kd >= 70 && kd < 85) { color = "#DC2626"; label = "Hard"; }
+            else if (kd >= 85) { color = "#7F1D1D"; label = "Very Hard"; }
+            return `<span class="pill" style="background:${color}18; color:${color}; font-weight:700; font-size:11px;" title="${label}">${kd}%</span>`;
+        };
+
+        tbody.innerHTML = keywords.map((k, idx) => {
+            const vol = k.search_volume !== null && k.search_volume !== undefined ? fmt(k.search_volume) : '<span style="color:var(--text-muted); font-size:12px;">—</span>';
+            const cpc = k.cpc !== null && k.cpc !== undefined ? `$${k.cpc.toFixed(2)}` : '<span style="color:var(--text-muted); font-size:12px;">—</span>';
+            const comp = k.competition_level ? `<span class="badge" style="font-size:10px; background:#F8FAFC; border:1px solid var(--border);">${esc(k.competition_level)}</span>` : '<span style="color:var(--text-muted); font-size:11px;">N/A</span>';
+
+            return `
+                <tr>
+                    <td style="text-align:center;">
+                        <input type="checkbox" class="km-row-checkbox" data-idx="${idx}" onchange="app.onKmRowCheckChange()">
+                    </td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <b style="color:var(--text); font-size:13px;">${esc(k.keyword)}</b>
+                            <button type="button" class="btn btn-outline" style="padding:1px 5px; font-size:10px; line-height:1;" onclick="navigator.clipboard.writeText('${esc(k.keyword)}'); alert('Copied: ${esc(k.keyword)}');" title="Copy keyword">📋</button>
+                        </div>
+                    </td>
+                    <td>${intentBadge(k.intent)}</td>
+                    <td><b>${vol}</b></td>
+                    <td>${kdPill(k.keyword_difficulty)}</td>
+                    <td><b>${cpc}</b></td>
+                    <td>${comp}</td>
+                    <td><span class="pill" style="font-size:11px;">${esc(k.cluster || "General")}</span></td>
+                    <td>
+                        <button class="btn btn-outline btn-sm" style="padding:3px 8px; font-size:11px;" onclick="app.quickSaveKeyword(${idx})">+ Save</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        this.onKmRowCheckChange();
+    }
+
+    toggleKmSelectAll(checked) {
+        const checkboxes = document.querySelectorAll(".km-row-checkbox");
+        checkboxes.forEach(cb => cb.checked = checked);
+        this.onKmRowCheckChange();
+    }
+
+    onKmRowCheckChange() {
+        const checked = document.querySelectorAll(".km-row-checkbox:checked");
+        const saveBtn = $("kmSaveSelectedBtn");
+        if (saveBtn) {
+            saveBtn.disabled = checked.length === 0;
+            saveBtn.innerHTML = `<span>+ Add to Project (${checked.length})</span>`;
+        }
+        const selectAll = $("kmSelectAllCheckbox");
+        const all = document.querySelectorAll(".km-row-checkbox");
+        if (selectAll && all.length > 0) {
+            selectAll.checked = (checked.length === all.length);
+        }
+    }
+
+    getSelectedKmKeywords() {
+        const checked = document.querySelectorAll(".km-row-checkbox:checked");
+        const list = [];
+        checked.forEach(cb => {
+            const idx = parseInt(cb.getAttribute("data-idx"));
+            if (this.kmState && this.kmState.filteredKeywords && this.kmState.filteredKeywords[idx]) {
+                list.push(this.kmState.filteredKeywords[idx]);
+            }
+        });
+        return list;
+    }
+
+    exportKm(format) {
+        if (!this.kmState || !this.kmState.seed) {
+            alert("Please search for a seed keyword first to export research results.");
+            return;
+        }
+        const params = new URLSearchParams({
+            seed: this.kmState.seed,
+            country: this.kmState.country || 2840,
+            language: this.kmState.language || "en",
+            match_type: this.kmState.matchType || "all"
+        });
+        if (this.kmState.cluster) params.set("cluster", this.kmState.cluster);
+        const intent = $("kmFilterIntent") ? $("kmFilterIntent").value : "all";
+        if (intent !== "all") params.set("intent", intent);
+
+        window.open(`${API_BASE}/keyword-magic/export/${format}?${params.toString()}`, "_blank");
+    }
+
+    // ==========================================
+    // KEYWORD PROJECTS MANAGEMENT
+    // ==========================================
+    async openKmProjectsModal() {
+        const modal = $("kmProjectModal");
+        if (!modal) return;
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+        this.loadKmProjectsList();
+    }
+
+    closeKmProjectsModal() {
+        const modal = $("kmProjectModal");
+        if (!modal) return;
+        modal.classList.add("hidden");
+        modal.style.display = "none";
+    }
+
+    async loadKmProjectsList() {
+        const body = $("kmProjectModalBody");
+        if (!body) return;
+        if ($("kmProjectModalTitle")) $("kmProjectModalTitle").textContent = "Keyword Projects";
+
+        body.innerHTML = '<div style="text-align:center; padding:24px; color:var(--text-muted);">Loading projects...</div>';
+
+        try {
+            const projects = await jsonFetch(`${API_BASE}/keyword-magic/projects`);
+            const clients = await jsonFetch(`${API_BASE}/clients`).catch(() => []);
+
+            let clientOpts = clients.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+
+            const createForm = `
+                <div class="card" style="background:#F8FAFC; border:1px solid var(--border); padding:16px; margin-bottom:20px;">
+                    <b style="font-size:14px; margin-bottom:10px; display:block;">+ Create New Keyword Project</b>
+                    <form onsubmit="app.handleCreateKmProject(event)" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <input id="newKmProjectName" class="form-input" type="text" placeholder="Project name (e.g. Q4 Target Terms)..." required style="flex:2; min-width:180px;">
+                        <select id="newKmProjectClient" class="form-input" style="flex:1; min-width:140px;">
+                            <option value="">Link Client (Optional)...</option>
+                            ${clientOpts}
+                        </select>
+                        <button type="submit" class="btn btn-primary" style="white-space:nowrap;">Create Project</button>
+                    </form>
+                </div>
+            `;
+
+            let tableHtml = '';
+            if (!projects || projects.length === 0) {
+                tableHtml = '<div class="empty-state" style="padding:24px;">No keyword projects created yet. Create one above to organize target keywords.</div>';
+            } else {
+                tableHtml = `
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Project Name</th>
+                                    <th>Client</th>
+                                    <th>Saved Keywords</th>
+                                    <th>Last Updated</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${projects.map(p => `
+                                    <tr>
+                                        <td>
+                                            <a href="javascript:void(0)" onclick="app.viewKmProjectDetail(${p.id})" style="color:var(--primary); font-weight:700; text-decoration:none;">
+                                                📁 ${esc(p.name)}
+                                            </a>
+                                        </td>
+                                        <td><span class="badge" style="font-size:11px;">${esc(p.client_name || "Unassigned")}</span></td>
+                                        <td><b>${p.keyword_count || 0}</b> keywords</td>
+                                        <td><span style="font-size:12px; color:var(--text-muted);">${p.updated_at ? new Date(p.updated_at).toLocaleDateString() : '—'}</span></td>
+                                        <td>
+                                            <div style="display:flex; gap:6px;">
+                                                <button class="btn btn-outline btn-sm" onclick="app.viewKmProjectDetail(${p.id})">Open</button>
+                                                <button class="btn btn-danger btn-sm" onclick="app.deleteKmProject(${p.id})">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            body.innerHTML = createForm + tableHtml;
+            this.updateKmProjectsCount();
+        } catch (err) {
+            body.innerHTML = `<div class="card" style="border-left:4px solid var(--danger);">Failed to load projects: ${esc(err.message)}</div>`;
+        }
+    }
+
+    async handleCreateKmProject(event) {
+        if (event) event.preventDefault();
+        const nameInp = $("newKmProjectName");
+        if (!nameInp || !nameInp.value.trim()) return;
+        const name = nameInp.value.trim();
+        const clientVal = $("newKmProjectClient") ? $("newKmProjectClient").value : "";
+        const client_id = clientVal ? parseInt(clientVal) : null;
+
+        try {
+            await jsonFetch(`${API_BASE}/keyword-magic/projects`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, client_id })
+            });
+            this.loadKmProjectsList();
+        } catch (err) {
+            alert("Failed to create project: " + err.message);
+        }
+    }
+
+    async viewKmProjectDetail(projectId) {
+        const body = $("kmProjectModalBody");
+        if (!body) return;
+        body.innerHTML = '<div style="text-align:center; padding:24px; color:var(--text-muted);">Loading project details...</div>';
+
+        try {
+            const project = await jsonFetch(`${API_BASE}/keyword-magic/projects/${projectId}`);
+            if ($("kmProjectModalTitle")) $("kmProjectModalTitle").innerHTML = `<a href="javascript:void(0)" onclick="app.loadKmProjectsList()" style="color:var(--text-muted); text-decoration:none;">Projects</a> &gt; ${esc(project.name)}`;
+
+            const keywords = project.keywords || [];
+            let rowsHtml = '';
+            if (keywords.length === 0) {
+                rowsHtml = '<tr><td colspan="7" class="empty-state">No keywords saved to this project yet. Use the Keyword Magic Tool table to save keywords here.</td></tr>';
+            } else {
+                rowsHtml = keywords.map(k => `
+                    <tr>
+                        <td><b>${esc(k.keyword)}</b></td>
+                        <td><span class="badge" style="font-size:11px;">${esc(k.intent || "Info")}</span></td>
+                        <td><b>${k.search_volume !== null && k.search_volume !== undefined ? fmt(k.search_volume) : '—'}</b></td>
+                        <td>${k.keyword_difficulty !== null && k.keyword_difficulty !== undefined ? `${k.keyword_difficulty}%` : '—'}</td>
+                        <td>${k.cpc !== null && k.cpc !== undefined ? `$${k.cpc.toFixed(2)}` : '—'}</td>
+                        <td><span class="pill" style="font-size:11px;">${esc(k.cluster || "General")}</span></td>
+                        <td>
+                            <button class="btn btn-outline btn-sm" style="color:var(--danger); border-color:var(--danger);" onclick="app.removeKmProjectKeyword(${projectId}, ${k.id})">✕ Remove</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            body.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                    <div>
+                        <div style="font-size:14px; font-weight:700;">${esc(project.name)}</div>
+                        <div style="font-size:12px; color:var(--text-muted);">Client: ${esc(project.client_name)} • Total: ${keywords.length} keywords</div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="app.loadKmProjectsList()">← Back to Projects</button>
+                        <button class="btn btn-outline btn-sm" onclick="app.exportKmProjectCsv(${projectId})">📥 Export CSV</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Keyword</th>
+                                <th>Intent</th>
+                                <th>Search Volume</th>
+                                <th>KD%</th>
+                                <th>CPC</th>
+                                <th>Cluster</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
+            `;
+        } catch (err) {
+            body.innerHTML = `<div class="card" style="border-left:4px solid var(--danger);">Failed to load project details: ${esc(err.message)}</div>`;
+        }
+    }
+
+    async deleteKmProject(projectId) {
+        if (!confirm("Are you sure you want to delete this keyword project and all saved keywords in it?")) return;
+        try {
+            await jsonFetch(`${API_BASE}/keyword-magic/projects/${projectId}`, { method: "DELETE" });
+            this.loadKmProjectsList();
+        } catch (err) {
+            alert("Failed to delete project: " + err.message);
+        }
+    }
+
+    async removeKmProjectKeyword(projectId, keywordId) {
+        try {
+            await jsonFetch(`${API_BASE}/keyword-magic/projects/${projectId}/keywords/${keywordId}`, { method: "DELETE" });
+            this.viewKmProjectDetail(projectId);
+        } catch (err) {
+            alert("Failed to remove keyword: " + err.message);
+        }
+    }
+
+    async openSaveSelectedToProjectModal() {
+        const selected = this.getSelectedKmKeywords();
+        if (selected.length === 0) {
+            alert("Please select at least one keyword using the checkboxes.");
+            return;
+        }
+
+        const modal = $("kmProjectModal");
+        if (!modal) return;
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+        if ($("kmProjectModalTitle")) $("kmProjectModalTitle").textContent = `Save ${selected.length} Keywords to Project`;
+
+        const body = $("kmProjectModalBody");
+        body.innerHTML = '<div style="text-align:center; padding:24px; color:var(--text-muted);">Loading projects...</div>';
+
+        try {
+            const projects = await jsonFetch(`${API_BASE}/keyword-magic/projects`);
+            let projOptions = projects.map(p => `<option value="${p.id}">${esc(p.name)} (${p.keyword_count || 0} keywords)</option>`).join('');
+
+            body.innerHTML = `
+                <div style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+                    Saving <b>${selected.length}</b> keywords into a project list.
+                </div>
+
+                ${projects.length > 0 ? `
+                <div class="card" style="padding:16px; margin-bottom:20px; background:#F8FAFC; border:1px solid var(--border);">
+                    <b style="font-size:14px; margin-bottom:10px; display:block;">Option A: Save to Existing Project</b>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <select id="kmSelectExistingProj" class="form-input" style="flex:1;">
+                            ${projOptions}
+                        </select>
+                        <button class="btn btn-primary" onclick="app.saveSelectedToExistingProject()">Save Keywords</button>
+                    </div>
+                </div>
+                ` : ''}
+
+                <div class="card" style="padding:16px; border:1px solid var(--border);">
+                    <b style="font-size:14px; margin-bottom:10px; display:block;">Option B: Create New Project &amp; Save</b>
+                    <form onsubmit="app.handleCreateKmProjectAndSaveSelected(event)" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <input id="kmNewProjAndSaveName" class="form-input" type="text" placeholder="New project name..." required style="flex:1; min-width:180px;">
+                        <button type="submit" class="btn btn-secondary">Create &amp; Save</button>
+                    </form>
+                </div>
+            `;
+        } catch (err) {
+            body.innerHTML = `<div class="card" style="border-left:4px solid var(--danger);">Failed to load options: ${esc(err.message)}</div>`;
+        }
+    }
+
+    async saveSelectedToExistingProject() {
+        const projSelect = $("kmSelectExistingProj");
+        if (!projSelect || !projSelect.value) return;
+        const pId = parseInt(projSelect.value);
+        const selected = this.getSelectedKmKeywords();
+
+        try {
+            const res = await jsonFetch(`${API_BASE}/keyword-magic/projects/${pId}/keywords`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ keywords: selected })
+            });
+            alert(`Success! Added ${res.added_count} keywords to project.`);
+            this.closeKmProjectsModal();
+            this.updateKmProjectsCount();
+        } catch (err) {
+            alert("Failed to save keywords: " + err.message);
+        }
+    }
+
+    async handleCreateKmProjectAndSaveSelected(event) {
+        if (event) event.preventDefault();
+        const inp = $("kmNewProjAndSaveName");
+        if (!inp || !inp.value.trim()) return;
+        const name = inp.value.trim();
+        const selected = this.getSelectedKmKeywords();
+
+        try {
+            const created = await jsonFetch(`${API_BASE}/keyword-magic/projects`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name })
+            });
+            const pId = created.project.id;
+            const res = await jsonFetch(`${API_BASE}/keyword-magic/projects/${pId}/keywords`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ keywords: selected })
+            });
+            alert(`Success! Created project "${name}" and added ${res.added_count} keywords.`);
+            this.closeKmProjectsModal();
+            this.updateKmProjectsCount();
+        } catch (err) {
+            alert("Failed to create and save: " + err.message);
+        }
+    }
+
+    quickSaveKeyword(idx) {
+        if (!this.kmState || !this.kmState.filteredKeywords || !this.kmState.filteredKeywords[idx]) return;
+        const kw = this.kmState.filteredKeywords[idx];
+        const checkboxes = document.querySelectorAll(".km-row-checkbox");
+        checkboxes.forEach((cb, i) => {
+            cb.checked = (i === idx);
+        });
+        this.onKmRowCheckChange();
+        this.openSaveSelectedToProjectModal();
+    }
+
+    exportKmProjectCsv(projectId) {
+        jsonFetch(`${API_BASE}/keyword-magic/projects/${projectId}`).then(project => {
+            const keywords = project.keywords || [];
+            if (keywords.length === 0) {
+                alert("Project has no keywords to export.");
+                return;
+            }
+            let csv = '\ufeffKeyword,Search Intent,Search Volume,KD (%),CPC (USD),Cluster,Source\n';
+            keywords.forEach(k => {
+                csv += `"${(k.keyword||'').replace(/"/g, '""')}",${k.intent||'Info'},${k.search_volume||'N/A'},${k.keyword_difficulty||'N/A'},${k.cpc||'N/A'},"${(k.cluster||'General').replace(/"/g, '""')}",${k.source||'research'}\n`;
+            });
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `project_${project.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_keywords.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }).catch(err => alert("Export failed: " + err.message));
+    }
+
+
+    renderIssuesTrendChart(trends) {
+        const container = $("doIssuesChartContainer");
+        if (!container) return;
+
+        if (!trends || trends.length < 2) {
+            container.innerHTML = `
+                <div style="padding:40px 16px; text-align:center; color:var(--text-muted); font-size:13px;">
+                    <div>Sequential audits will automatically plot critical vs. warning resolution trends here.</div>
+                </div>
+            `;
+            return;
+        }
+
+        const W = 500;
+        const H = 180;
+        const padX = 40;
+        const padY = 25;
+        const plotW = W - padX * 2;
+        const plotH = H - padY * 2;
+
+        const maxIssues = Math.max(10, ...trends.map(t => Math.max(t.critical_issues || 0, t.warning_issues || 0)));
+
+        const critPoints = trends.map((t, idx) => {
+            const x = padX + (idx / (trends.length - 1)) * plotW;
+            const y = padY + plotH - ((t.critical_issues || 0) / maxIssues) * plotH;
+            return { x, y, val: t.critical_issues || 0, date: t.date_display || `Audit ${t.audit_id}` };
+        });
+
+        const warnPoints = trends.map((t, idx) => {
+            const x = padX + (idx / (trends.length - 1)) * plotW;
+            const y = padY + plotH - ((t.warning_issues || 0) / maxIssues) * plotH;
+            return { x, y, val: t.warning_issues || 0, date: t.date_display || `Audit ${t.audit_id}` };
+        });
+
+        const critLine = critPoints.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+        const warnLine = warnPoints.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+
+        container.innerHTML = `
+            <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:180px; overflow:visible;">
+                <!-- Grid Lines -->
+                <line x1="${padX}" y1="${padY}" x2="${W - padX}" y2="${padY}" stroke="#E2E8F0" stroke-dasharray="3,3"/>
+                <line x1="${padX}" y1="${padY + plotH * 0.5}" x2="${W - padX}" y2="${padY + plotH * 0.5}" stroke="#E2E8F0" stroke-dasharray="3,3"/>
+                <line x1="${padX}" y1="${padY + plotH}" x2="${W - padX}" y2="${padY + plotH}" stroke="#CBD5E1"/>
+                <text x="${padX - 8}" y="${padY + 4}" font-size="10" fill="#64748B" text-anchor="end">${maxIssues}</text>
+                <text x="${padX - 8}" y="${padY + plotH * 0.5 + 4}" font-size="10" fill="#64748B" text-anchor="end">${Math.round(maxIssues * 0.5)}</text>
+                <text x="${padX - 8}" y="${padY + plotH + 4}" font-size="10" fill="#64748B" text-anchor="end">0</text>
+                
+                <!-- Lines -->
+                <path d="${warnLine}" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="${critLine}" fill="none" stroke="#EF4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                
+                <!-- Warnings Points -->
+                ${warnPoints.map(p => `
+                    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#FFFFFF" stroke="#F59E0B" stroke-width="2">
+                        <title>${p.date}: ${p.val} Warnings</title>
+                    </circle>
+                    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-size="10" font-weight="700" fill="#F59E0B" text-anchor="middle">${p.val}</text>
+                `).join('')}
+
+                <!-- Critical Points -->
+                ${critPoints.map(p => `
+                    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#FFFFFF" stroke="#EF4444" stroke-width="2">
+                        <title>${p.date}: ${p.val} Critical Issues</title>
+                    </circle>
+                    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-size="10" font-weight="700" fill="#EF4444" text-anchor="middle">${p.val}</text>
+                    <text x="${p.x.toFixed(1)}" y="${(padY + plotH + 16).toFixed(1)}" font-size="10" fill="#64748B" text-anchor="middle">${p.date}</text>
+                `).join('')}
+            </svg>
+        `;
+    }
+
+
+
+
+    // ==========================================
+    // COMPETITOR ANALYSIS MODULE (PHASE 5)
+    // ==========================================
+    async loadCompetitorAnalysis() {
+        if (!this.compState) {
+            this.compState = {
+                targetDomain: "",
+                competitorDomains: [],
+                country: 2840,
+                language: "en",
+                analysisData: null,
+                activeFilter: "all",
+                searchQuery: "",
+                intentFilter: "",
+                selectedKeywords: new Set(),
+                savedComparisons: []
+            };
+        }
+
+        // 1. Populate Target Dropdown from domains list
+        try {
+            const domains = await jsonFetch(`${API_BASE}/domain/list`);
+            const targetSelect = $("compTargetDropdown");
+            if (targetSelect) {
+                targetSelect.innerHTML = '<option value="">Select Inspected Domain...</option>' +
+                    domains.map(d => `<option value="${d.domain}">${d.domain_display} (Score: ${d.latest_score !== null ? Math.round(d.latest_score) : 'No audit'})</option>`).join('');
+            }
+            if (!this.compState.targetDomain && domains && domains.length > 0) {
+                this.compState.targetDomain = domains[0].domain.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/^www\./i, '');
+                if ($("compTargetInput")) $("compTargetInput").value = this.compState.targetDomain;
+            }
+        } catch (err) {
+            console.warn("Could not load domains list for competitor analysis:", err);
+        }
+
+        // Set inputs from state
+        if ($("compTargetInput") && this.compState.targetDomain) {
+            $("compTargetInput").value = this.compState.targetDomain;
+        }
+        if ($("compCountrySelect")) $("compCountrySelect").value = this.compState.country;
+        if ($("compLangSelect")) $("compLangSelect").value = this.compState.language;
+
+        this.renderCompetitorTags();
+        this.updateCompSavedCount();
+
+        // If we haven't run analysis yet and have a target domain, run initial analysis
+        if (!this.compState.analysisData && this.compState.targetDomain) {
+            this.runCompetitorAnalysis();
+        } else if (this.compState.analysisData) {
+            this.renderCompetitorView(this.compState.analysisData);
+        }
+    }
+
+    onCompTargetDropdownChange(val) {
+        if (!val) return;
+        const clean = val.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/^www\./i, '').trim();
+        this.compState.targetDomain = clean;
+        if ($("compTargetInput")) $("compTargetInput").value = clean;
+    }
+
+    onAddCompetitorFromInput() {
+        const inp = $("compAddInput");
+        if (!inp) return;
+        const val = inp.value.trim();
+        if (!val) return;
+        this.addCompetitorTag(val);
+        inp.value = "";
+    }
+
+    addCompetitorTag(domainStr) {
+        if (!domainStr) return;
+        const clean = domainStr.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/^www\./i, '').trim().toLowerCase();
+        if (!clean) return;
+
+        if (clean === (this.compState.targetDomain || "").toLowerCase()) {
+            this.showNotification("Competitor domain cannot be the same as your target website.", "warning");
+            return;
+        }
+
+        if (this.compState.competitorDomains.includes(clean)) {
+            this.showNotification(`'${clean}' is already in your competitor comparison list.`, "info");
+            return;
+        }
+
+        if (this.compState.competitorDomains.length >= 4) {
+            this.showNotification("You can compare up to 4 competitor domains simultaneously.", "warning");
+            return;
+        }
+
+        this.compState.competitorDomains.push(clean);
+        this.renderCompetitorTags();
+    }
+
+    removeCompetitorTag(domainStr) {
+        this.compState.competitorDomains = this.compState.competitorDomains.filter(d => d !== domainStr);
+        this.renderCompetitorTags();
+    }
+
+    renderCompetitorTags() {
+        const listEl = $("compTagsList");
+        const countEl = $("compTagsCount");
+        if (!listEl) return;
+
+        const count = this.compState.competitorDomains.length;
+        if (countEl) countEl.textContent = `${count}/4 added`;
+
+        if (count === 0) {
+            listEl.innerHTML = '<span style="font-size:12px; color:var(--text-muted); font-style:italic;">No competitor domains added yet (click Auto-Discover below or type a domain above).</span>';
+            return;
+        }
+
+        listEl.innerHTML = this.compState.competitorDomains.map(d => `
+            <span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:600; font-size:12px; padding:4px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:6px;">
+                <span>${escapeHtml(d)}</span>
+                <span onclick="app.removeCompetitorTag('${escapeHtml(d)}')" style="cursor:pointer; font-weight:bold; color:#6366F1; hover:color:#4338CA;" title="Remove">&times;</span>
+            </span>
+        `).join('');
+    }
+
+    onCompetitorSearchSubmit(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        const targetInp = $("compTargetInput");
+        if (!targetInp || !targetInp.value.trim()) {
+            this.showNotification("Please enter a target website to analyze.", "warning");
+            return;
+        }
+        this.compState.targetDomain = targetInp.value.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/^www\./i, '');
+        if ($("compCountrySelect")) this.compState.country = parseInt($("compCountrySelect").value, 10) || 2840;
+        if ($("compLangSelect")) this.compState.language = $("compLangSelect").value || "en";
+
+        this.runCompetitorAnalysis();
+    }
+
+    async runCompetitorAnalysis() {
+        const target = this.compState.targetDomain;
+        if (!target) {
+            this.showNotification("Target website domain is required.", "warning");
+            return;
+        }
+
+        const btn = $("compAnalyzeBtn");
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Analyzing Market...</span>';
+        }
+
+        try {
+            const payload = {
+                target_domain: target,
+                competitor_domains: this.compState.competitorDomains,
+                country: this.compState.country,
+                language: this.compState.language
+            };
+
+            const data = await jsonFetch(`${API_BASE}/competitors/analyze`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            this.compState.analysisData = data;
+            // Update competitors list in state if auto-discovered
+            if (data.competitor_domains && data.competitor_domains.length > 0) {
+                this.compState.competitorDomains = data.competitor_domains;
+                this.renderCompetitorTags();
+            }
+
+            this.renderCompetitorView(data);
+            this.showNotification("Competitor intelligence & market gap analysis updated.", "success");
+        } catch (err) {
+            console.error("Competitor analysis failed:", err);
+            this.showNotification("Competitor analysis failed: " + (err.message || err), "danger");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<span>⚔️ Analyze Competitors</span>';
+            }
+        }
+    }
+
+    async autoDiscoverCompetitors() {
+        const target = $("compTargetInput") ? $("compTargetInput").value.trim() : (this.compState.targetDomain || "");
+        if (!target) {
+            this.showNotification("Enter a target website first to discover organic competitors.", "warning");
+            return;
+        }
+
+        const discoRow = $("compDiscoveredRow");
+        if (discoRow) discoRow.innerHTML = '<span style="font-size:12px; color:var(--text-muted);">Finding organic competitors...</span>';
+
+        try {
+            const country = $("compCountrySelect") ? $("compCountrySelect").value : 2840;
+            const lang = $("compLangSelect") ? $("compLangSelect").value : "en";
+            const res = await jsonFetch(`${API_BASE}/competitors/discover?target=${encodeURIComponent(target)}&country=${country}&language=${lang}&limit=8`);
+
+            if (!res.ok || !res.competitors || res.competitors.length === 0) {
+                if (discoRow) discoRow.innerHTML = '<span style="font-size:12px; color:var(--text-muted); font-style:italic;">No competitor candidates found in index.</span>';
+                return;
+            }
+
+            if (discoRow) {
+                discoRow.innerHTML = res.competitors.slice(0, 6).map(c => `
+                    <button type="button" class="pill" style="cursor:pointer; border:1px solid #CBD5E1; background:#F8FAFC; font-size:11px; padding:3px 8px; display:inline-flex; align-items:center; gap:4px;" onclick="app.addCompetitorTag('${escapeHtml(c.domain)}')">
+                        <span>+ ${escapeHtml(c.domain)}</span>
+                        ${c.shared_keywords ? `<span style="font-size:10px; color:var(--primary); font-weight:700;">(${c.shared_keywords} shared)</span>` : ''}
+                    </button>
+                `).join('');
+            }
+        } catch (err) {
+            console.warn("Auto-discover failed:", err);
+            if (discoRow) discoRow.innerHTML = '<span style="font-size:12px; color:#EF4444;">Failed to discover competitors.</span>';
+        }
+    }
+
+    renderCompetitorView(data) {
+        if (!data) return;
+
+        // 1. Provenance Banner
+        const prov = data.provenance || {};
+        if ($("compProvSource")) {
+            $("compProvSource").textContent = `Data Sources: ${(prov.data_providers || []).join(' • ')}`;
+        }
+        if ($("compProvLegal")) {
+            $("compProvLegal").textContent = prov.privacy_notice || "Competitor Search Console and Google Analytics are private first-party properties and not accessible.";
+        }
+        if ($("compTimestampBadge")) {
+            const dt = prov.generated_at ? new Date(prov.generated_at).toLocaleString() : 'Just now';
+            $("compTimestampBadge").textContent = `Verified: ${dt}`;
+        }
+
+        // 2. Scoreboard Table
+        this.renderCompetitorScoreboard(data.scoreboard || []);
+
+        // 3. KPI Summary Numbers
+        const kg = data.keyword_gap || {};
+        if ($("compStatShared")) $("compStatShared").textContent = (kg.shared_count || 0).toLocaleString();
+        if ($("compStatMissing")) $("compStatMissing").textContent = (kg.missing_count || 0).toLocaleString();
+        if ($("compStatWeak")) $("compStatWeak").textContent = (kg.weak_count || 0).toLocaleString();
+        if ($("compStatStrong")) $("compStatStrong").textContent = (kg.strong_count || 0).toLocaleString();
+
+        // 4. Update Tab Counts
+        if ($("compTabAllCount")) $("compTabAllCount").textContent = (kg.total_keywords || 0).toLocaleString();
+        if ($("compTabMissingCount")) $("compTabMissingCount").textContent = (kg.missing_count || 0).toLocaleString();
+        if ($("compTabWeakCount")) $("compTabWeakCount").textContent = (kg.weak_count || 0).toLocaleString();
+        if ($("compTabSharedCount")) $("compTabSharedCount").textContent = (kg.shared_count || 0).toLocaleString();
+        if ($("compTabStrongCount")) $("compTabStrongCount").textContent = (kg.strong_count || 0).toLocaleString();
+        if ($("compGapCountBadge")) $("compGapCountBadge").textContent = `${(kg.total_keywords || 0).toLocaleString()} queries`;
+
+        // 5. Keyword Gap Table
+        this.renderCompetitorGapTable();
+
+        // 6. Content Opportunities
+        this.renderCompetitorContentOpportunities(data.content_opportunities || []);
+
+        // 7. Backlink Gap
+        this.renderCompetitorBacklinkGaps(data.backlink_gaps || []);
+
+        // 8. Historical Trends
+        this.renderCompetitorTrends(data.historical_trends || {});
+    }
+
+    renderCompetitorScoreboard(scoreboard) {
+        const thead = $("compScoreboardHead");
+        const tbody = $("compScoreboardBody");
+        if (!thead || !tbody) return;
+
+        if (!scoreboard || scoreboard.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No domain comparison data available.</td></tr>';
+            return;
+        }
+
+        // Build header
+        thead.innerHTML = '<th style="width:200px; text-align:left;">Domain Benchmark Metric</th>' +
+            scoreboard.map(s => `
+                <th style="text-align:center; min-width:140px; ${s.is_target ? 'background:#EFF6FF; border-bottom:2px solid var(--primary); color:#1E3A8A;' : ''}">
+                    <div style="font-size:14px; font-weight:800;">${escapeHtml(s.domain)}</div>
+                    <div style="font-size:11px; font-weight:normal; color:${s.is_target ? '#2563EB' : 'var(--text-muted)'};">
+                        ${s.is_target ? '★ Target Website' : 'Competitor Benchmark'}
+                    </div>
+                </th>
+            `).join('');
+
+        const metrics = [
+            {
+                label: "SEO Health Score",
+                format: s => {
+                    if (s.seo_score === null || s.seo_score === undefined) return '<span style="color:var(--text-muted);">No Audit</span>';
+                    const score = Math.round(s.seo_score);
+                    const color = score >= 80 ? '#10B981' : (score >= 60 ? '#F59E0B' : '#EF4444');
+                    return `<span style="font-size:16px; font-weight:800; color:${color};">${score}%</span>`;
+                }
+            },
+            {
+                label: "Technical SEO",
+                format: s => s.technical_score !== null && s.technical_score !== undefined ? `<b>${Math.round(s.technical_score)}%</b>` : '<span style="color:var(--text-muted);">-</span>'
+            },
+            {
+                label: "On-Page SEO",
+                format: s => s.onpage_score !== null && s.onpage_score !== undefined ? `<b>${Math.round(s.onpage_score)}%</b>` : '<span style="color:var(--text-muted);">-</span>'
+            },
+            {
+                label: "Content SEO",
+                format: s => s.content_score !== null && s.content_score !== undefined ? `<b>${Math.round(s.content_score)}%</b>` : '<span style="color:var(--text-muted);">-</span>'
+            },
+            {
+                label: "Organic Keywords",
+                format: s => `<span style="font-weight:700; color:var(--primary);">${(s.organic_keywords_count || 0).toLocaleString()}</span>`
+            },
+            {
+                label: "Est. Monthly Traffic",
+                format: s => s.estimated_monthly_traffic !== null && s.estimated_monthly_traffic !== undefined ? `<span style="font-weight:700; color:#10B981;">${s.estimated_monthly_traffic.toLocaleString()}</span>` : '<span style="font-size:11px; color:var(--text-muted); font-style:italic;">Requires SERP Connector</span>'
+            },
+            {
+                label: "Avg. Ranking Position",
+                format: s => s.avg_position !== null && s.avg_position !== undefined ? `<b>#${s.avg_position}</b>` : '<span style="color:var(--text-muted);">-</span>'
+            },
+            {
+                label: "Indexed Backlinks",
+                format: s => s.backlinks_count !== null && s.backlinks_count !== undefined ? `<b>${s.backlinks_count.toLocaleString()}</b>` : '<span style="font-size:11px; color:var(--text-muted); font-style:italic;">DataForSEO Backlinks</span>'
+            },
+            {
+                label: "Referring Domains",
+                format: s => `<b>${(s.referring_domains_count || 0).toLocaleString()}</b>`
+            },
+            {
+                label: "Core Web Vitals Perf",
+                format: s => s.core_web_vitals_perf !== null && s.core_web_vitals_perf !== undefined ? `<b>${Math.round(s.core_web_vitals_perf)}/100</b>` : '<span style="color:var(--text-muted);">-</span>'
+            },
+            {
+                label: "Crawled Pages",
+                format: s => `<b>${(s.pages_crawled || 0).toLocaleString()}</b>`
+            },
+            {
+                label: "Critical Issues",
+                format: s => s.critical_issues > 0 ? `<span class="badge" style="background:#FEE2E2; color:#B91C1C; font-weight:700;">${s.critical_issues}</span>` : '<span class="badge" style="background:#DCFCE7; color:#15803D;">0</span>'
+            }
+        ];
+
+        tbody.innerHTML = metrics.map(m => `
+            <tr>
+                <td style="font-weight:600; color:var(--text);">${escapeHtml(m.label)}</td>
+                ${scoreboard.map(s => `
+                    <td style="text-align:center; ${s.is_target ? 'background:#F8FAFC;' : ''}">
+                        ${m.format(s)}
+                    </td>
+                `).join('')}
+            </tr>
+        `).join('');
+    }
+
+    renderCompetitorGapTable() {
+        const thead = $("compGapHead");
+        const tbody = $("compGapBody");
+        if (!thead || !tbody) return;
+
+        const data = this.compState.analysisData;
+        if (!data || !data.keyword_gap) {
+            tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No keyword gap analysis available.</td></tr>';
+            return;
+        }
+
+        const comps = data.competitor_domains || [];
+        const target = data.target_domain || "Target";
+
+        // Build dynamic thead including competitors
+        thead.innerHTML = `
+            <th style="width:34px; text-align:center;"><input type="checkbox" id="compSelectAllCheckbox" onchange="app.toggleCompetitorSelectAll(this.checked)"></th>
+            <th>Keyword</th>
+            <th>Intent</th>
+            <th>Search Volume</th>
+            <th>KD%</th>
+            <th>CPC</th>
+            <th style="background:#EFF6FF; color:#1E3A8A;">Target (${escapeHtml(target)})</th>
+            ${comps.map(c => `<th style="min-width:90px;">${escapeHtml(c)}</th>`).join('')}
+            <th>Gap Status</th>
+            <th style="text-align:right;">Action</th>
+        `;
+
+        const allRows = data.keyword_gap.keywords || [];
+        const filter = this.compState.activeFilter;
+        const q = (this.compState.searchQuery || "").trim().toLowerCase();
+        const intent = this.compState.intentFilter;
+
+        const filtered = allRows.filter(row => {
+            if (filter !== "all" && row.gap_type !== filter) return false;
+            if (q && !row.keyword.toLowerCase().includes(q)) return false;
+            if (intent && row.intent !== intent) return false;
+            return true;
+        });
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="${9 + comps.length}" class="empty-state" style="padding:30px;">No keywords match the selected filter criteria.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.slice(0, 150).map(k => {
+            const isChecked = this.compState.selectedKeywords.has(k.keyword);
+            const gtype = (k.gap_type || "").toLowerCase();
+            let badgeStyle = "background:#F1F5F9; color:#475569;";
+            let badgeText = "SHARED";
+            if (gtype === "missing") {
+                badgeStyle = "background:#FEE2E2; color:#B91C1C;";
+                badgeText = "MISSING";
+            } else if (gtype === "weak") {
+                badgeStyle = "background:#FFEDD5; color:#C2410C;";
+                badgeText = "WEAK";
+            } else if (gtype === "strong") {
+                badgeStyle = "background:#EEF2FF; color:#4338CA;";
+                badgeText = "STRONG";
+            } else {
+                badgeStyle = "background:#DCFCE7; color:#15803D;";
+                badgeText = "SHARED";
+            }
+
+            // Intent badge style
+            let intentBadge = `<span class="badge" style="background:#F1F5F9; color:#475569; font-size:11px;">${escapeHtml(k.intent || "Informational")}</span>`;
+            if (k.intent === "Commercial") intentBadge = `<span class="badge" style="background:#FEF3C7; color:#B45309; font-size:11px;">Commercial</span>`;
+            else if (k.intent === "Transactional") intentBadge = `<span class="badge" style="background:#D1FAE5; color:#047857; font-size:11px;">Transactional</span>`;
+            else if (k.intent === "Navigational") intentBadge = `<span class="badge" style="background:#E0E7FF; color:#4338CA; font-size:11px;">Navigational</span>`;
+
+            const volStr = k.search_volume !== null && k.search_volume !== undefined ? k.search_volume.toLocaleString() : '<span style="color:var(--text-muted);">-</span>';
+            const kdStr = k.keyword_difficulty !== null && k.keyword_difficulty !== undefined ? `<b>${k.keyword_difficulty}%</b>` : '<span style="color:var(--text-muted);">-</span>';
+            const cpcStr = k.cpc !== null && k.cpc !== undefined ? `$${k.cpc.toFixed(2)}` : '<span style="color:var(--text-muted);">-</span>';
+
+            const tRankStr = k.target_rank !== null && k.target_rank !== undefined ? `<span style="font-weight:800; color:var(--primary);">#${k.target_rank}</span>` : '<span style="color:var(--text-muted); font-size:12px;">Not Ranking</span>';
+
+            const compRanks = k.competitor_ranks || {};
+
+            return `
+                <tr>
+                    <td style="text-align:center;">
+                        <input type="checkbox" ${isChecked ? "checked" : ""} onchange="app.onCompetitorRowCheckChange('${escapeHtml(k.keyword)}', this.checked)">
+                    </td>
+                    <td style="font-weight:600; color:var(--text);">${escapeHtml(k.keyword)}</td>
+                    <td>${intentBadge}</td>
+                    <td style="font-weight:600;">${volStr}</td>
+                    <td>${kdStr}</td>
+                    <td>${cpcStr}</td>
+                    <td style="background:#F8FAFC; text-align:center;">${tRankStr}</td>
+                    ${comps.map(c => {
+                        const rk = compRanks[c];
+                        return `<td style="text-align:center;">${rk !== null && rk !== undefined ? `<b>#${rk}</b>` : '<span style="color:var(--text-muted); font-size:11px;">-</span>'}</td>`;
+                    }).join('')}
+                    <td>
+                        <span class="badge" style="${badgeStyle} font-weight:700; font-size:11px;">${badgeText}</span>
+                    </td>
+                    <td style="text-align:right; white-space:nowrap;">
+                        <button type="button" class="btn btn-outline btn-sm" style="font-size:11px; padding:3px 8px;" onclick="app.quickSaveCompetitorKeyword('${escapeHtml(k.keyword)}', '${escapeHtml(k.intent || '')}', ${k.search_volume || 'null'}, ${k.keyword_difficulty || 'null'}, ${k.cpc || 'null'})" title="Save to Project">
+                            <span>+ Save</span>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    filterCompetitorGap(filterType) {
+        this.compState.activeFilter = filterType;
+        const tabs = $("compGapTabs");
+        if (tabs) {
+            tabs.querySelectorAll("button").forEach(b => {
+                b.classList.toggle("active", b.getAttribute("data-filter") === filterType);
+            });
+        }
+        this.renderCompetitorGapTable();
+    }
+
+    applyCompetitorSearch(query) {
+        this.compState.searchQuery = query;
+        this.renderCompetitorGapTable();
+    }
+
+    applyCompetitorIntentFilter(intent) {
+        this.compState.intentFilter = intent;
+        this.renderCompetitorGapTable();
+    }
+
+    toggleCompetitorSelectAll(checked) {
+        const data = this.compState.analysisData;
+        if (!data || !data.keyword_gap) return;
+
+        const allRows = data.keyword_gap.keywords || [];
+        const filter = this.compState.activeFilter;
+        const q = (this.compState.searchQuery || "").trim().toLowerCase();
+        const intent = this.compState.intentFilter;
+
+        const filtered = allRows.filter(row => {
+            if (filter !== "all" && row.gap_type !== filter) return false;
+            if (q && !row.keyword.toLowerCase().includes(q)) return false;
+            if (intent && row.intent !== intent) return false;
+            return true;
+        });
+
+        if (checked) {
+            filtered.forEach(k => this.compState.selectedKeywords.add(k.keyword));
+        } else {
+            filtered.forEach(k => this.compState.selectedKeywords.delete(k.keyword));
+        }
+
+        this.updateCompetitorSelectedCount();
+        this.renderCompetitorGapTable();
+    }
+
+    onCompetitorRowCheckChange(kwStr, checked) {
+        if (checked) this.compState.selectedKeywords.add(kwStr);
+        else this.compState.selectedKeywords.delete(kwStr);
+        this.updateCompetitorSelectedCount();
+    }
+
+    updateCompetitorSelectedCount() {
+        const count = this.compState.selectedKeywords.size;
+        const btn = $("compAddSelectedBtn");
+        const countSpan = $("compSelectedCount");
+        if (btn) btn.style.display = count > 0 ? "inline-flex" : "none";
+        if (countSpan) countSpan.textContent = count;
+    }
+
+    renderCompetitorContentOpportunities(opps) {
+        const listEl = $("compContentOppsList");
+        const badge = $("compContentOppsBadge");
+        if (!listEl) return;
+
+        if (badge) badge.textContent = `${opps.length} topics`;
+
+        if (!opps || opps.length === 0) {
+            listEl.innerHTML = '<div class="empty-state" style="padding:24px;">No topical content gaps identified.</div>';
+            return;
+        }
+
+        listEl.innerHTML = opps.slice(0, 8).map(o => `
+            <div style="padding:12px; border:1px solid var(--border); border-radius:8px; background:#F8FAFC;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px; gap:8px;">
+                    <div>
+                        <b style="font-size:14px; color:var(--text);">${escapeHtml(o.topic)}</b>
+                        <span class="badge" style="background:#DBEAFE; color:#1D4ED8; font-size:10px; margin-left:6px;">${escapeHtml(o.intent)}</span>
+                    </div>
+                    <span class="badge" style="background:#D1FAE5; color:#047857; font-weight:700; font-size:11px;">Score: ${o.opportunity_score}/100</span>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">
+                    ${escapeHtml(o.suggested_action)}
+                </div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; font-size:11px;">
+                    <span style="color:var(--text-muted); font-weight:600;">Sample Queries:</span>
+                    ${(o.sample_keywords || []).map(sk => `<span class="pill" style="font-size:10px; background:#FFFFFF; border:1px solid var(--border);">${escapeHtml(sk)}</span>`).join('')}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    renderCompetitorBacklinkGaps(gaps) {
+        const listEl = $("compBacklinksList");
+        const badge = $("compBacklinksBadge");
+        if (!listEl) return;
+
+        if (badge) badge.textContent = `${gaps.length} targets`;
+
+        if (!gaps || gaps.length === 0) {
+            listEl.innerHTML = '<div class="empty-state" style="padding:24px;">No backlink gaps identified. Local crawl data shows no missing external domains.</div>';
+            return;
+        }
+
+        listEl.innerHTML = gaps.slice(0, 10).map(b => {
+            const priorityStyle = b.outreach_priority === "High" ? "background:#FEE2E2; color:#B91C1C;" : "background:#FEF3C7; color:#B45309;";
+            return `
+                <div style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:#F8FAFC; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                    <div>
+                        <div style="font-weight:700; font-size:13px; color:var(--text);">${escapeHtml(b.referring_domain)}</div>
+                        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                            ${escapeHtml(b.suggested_angle || 'Links to competitors')} • Competitors: <b>${(b.competitors_linked || []).join(', ')}</b>
+                        </div>
+                    </div>
+                    <span class="badge" style="${priorityStyle} font-weight:700; font-size:10px; white-space:nowrap;">${escapeHtml(b.outreach_priority)} Priority</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    renderCompetitorTrends(trends) {
+        const container = $("compTrendsContainer");
+        if (!container) return;
+
+        const entries = Object.entries(trends || {}).filter(([d, list]) => list && list.length > 0);
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="empty-state" style="padding:20px;">No historical audit records available for compared domains. Running multiple audits over time unlocks historical trajectory tracking.</div>';
+            return;
+        }
+
+        container.innerHTML = `
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
+                ${entries.map(([dom, audits]) => {
+                    const latest = audits[audits.length - 1];
+                    const earliest = audits[0];
+                    const diff = audits.length > 1 ? (latest.score - earliest.score) : 0;
+                    const diffColor = diff >= 0 ? '#10B981' : '#EF4444';
+                    const diffSign = diff >= 0 ? '+' : '';
+                    return `
+                        <div style="padding:12px; border:1px solid var(--border); border-radius:8px; background:#F8FAFC;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <b style="font-size:13px;">${escapeHtml(dom)}</b>
+                                <span class="badge" style="font-size:10px;">${audits.length} audits</span>
+                            </div>
+                            <div style="font-size:18px; font-weight:800; color:var(--primary);">
+                                ${Math.round(latest.score)}%
+                                ${audits.length > 1 ? `<span style="font-size:12px; color:${diffColor}; margin-left:4px;">(${diffSign}${Math.round(diff)}%)</span>` : ''}
+                            </div>
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+                                Latest: ${latest.date}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    async exportCompetitor(format) {
+        const target = this.compState.targetDomain;
+        if (!target) {
+            this.showNotification("Run competitor analysis first before exporting.", "warning");
+            return;
+        }
+
+        try {
+            this.showNotification(`Generating Competitor Analysis ${format.toUpperCase()} export...`, "info");
+            const payload = {
+                target_domain: target,
+                competitor_domains: this.compState.competitorDomains,
+                country: this.compState.country,
+                language: this.compState.language
+            };
+
+            const token = localStorage.getItem("token") || "";
+            const response = await fetch(`${API_BASE}/competitors/export/${format}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(errText || "Export request failed");
+            }
+
+            const blob = await response.blob();
+            const ext = format === "pdf" ? "pdf" : (format === "excel" ? "xls" : "csv");
+            const filename = `competitor_analysis_${target.replace(/[^a-z0-9_-]/gi, '_')}_${new Date().toISOString().slice(0, 10)}.${ext}`;
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            this.showNotification(`Downloaded ${filename} successfully.`, "success");
+        } catch (err) {
+            console.error("Export failed:", err);
+            this.showNotification("Export failed: " + (err.message || err), "danger");
+        }
+    }
+
+    async saveCurrentComparison() {
+        const target = this.compState.targetDomain;
+        if (!target) {
+            this.showNotification("Target website domain is required to save comparison set.", "warning");
+            return;
+        }
+
+        const defaultName = `${target} vs ${(this.compState.competitorDomains || []).join(', ') || 'Competitors'}`;
+        const name = prompt("Enter a name for this Competitor Benchmark Set:", defaultName);
+        if (!name) return;
+
+        try {
+            const payload = {
+                name: name.trim(),
+                target_domain: target,
+                competitor_domains: this.compState.competitorDomains,
+                country: this.compState.country,
+                language: this.compState.language,
+                data: this.compState.analysisData
+            };
+
+            const res = await jsonFetch(`${API_BASE}/competitors/comparisons`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            this.showNotification(`Saved '${name}' benchmark set successfully.`, "success");
+            this.updateCompSavedCount();
+        } catch (err) {
+            console.error("Save comparison failed:", err);
+            this.showNotification("Save comparison failed: " + (err.message || err), "danger");
+        }
+    }
+
+    async updateCompSavedCount() {
+        try {
+            const list = await jsonFetch(`${API_BASE}/competitors/comparisons`);
+            if ($("compSavedCount")) $("compSavedCount").textContent = (list || []).length;
+            this.compState.savedComparisons = list || [];
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    async openSavedComparisonsModal() {
+        const modal = $("compSavedModal");
+        const body = $("compSavedModalBody");
+        if (!modal || !body) return;
+
+        modal.classList.remove("hidden");
+        body.innerHTML = '<div class="empty-state" style="padding:30px;">Loading saved comparisons...</div>';
+
+        try {
+            const list = await jsonFetch(`${API_BASE}/competitors/comparisons`);
+            this.compState.savedComparisons = list || [];
+            if ($("compSavedCount")) $("compSavedCount").textContent = (list || []).length;
+
+            if (!list || list.length === 0) {
+                body.innerHTML = '<div class="empty-state" style="padding:40px;">No saved competitor comparison sets yet. Click <b>Save Set</b> after analyzing competitors to save benchmarks.</div>';
+                return;
+            }
+
+            body.innerHTML = `
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    ${list.map(item => `
+                        <div style="padding:14px; border:1px solid var(--border); border-radius:10px; background:#F8FAFC; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                            <div>
+                                <b style="font-size:15px; color:var(--text);">${escapeHtml(item.name)}</b>
+                                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+                                    Target: <b>${escapeHtml(item.target_domain)}</b> • Competitors: <b>${(item.competitor_domains || []).join(', ') || 'None'}</b>
+                                </div>
+                                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                                    Saved: ${item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Unknown'}
+                                </div>
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <button type="button" class="btn btn-primary btn-sm" onclick="app.loadSavedComparisonItem(${item.id})">Load Set</button>
+                                <button type="button" class="btn btn-danger btn-sm" onclick="app.deleteSavedComparisonItem(${item.id})">Delete</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } catch (err) {
+            console.error("Failed to load saved comparisons:", err);
+            body.innerHTML = `<div class="empty-state" style="padding:30px; color:#EF4444;">Failed to load saved comparisons: ${escapeHtml(err.message || err)}</div>`;
+        }
+    }
+
+    closeSavedComparisonsModal() {
+        const modal = $("compSavedModal");
+        if (modal) modal.classList.add("hidden");
+    }
+
+    async loadSavedComparisonItem(id) {
+        try {
+            const item = await jsonFetch(`${API_BASE}/competitors/comparisons/${id}`);
+            if (!item) return;
+
+            this.compState.targetDomain = item.target_domain;
+            this.compState.competitorDomains = item.competitor_domains || [];
+            this.compState.country = item.market_country || 2840;
+            this.compState.language = item.market_language || "en";
+
+            if ($("compTargetInput")) $("compTargetInput").value = item.target_domain;
+            if ($("compCountrySelect")) $("compCountrySelect").value = this.compState.country;
+            if ($("compLangSelect")) $("compLangSelect").value = this.compState.language;
+
+            this.renderCompetitorTags();
+            this.closeSavedComparisonsModal();
+
+            if (item.data && Object.keys(item.data).length > 0) {
+                this.compState.analysisData = item.data;
+                this.renderCompetitorView(item.data);
+                this.showNotification(`Loaded saved comparison set '${item.name}'.`, "success");
+            } else {
+                this.runCompetitorAnalysis();
+            }
+        } catch (err) {
+            console.error("Failed to load comparison item:", err);
+            this.showNotification("Failed to load saved set: " + (err.message || err), "danger");
+        }
+    }
+
+    async deleteSavedComparisonItem(id) {
+        if (!confirm("Are you sure you want to delete this saved competitor comparison set?")) return;
+        try {
+            await jsonFetch(`${API_BASE}/competitors/comparisons/${id}`, { method: "DELETE" });
+            this.showNotification("Saved comparison set deleted.", "info");
+            this.openSavedComparisonsModal();
+            this.updateCompSavedCount();
+        } catch (err) {
+            console.error("Delete comparison failed:", err);
+            this.showNotification("Failed to delete saved set: " + (err.message || err), "danger");
+        }
+    }
+
+    async openCompetitorSaveToProjectModal() {
+        const selected = Array.from(this.compState.selectedKeywords);
+        if (selected.length === 0) {
+            this.showNotification("Please select at least one keyword using the checkboxes first.", "warning");
+            return;
+        }
+
+        // Collect keyword objects from current gap data
+        const data = this.compState.analysisData;
+        const allKws = (data && data.keyword_gap && data.keyword_gap.keywords) || [];
+        const kwMap = new Map(allKws.map(k => [k.keyword, k]));
+
+        const kwObjs = selected.map(kname => {
+            const found = kwMap.get(kname);
+            return {
+                keyword: kname,
+                intent: found ? found.intent : "Informational",
+                search_volume: found ? found.search_volume : null,
+                keyword_difficulty: found ? found.keyword_difficulty : null,
+                cpc: found ? found.cpc : null,
+                cluster: "Competitor Gap",
+                source: "Competitor Analysis"
+            };
+        });
+
+        const projName = prompt(`Enter project name to save ${selected.length} competitor keywords to:`, "Competitor Opportunities");
+        if (!projName) return;
+        try {
+            const projRes = await jsonFetch(`${API_BASE}/keyword-magic/projects`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: projName.trim(), description: `Keywords from competitor analysis on ${this.compState.targetDomain}` })
+            });
+            const projId = projRes.project.id;
+            await jsonFetch(`${API_BASE}/keyword-magic/projects/${projId}/keywords`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ keywords: kwObjs })
+            });
+            this.showNotification(`Saved ${selected.length} keywords to project '${projName}'.`, "success");
+            this.compState.selectedKeywords.clear();
+            this.updateCompetitorSelectedCount();
+            this.renderCompetitorGapTable();
+        } catch (err) {
+            this.showNotification("Failed to save to project: " + (err.message || err), "danger");
+        }
+    }
+
+    async quickSaveCompetitorKeyword(kwStr, intent, vol, kd, cpc) {
+        const projName = prompt(`Save '${kwStr}' to Keyword Project:`, "Competitor Opportunities");
+        if (!projName) return;
+        try {
+            const projRes = await jsonFetch(`${API_BASE}/keyword-magic/projects`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: projName.trim(), description: `Keywords from competitor analysis on ${this.compState.targetDomain}` })
+            });
+            const projId = projRes.project.id;
+            await jsonFetch(`${API_BASE}/keyword-magic/projects/${projId}/keywords`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    keywords: [{
+                        keyword: kwStr,
+                        intent: intent || "Informational",
+                        search_volume: vol,
+                        keyword_difficulty: kd,
+                        cpc: cpc,
+                        cluster: "Competitor Gap",
+                        source: "Competitor Analysis"
+                    }]
+                })
+            });
+            this.showNotification(`Saved '${kwStr}' to project '${projName}'.`, "success");
+        } catch (err) {
+            this.showNotification("Failed to save to project: " + (err.message || err), "danger");
+        }
+    }
+
 }
 
 const app = new SEOAdminApp();
