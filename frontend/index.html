@@ -85,6 +85,11 @@
                 <span class="nav-icon">🎯</span>
                 <span>Rank Tracking</span>
             </div>
+            <div class="nav-item" data-view="ai_advisor" data-permission="audits.view" onclick="app.navigate('ai_advisor')">
+                <span class="nav-icon">🧠</span>
+                <span>AI SEO Advisor</span>
+                <span class="badge" style="background:#8b5cf6;color:#fff;font-size:0.65rem;padding:2px 6px;border-radius:4px;margin-left:auto;">AI</span>
+            </div>
             <div class="nav-item" data-view="technical_report" data-permission="technical_report.view" onclick="app.navigate('technical_report')">
                 <span class="nav-icon">🛠️</span>
                 <span>Technical Report</span>
@@ -1453,6 +1458,134 @@
                     <h3 style="margin:0 0 6px 0;">No Tracked Keywords Loaded</h3>
                     <p style="margin:0 0 16px 0; font-size:13px; color:var(--text-muted);">Choose a website from the dropdown above or click '+ Add Keywords' to begin monitoring organic search positions.</p>
                     <button class="btn btn-primary btn-sm" onclick="app.openAddKeywordsModal()">+ Add Keywords</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PHASE 9: AI SEO RECOMMENDATION ENGINE & ASSISTANT -->
+        <div id="viewAiAdvisor" class="admin-view">
+            <!-- HEADER BAR & CONTROLS -->
+            <div class="card" style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+                    <div>
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <h2 style="margin:0; font-size:22px; display:flex; align-items:center; gap:8px;">
+                                <span>🧠</span> AI SEO Recommendation Engine
+                            </h2>
+                            <span id="aiModelBadge" class="badge" style="background:#e0e7ff; color:#4338ca; font-weight:600; font-size:12px; padding:3px 8px; border-radius:6px;">Checking Ollama...</span>
+                            <span class="badge" style="background:#dcfce7; color:#15803d; font-size:11px; padding:3px 8px; border-radius:6px; font-weight:600;">
+                                🛡️ Zero-Fabrication Mandate Active
+                            </span>
+                        </div>
+                        <p style="margin:6px 0 0 0; color:var(--text-muted); font-size:13px;">
+                            Evidence-grounded action roadmap, technical fixes, title/meta proposals, and interactive consultant strictly tied to verified audit findings.
+                        </p>
+                    </div>
+
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <select id="aiAuditSelector" class="form-control" style="max-width:280px; font-size:13px; height:36px;" onchange="app.onAiAuditSelected()">
+                            <option value="">-- Select Completed Audit --</option>
+                        </select>
+                        <button id="btnGenerateAi" class="btn btn-primary btn-sm" onclick="app.generateAiRecommendations(false)" style="display:flex; align-items:center; gap:6px;">
+                            <span>⚡</span> Generate Recommendations
+                        </button>
+                        <button id="btnFallbackAi" class="btn btn-secondary btn-sm" onclick="app.generateAiRecommendations(true)" title="Force deterministic knowledge-base fallback without LLM">
+                            <span>🛡️</span> Knowledge-Base Mode
+                        </button>
+                        <div class="dropdown" style="display:inline-block; position:relative;">
+                            <button class="btn btn-secondary btn-sm dropdown-toggle" onclick="app.toggleAiExportMenu(event)" style="display:flex; align-items:center; gap:6px;">
+                                <span>📥</span> Export ▾
+                            </button>
+                            <div id="aiExportMenu" class="dropdown-menu" style="display:none; position:absolute; right:0; left:auto; top:100%; z-index:100; background:#fff; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.1); min-width:180px; padding:4px 0;">
+                                <a href="javascript:void(0)" style="display:block; padding:8px 14px; font-size:12px; color:#1e293b; text-decoration:none;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'" onclick="app.exportAiRecommendations('pdf')">📄 Export Client PDF</a>
+                                <a href="javascript:void(0)" style="display:block; padding:8px 14px; font-size:12px; color:#1e293b; text-decoration:none;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'" onclick="app.exportAiRecommendations('excel')">📊 Export Excel Workbook</a>
+                                <a href="javascript:void(0)" style="display:block; padding:8px 14px; font-size:12px; color:#1e293b; text-decoration:none;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'" onclick="app.exportAiRecommendations('csv')">📑 Export CSV Plan</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DISCLAIMER / PROVENANCE CALLOUT -->
+                <div id="aiDisclaimerBanner" style="margin-top:16px; padding:10px 14px; background:var(--bg-secondary, #f8fafc); border-left:4px solid #4f46e5; border-radius:4px; font-size:12px; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                    <div>
+                        <b>Data Provenance &amp; Verification Notice:</b>
+                        Aviance AI never fabricates search volumes, ranking positions, backlink metrics, or SEO health scores. All recommendations are directly linked to verified crawl observations.
+                    </div>
+                    <span id="aiEngineLabel" style="font-size:11px; font-weight:600; color:#4f46e5;">Engine: Ollama</span>
+                </div>
+            </div>
+
+            <!-- MAIN CONTENT WORKSPACE -->
+            <div id="aiContentArea">
+                <!-- EMPTY STATE -->
+                <div id="aiEmptyState" class="empty-state" style="padding:60px 20px; text-align:center;">
+                    <div style="font-size:44px; margin-bottom:12px;">🧠</div>
+                    <h3 style="margin:0 0 6px 0; font-size:18px;">No Audit Recommendations Loaded</h3>
+                    <p style="margin:0 0 20px 0; font-size:13px; color:var(--text-muted); max-width:540px; margin-left:auto; margin-right:auto;">
+                        Select a completed audit from the dropdown above or run an on-demand audit to generate evidence-based SEO guidance, code snippets, and prioritized developer tasks.
+                    </p>
+                    <button class="btn btn-primary" onclick="app.generateAiRecommendations(false)">Generate Recommendations</button>
+                </div>
+
+                <!-- RECOMMENDATIONS WORKSPACE (HIDDEN UNTIL LOADED) -->
+                <div id="aiActiveWorkspace" style="display:none;">
+                    <!-- 8-DISCIPLINE TAB NAVIGATION -->
+                    <div class="subnav-tabs" style="display:flex; gap:6px; border-bottom:1px solid var(--border-color, #e2e8f0); margin-bottom:20px; overflow-x:auto; padding-bottom:2px;">
+                        <button class="btn btn-sm btn-secondary active" data-aitab="roadmap" onclick="app.switchAiTab('roadmap')" style="border-radius:4px;">📋 Prioritized Roadmap</button>
+                        <button class="btn btn-sm btn-secondary" data-aitab="explanations" onclick="app.switchAiTab('explanations')" style="border-radius:4px;">🔍 Issue Explanations</button>
+                        <button class="btn btn-sm btn-secondary" data-aitab="technical" onclick="app.switchAiTab('technical')" style="border-radius:4px;">💻 Technical Fixes</button>
+                        <button class="btn btn-sm btn-secondary" data-aitab="content" onclick="app.switchAiTab('content')" style="border-radius:4px;">✍️ Content Improvements</button>
+                        <button class="btn btn-sm btn-secondary" data-aitab="keywords" onclick="app.switchAiTab('keywords')" style="border-radius:4px;">🎯 Keyword Opportunities</button>
+                        <button class="btn btn-sm btn-secondary" data-aitab="linking" onclick="app.switchAiTab('linking')" style="border-radius:4px;">🔗 Internal Linking</button>
+                        <button class="btn btn-sm btn-secondary" data-aitab="schema" onclick="app.switchAiTab('schema')" style="border-radius:4px;">🏷️ Structured Data</button>
+                        <button class="btn btn-sm btn-secondary" data-aitab="dev" onclick="app.switchAiTab('dev')" style="border-radius:4px;">🛠️ Developer Checklist</button>
+                    </div>
+
+                    <!-- TAB PANELS -->
+                    <div id="aiTabPanelRoadmap" class="ai-tab-panel"></div>
+                    <div id="aiTabPanelExplanations" class="ai-tab-panel" style="display:none;"></div>
+                    <div id="aiTabPanelTechnical" class="ai-tab-panel" style="display:none;"></div>
+                    <div id="aiTabPanelContent" class="ai-tab-panel" style="display:none;"></div>
+                    <div id="aiTabPanelKeywords" class="ai-tab-panel" style="display:none;"></div>
+                    <div id="aiTabPanelLinking" class="ai-tab-panel" style="display:none;"></div>
+                    <div id="aiTabPanelSchema" class="ai-tab-panel" style="display:none;"></div>
+                    <div id="aiTabPanelDev" class="ai-tab-panel" style="display:none;"></div>
+
+                    <!-- INTERACTIVE AI SEO CONSULTANT DRAWER / CHAT -->
+                    <div class="card" style="margin-top:24px; border:1px solid #c7d2fe; background:linear-gradient(to bottom, #ffffff, #faf5ff);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="font-size:20px;">💬</span>
+                                <h3 style="margin:0; font-size:16px; font-weight:700;">Interactive AI SEO Consultant</h3>
+                                <span class="badge" style="background:#8b5cf6; color:#fff; font-size:11px;">Audit Grounded</span>
+                            </div>
+                            <span style="font-size:12px; color:var(--text-muted);">Ask technical questions, request custom rewrite drafts, or get server config guides</span>
+                        </div>
+
+                        <!-- QUICK PROMPT PILLS -->
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
+                            <button class="btn btn-sm btn-secondary" style="font-size:11px; padding:3px 8px;" onclick="app.sendAiChatMessage('How do I fix canonical issues on this website?')">🔗 Fix Canonicals</button>
+                            <button class="btn btn-sm btn-secondary" style="font-size:11px; padding:3px 8px;" onclick="app.sendAiChatMessage('Generate an optimized robots.txt for this website')">🤖 Draft robots.txt</button>
+                            <button class="btn btn-sm btn-secondary" style="font-size:11px; padding:3px 8px;" onclick="app.sendAiChatMessage('Suggest Organization and WebSite JSON-LD schemas')">🏷️ Recommend Schema</button>
+                            <button class="btn btn-sm btn-secondary" style="font-size:11px; padding:3px 8px;" onclick="app.sendAiChatMessage('How can I optimize Core Web Vitals (LCP and CLS)?')">⚡ Core Web Vitals Fixes</button>
+                        </div>
+
+                        <!-- CHAT MESSAGE LOG -->
+                        <div id="aiChatLog" style="max-height:320px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:6px; padding:12px; background:#fff; margin-bottom:12px; display:flex; flex-direction:column; gap:10px;">
+                            <div style="display:flex; gap:8px; align-items:flex-start;">
+                                <div style="font-size:18px;">🤖</div>
+                                <div style="background:#f1f5f9; padding:8px 12px; border-radius:8px; font-size:13px; line-height:1.45; max-width:85%;">
+                                    Hello! I am your Aviance AI SEO Consultant. I am grounded in your verified audit crawl data. Ask me anything about fixing technical errors, crafting high-CTR titles, or restructuring headers.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CHAT INPUT -->
+                        <div style="display:flex; gap:8px;">
+                            <input id="aiChatInput" type="text" class="form-control" placeholder="Ask Aviance SEO Consultant (e.g. 'How should I optimize the homepage meta tags?')" onkeydown="if(event.key==='Enter') app.sendAiChatMessage()" style="font-size:13px;">
+                            <button id="btnAiChatSend" class="btn btn-primary" onclick="app.sendAiChatMessage()" style="min-width:90px;">Ask AI</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

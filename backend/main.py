@@ -79,6 +79,7 @@ from . import competitor_engine
 from . import backlink_engine
 from . import google_service
 from . import rank_tracker
+from . import ai_advisor
 from .seo_engine.signals import extract_signals
 from .seo_engine import run_engine, RULESET_VERSION, WEIGHTS as ENGINE_WEIGHTS, band as engine_band, maturity as engine_maturity
 from .seo_engine.narrative import category_explanations, clean_prose
@@ -6727,6 +6728,171 @@ def run_ai_analysis(audit: dict[str, Any]):
         return local_ai(audit)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"AI analysis failed: {exc}")
+
+
+# -----------------------------------------------------------------------------
+# PHASE 9: EVIDENCE-BASED AI SEO RECOMMENDATION ENGINE & ASSISTANT
+# -----------------------------------------------------------------------------
+
+class AiRecommendationsRequest(BaseModel):
+    audit: Optional[dict[str, Any]] = None
+    audit_id: Optional[int] = None
+    force_fallback: bool = False
+
+
+class AiChatRequest(BaseModel):
+    prompt: str
+    audit: Optional[dict[str, Any]] = None
+    audit_id: Optional[int] = None
+    history: Optional[list[dict[str, str]]] = None
+
+
+class AiExportRequest(BaseModel):
+    recommendations: Optional[dict[str, Any]] = None
+    audit_id: Optional[int] = None
+    audit: Optional[dict[str, Any]] = None
+
+
+def _resolve_audit_payload(req_audit: Optional[dict[str, Any]], req_audit_id: Optional[int], db: Session) -> dict[str, Any]:
+    if isinstance(req_audit, dict) and (req_audit.get("target") or req_audit.get("url")):
+        return req_audit
+    if req_audit_id:
+        audit_row = db.query(Audit).filter(Audit.id == req_audit_id).first()
+        if audit_row and audit_row.result_json:
+            try:
+                parsed = json.loads(audit_row.result_json)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                pass
+    return {}
+
+
+@app.get("/api/ai/status")
+def ai_status_endpoint(
+    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
+):
+    """
+    Returns live connectivity status, model readiness, and fallback status for the AI engine.
+    """
+    return ai_advisor.check_ollama_status()
+
+
+@app.post("/api/ai/recommendations")
+def ai_recommendations_endpoint(
+    req: AiRecommendationsRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
+):
+    """
+    Produces evidence-grounded AI recommendations across 8 core disciplines:
+    - Issue Explanations
+    - Prioritized Roadmap
+    - Technical Fixes
+    - Content Improvements
+    - Keyword Opportunities
+    - Internal Linking
+    - Structured Data Schemas
+    - Developer Instructions
+    """
+    audit_data = _resolve_audit_payload(req.audit, req.audit_id, db)
+    if not audit_data:
+        raise HTTPException(
+            status_code=400,
+            detail="A valid completed audit JSON payload or valid audit_id is required."
+        )
+    try:
+        if req.force_fallback:
+            return ai_advisor.generate_deterministic_fallback_recommendations(audit_data)
+        return ai_advisor.generate_ai_recommendations(audit_data)
+    except Exception as exc:
+        logger.exception("AI recommendations failed: %s", exc)
+        return ai_advisor.generate_deterministic_fallback_recommendations(audit_data)
+
+
+@app.post("/api/ai/chat")
+def ai_chat_endpoint(
+    req: AiChatRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
+):
+    """
+    Interactive AI SEO consultant grounded strictly in crawl evidence and search specifications.
+    """
+    if not (req.prompt or "").strip():
+        raise HTTPException(status_code=400, detail="A question/prompt is required.")
+    audit_data = _resolve_audit_payload(req.audit, req.audit_id, db) if (req.audit or req.audit_id) else None
+    return ai_advisor.ask_ai_seo_assistant(
+        question=req.prompt,
+        audit_data=audit_data,
+        conversation_history=req.history
+    )
+
+
+@app.post("/api/ai/export/csv")
+def ai_export_csv_endpoint(
+    req: AiExportRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
+):
+    rec_data = req.recommendations
+    if not rec_data:
+        audit_data = _resolve_audit_payload(req.audit, req.audit_id, db)
+        if not audit_data:
+            raise HTTPException(status_code=400, detail="Recommendations data or audit payload is required.")
+        rec_data = ai_advisor.generate_ai_recommendations(audit_data)
+    csv_text = ai_advisor.generate_ai_recommendations_csv(rec_data)
+    target = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", rec_data.get("target") or "website").strip("_")
+    filename = f"ai_seo_recommendations_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/ai/export/excel")
+def ai_export_excel_endpoint(
+    req: AiExportRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
+):
+    rec_data = req.recommendations
+    if not rec_data:
+        audit_data = _resolve_audit_payload(req.audit, req.audit_id, db)
+        if not audit_data:
+            raise HTTPException(status_code=400, detail="Recommendations data or audit payload is required.")
+        rec_data = ai_advisor.generate_ai_recommendations(audit_data)
+    xml_text = ai_advisor.generate_ai_recommendations_excel_xml(rec_data)
+    target = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", rec_data.get("target") or "website").strip("_")
+    filename = f"ai_seo_recommendations_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.xls"
+    return Response(
+        content=xml_text,
+        media_type="application/vnd.ms-excel; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/ai/export/pdf")
+def ai_export_pdf_endpoint(
+    req: AiExportRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
+):
+    rec_data = req.recommendations
+    if not rec_data:
+        audit_data = _resolve_audit_payload(req.audit, req.audit_id, db)
+        if not audit_data:
+            raise HTTPException(status_code=400, detail="Recommendations data or audit payload is required.")
+        rec_data = ai_advisor.generate_ai_recommendations(audit_data)
+    pdf_bytes = ai_advisor.generate_ai_recommendations_pdf(rec_data)
+    target = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", rec_data.get("target") or "website").strip("_")
+    filename = f"ai_seo_recommendations_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 @app.post("/api/page-check")

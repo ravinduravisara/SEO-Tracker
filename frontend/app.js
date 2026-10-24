@@ -141,6 +141,14 @@ class SEOAdminApp {
             searchQuery: "",
             loading: false
         };
+        this.aiState = {
+            currentRecommendations: null,
+            activeAuditId: null,
+            status: null,
+            activeTab: "roadmap",
+            chatMessages: [],
+            loading: false
+        };
         this.init();
     }
 
@@ -380,7 +388,8 @@ class SEOAdminApp {
             technology_detector: "tech_detector.view",
             backlink_analytics: "audits.view",
             google_performance: "audits.view",
-            rank_tracking: "audits.view"
+            rank_tracking: "audits.view",
+            ai_advisor: "audits.view"
         };
 
         const requiredPerm = viewPermissions[view];
@@ -438,7 +447,8 @@ class SEOAdminApp {
             competitor_analysis: { id: "viewCompetitorAnalysis", title: "Competitor Analysis", breadcrumb: "Intelligence • Head-to-Head Benchmarks & Market Gaps" },
             backlink_analytics: { id: "viewBacklinkAnalytics", title: "Backlink Analytics", breadcrumb: "Intelligence • Indexed Backlinks & Internal Equity Modeling" },
             google_performance: { id: "viewGooglePerformance", title: "Google & Performance", breadcrumb: "Telemetry • Search Console, Analytics 4 & Core Web Vitals" },
-            rank_tracking: { id: "viewRankTracking", title: "Keyword Rank Tracking", breadcrumb: "Telemetry • Live Google SERP Positions & Competitor Benchmarks" }
+            rank_tracking: { id: "viewRankTracking", title: "Keyword Rank Tracking", breadcrumb: "Telemetry • Live Google SERP Positions & Competitor Benchmarks" },
+            ai_advisor: { id: "viewAiAdvisor", title: "AI SEO Advisor & Consultant", breadcrumb: "Intelligence • Evidence-Grounded Recommendations & Assistant" }
         };
 
         const target = viewMap[view] || viewMap.dashboard;
@@ -459,6 +469,7 @@ class SEOAdminApp {
         else if (view === "backlink_analytics") this.loadBacklinkAnalytics();
         else if (view === "google_performance") this.loadGooglePerformance();
         else if (view === "rank_tracking") this.loadRankings();
+        else if (view === "ai_advisor") this.initAiAdvisor();
         else if (view === "clients") this.loadClients();
         else if (view === "audits") this.loadAudits();
         else if (view === "leads") this.loadLeads();
@@ -7057,6 +7068,589 @@ class SEOAdminApp {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
             this.showNotification(`Downloaded ${format.toUpperCase()} rankings report successfully.`, "success");
+        } catch (err) {
+            this.showNotification(`Export failed: ${err.message || err}`, "danger");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // PHASE 9: AI SEO RECOMMENDATION ENGINE & ASSISTANT
+    // ------------------------------------------------------------------------
+
+    async initAiAdvisor() {
+        await this.checkAiStatus();
+        await this.loadAiAuditsDropdown();
+        if (this.state.currentAudit && !this.aiState.currentRecommendations) {
+            await this.generateAiRecommendations(false);
+        }
+    }
+
+    async checkAiStatus() {
+        try {
+            const res = await jsonFetch(`${API_BASE}/ai/status`);
+            this.aiState.status = res;
+            const badge = $("aiModelBadge");
+            const label = $("aiEngineLabel");
+            if (res && res.available && res.model_available) {
+                if (badge) {
+                    badge.textContent = `🟢 Connected: ${res.model}`;
+                    badge.style.background = "#dcfce7";
+                    badge.style.color = "#15803d";
+                }
+                if (label) label.textContent = `Engine: Ollama (${res.model})`;
+            } else {
+                if (badge) {
+                    badge.textContent = "🟠 Deterministic Fallback Active";
+                    badge.style.background = "#fef3c7";
+                    badge.style.color = "#b45309";
+                }
+                if (label) label.textContent = "Engine: Deterministic SEO Knowledge Engine";
+            }
+        } catch (err) {
+            console.warn("[eSupport] Failed to check AI status:", err);
+            const badge = $("aiModelBadge");
+            if (badge) {
+                badge.textContent = "🟠 Knowledge-Base Engine";
+                badge.style.background = "#fef3c7";
+                badge.style.color = "#b45309";
+            }
+        }
+    }
+
+    async loadAiAuditsDropdown() {
+        const sel = $("aiAuditSelector");
+        if (!sel) return;
+        try {
+            const audits = await jsonFetch(`${API_BASE}/audits`);
+            let html = '<option value="">-- Select Completed Audit --</option>';
+            if (Array.isArray(audits)) {
+                audits.forEach(a => {
+                    const domain = a.target_url ? a.target_url.replace(/^https?:\/\//, "").replace(/\/.*$/, "") : `Audit #${a.id}`;
+                    const score = a.score !== null ? `${Math.round(a.score)}/100` : "Unscored";
+                    const dt = a.created_at ? new Date(a.created_at).toLocaleDateString() : "";
+                    const selected = (this.aiState.activeAuditId == a.id) ? "selected" : "";
+                    html += `<option value="${a.id}" ${selected}>${domain} (${score} • ${dt})</option>`;
+                });
+            }
+            sel.innerHTML = html;
+        } catch (err) {
+            console.warn("[eSupport] Failed to load audits for AI advisor:", err);
+        }
+    }
+
+    onAiAuditSelected() {
+        const sel = $("aiAuditSelector");
+        if (!sel) return;
+        this.aiState.activeAuditId = sel.value ? parseInt(sel.value) : null;
+        if (this.aiState.activeAuditId) {
+            this.generateAiRecommendations(false);
+        }
+    }
+
+    toggleAiExportMenu(e) {
+        if (e) e.stopPropagation();
+        const menu = $("aiExportMenu");
+        if (menu) {
+            menu.style.display = (menu.style.display === "block") ? "none" : "block";
+        }
+    }
+
+    async generateAiRecommendations(forceFallback = false) {
+        const btn = $("btnGenerateAi");
+        const btnFb = $("btnFallbackAi");
+        if (btn) btn.disabled = true;
+        if (btnFb) btnFb.disabled = true;
+
+        const auditId = this.aiState.activeAuditId;
+        const currentAudit = this.state.currentAudit;
+
+        if (!auditId && !currentAudit) {
+            this.showNotification("Please select an audit from the dropdown or run a fresh audit first.", "warning");
+            if (btn) btn.disabled = false;
+            if (btnFb) btnFb.disabled = false;
+            return;
+        }
+
+        try {
+            this.showNotification(forceFallback ? "Generating deterministic knowledge-base recommendations..." : "Synthesizing evidence-based AI SEO recommendations...", "info");
+            const payload = {
+                audit: currentAudit,
+                audit_id: auditId,
+                force_fallback: forceFallback
+            };
+
+            const data = await jsonFetch(`${API_BASE}/ai/recommendations`, {
+                method: "POST",
+                body: JSON.stringify(payload)
+            });
+
+            this.aiState.currentRecommendations = data;
+            if ($("aiEmptyState")) $("aiEmptyState").style.display = "none";
+            if ($("aiActiveWorkspace")) $("aiActiveWorkspace").style.display = "block";
+
+            // Update badge & engine
+            const badge = $("aiModelBadge");
+            const label = $("aiEngineLabel");
+            if (data.ai_generated) {
+                if (badge) {
+                    badge.textContent = `🟢 ${data.source_model || "Ollama"}`;
+                    badge.style.background = "#dcfce7";
+                    badge.style.color = "#15803d";
+                }
+                if (label) label.textContent = `Engine: ${data.source_model || "Ollama"}`;
+            } else {
+                if (badge) {
+                    badge.textContent = "🟠 Knowledge-Base Engine";
+                    badge.style.background = "#fef3c7";
+                    badge.style.color = "#b45309";
+                }
+                if (label) label.textContent = `Engine: ${data.source_model || "Deterministic Fallback"}`;
+            }
+
+            this.renderAiCurrentTab();
+            this.showNotification("AI recommendations ready across all 8 disciplines.", "success");
+        } catch (err) {
+            this.showNotification(`Failed to generate recommendations: ${err.message || err}`, "danger");
+        } finally {
+            if (btn) btn.disabled = false;
+            if (btnFb) btnFb.disabled = false;
+        }
+    }
+
+    switchAiTab(tabKey) {
+        this.aiState.activeTab = tabKey;
+        document.querySelectorAll("[data-aitab]").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.aitab === tabKey);
+            btn.classList.toggle("btn-primary", btn.dataset.aitab === tabKey);
+            btn.classList.toggle("btn-secondary", btn.dataset.aitab !== tabKey);
+        });
+
+        document.querySelectorAll(".ai-tab-panel").forEach(p => p.style.display = "none");
+        this.renderAiCurrentTab();
+    }
+
+    renderAiCurrentTab() {
+        const tab = this.aiState.activeTab || "roadmap";
+        const map = {
+            roadmap: { panel: "aiTabPanelRoadmap", fn: () => this.renderAiRoadmap() },
+            explanations: { panel: "aiTabPanelExplanations", fn: () => this.renderAiExplanations() },
+            technical: { panel: "aiTabPanelTechnical", fn: () => this.renderAiTechnicalFixes() },
+            content: { panel: "aiTabPanelContent", fn: () => this.renderAiContent() },
+            keywords: { panel: "aiTabPanelKeywords", fn: () => this.renderAiKeywords() },
+            linking: { panel: "aiTabPanelLinking", fn: () => this.renderAiInternalLinking() },
+            schema: { panel: "aiTabPanelSchema", fn: () => this.renderAiStructuredData() },
+            dev: { panel: "aiTabPanelDev", fn: () => this.renderAiDevInstructions() }
+        };
+
+        const target = map[tab];
+        if (target) {
+            const p = $(target.panel);
+            if (p) {
+                p.style.display = "block";
+                p.innerHTML = target.fn();
+            }
+        }
+    }
+
+    renderAiRoadmap() {
+        const recs = this.aiState.currentRecommendations?.prioritized_recommendations || [];
+        if (!recs.length) {
+            return '<div class="empty-state" style="padding:40px;">No prioritized recommendations available.</div>';
+        }
+
+        const sevColors = {
+            CRITICAL: { bg: "#fef2f2", text: "#b91c1c", border: "#fca5a5" },
+            HIGH: { bg: "#fff7ed", text: "#c2410c", border: "#fdba74" },
+            MEDIUM: { bg: "#eff6ff", text: "#1d4ed8", border: "#93c5fd" },
+            LOW: { bg: "#f8fafc", text: "#475569", border: "#cbd5e1" }
+        };
+
+        return `
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                ${recs.map(r => {
+                    const col = sevColors[r.priority] || sevColors.MEDIUM;
+                    const urls = (r.affected_urls || []).slice(0, 3).map(u => `<code style="font-size:11px; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${escapeHtml(u)}</code>`).join(" ");
+                    return `
+                        <div class="card" style="border-left:5px solid ${col.border}; padding:16px 20px;">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px; margin-bottom:8px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span class="badge" style="background:${col.bg}; color:${col.text}; font-weight:700; font-size:11px;">${r.priority}</span>
+                                    <span class="badge" style="background:#f1f5f9; color:#334155; font-size:11px;">${escapeHtml(r.category || "General")}</span>
+                                    <h4 style="margin:0; font-size:15px; font-weight:700; color:#0f172a;">${escapeHtml(r.title)}</h4>
+                                </div>
+                                <div style="display:flex; gap:8px; font-size:12px;">
+                                    <span title="Expected SEO Impact" style="background:#ecfdf5; color:#047857; padding:2px 8px; border-radius:4px; font-weight:600;">Impact: ${escapeHtml(r.impact || "High")}</span>
+                                    <span title="Implementation Effort" style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:4px; font-weight:600;">Effort: ${escapeHtml(r.effort || "Medium")}</span>
+                                </div>
+                            </div>
+                            <div style="font-size:13px; color:#334155; margin-bottom:10px; line-height:1.5;">
+                                <b>Action Plan:</b> ${escapeHtml(r.action)}
+                            </div>
+                            ${r.validation ? `
+                                <div style="font-size:12px; color:#0369a1; background:#f0f9ff; padding:6px 12px; border-radius:4px; margin-bottom:8px;">
+                                    <b>Validation Criteria:</b> ${escapeHtml(r.validation)}
+                                </div>
+                            ` : ""}
+                            ${urls ? `
+                                <div style="font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                    <span>Affected:</span> ${urls}
+                                </div>
+                            ` : ""}
+                        </div>
+                    `;
+                }).join("")}
+            </div>
+        `;
+    }
+
+    renderAiExplanations() {
+        const issues = this.aiState.currentRecommendations?.issue_explanations || [];
+        if (!issues.length) {
+            return '<div class="empty-state" style="padding:40px;">No issue explanations loaded.</div>';
+        }
+
+        return `
+            <div class="grid grid-2col" style="gap:16px;">
+                ${issues.map(iss => `
+                    <div class="card" style="padding:16px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span class="badge" style="background:#e0e7ff; color:#3730a3; font-family:monospace; font-size:11px;">${escapeHtml(iss.code || "ISSUE")}</span>
+                            <span class="badge" style="background:${iss.severity === 'CRITICAL' ? '#fef2f2' : '#fff7ed'}; color:${iss.severity === 'CRITICAL' ? '#dc2626' : '#ea580c'}; font-size:10px;">${iss.severity}</span>
+                        </div>
+                        <h4 style="margin:0 0 8px 0; font-size:14px; font-weight:700;">${escapeHtml(iss.title)}</h4>
+                        <p style="margin:0 0 8px 0; font-size:12px; color:#475569; line-height:1.45;">
+                            <b>Root Cause:</b> ${escapeHtml(iss.explanation)}
+                        </p>
+                        ${iss.evidence ? `
+                            <div style="font-size:11px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; padding:6px 10px; margin-bottom:8px; font-family:monospace; color:#0f172a; word-break:break-all;">
+                                <b>Evidence:</b> ${escapeHtml(iss.evidence)}
+                            </div>
+                        ` : ""}
+                        <div style="font-size:12px; color:#047857; background:#ecfdf5; padding:6px 10px; border-radius:4px;">
+                            <b>Recommended Fix:</b> ${escapeHtml(iss.action)}
+                        </div>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    renderAiTechnicalFixes() {
+        const fixes = this.aiState.currentRecommendations?.technical_fixes || [];
+        if (!fixes.length) {
+            return '<div class="empty-state" style="padding:40px;">No technical snippets required.</div>';
+        }
+
+        return `
+            <div style="display:flex; flex-direction:column; gap:16px;">
+                ${fixes.map((f, idx) => `
+                    <div class="card" style="padding:18px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="badge" style="background:#3b82f6; color:#fff; font-size:11px;">${escapeHtml(f.snippet_type || "Snippet")}</span>
+                                <h4 style="margin:0; font-size:15px; font-weight:700;">${escapeHtml(f.title)}</h4>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText($('snippetCode_${idx}').textContent); app.showNotification('Snippet copied to clipboard!', 'success');" style="font-size:11px; padding:3px 8px;">
+                                📋 Copy Snippet
+                            </button>
+                        </div>
+                        <p style="margin:0 0 10px 0; font-size:13px; color:#475569;">${escapeHtml(f.description)}</p>
+                        <pre style="margin:0; background:#0f172a; color:#f8fafc; padding:12px 16px; border-radius:6px; font-size:12px; font-family:monospace; overflow-x:auto;"><code id="snippetCode_${idx}">${escapeHtml(f.code || "")}</code></pre>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    renderAiContent() {
+        const items = this.aiState.currentRecommendations?.content_improvements || [];
+        if (!items.length) {
+            return '<div class="empty-state" style="padding:40px;">No content rewrite proposals for this crawl.</div>';
+        }
+
+        return `
+            <div style="display:flex; flex-direction:column; gap:16px;">
+                ${items.map(pg => `
+                    <div class="card" style="padding:18px;">
+                        <div style="font-size:13px; font-weight:700; color:#0f172a; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+                            <span>📄 Target URL:</span>
+                            <a href="${escapeHtml(pg.page_url)}" target="_blank" style="color:#2563eb; text-decoration:none; font-family:monospace; font-size:12px;">${escapeHtml(pg.page_url)}</a>
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:12px;">
+                            ${(pg.suggestions || []).map(sug => `
+                                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:12px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                        <span class="badge" style="background:#8b5cf6; color:#fff; font-size:11px;">${escapeHtml(sug.type)}</span>
+                                        <span style="font-size:11px; color:#64748b;">Proposed: ${sug.character_count || 0} chars</span>
+                                    </div>
+                                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12px; margin-bottom:6px;">
+                                        <div style="background:#fff; border:1px solid #fed7aa; padding:8px; border-radius:4px;">
+                                            <b style="color:#c2410c;">Current Value:</b>
+                                            <div style="color:#334155; margin-top:4px;">${escapeHtml(sug.current || "(Empty)")}</div>
+                                        </div>
+                                        <div style="background:#fff; border:1px solid #bbf7d0; padding:8px; border-radius:4px;">
+                                            <b style="color:#15803d;">Proposed High-CTR Proposal:</b>
+                                            <div style="color:#0f172a; margin-top:4px; font-weight:600;">${escapeHtml(sug.proposed || "")}</div>
+                                        </div>
+                                    </div>
+                                    <div style="font-size:11px; color:#475569;"><b>Rationale:</b> ${escapeHtml(sug.rationale || "")}</div>
+                                </div>
+                            `).join("")}
+                        </div>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    renderAiKeywords() {
+        const kws = this.aiState.currentRecommendations?.keyword_opportunities || [];
+        if (!kws.length) {
+            return '<div class="empty-state" style="padding:40px;">No on-page keyword gaps identified.</div>';
+        }
+
+        return `
+            <div class="card" style="padding:0; overflow:hidden;">
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Keyword Opportunity</th>
+                                <th>Source</th>
+                                <th>Intent</th>
+                                <th>Optimization Action</th>
+                                <th>Evidence Basis</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${kws.map(k => `
+                                <tr>
+                                    <td><b style="color:#0f172a;">${escapeHtml(k.keyword)}</b></td>
+                                    <td><span class="badge" style="background:#f1f5f9; font-size:11px;">${escapeHtml(k.source || "Crawl")}</span></td>
+                                    <td><span class="badge" style="background:#e0f2fe; color:#0369a1; font-size:11px;">${escapeHtml(k.intent || "Informational")}</span></td>
+                                    <td style="font-size:12px; color:#334155;">${escapeHtml(k.recommendation)}</td>
+                                    <td style="font-size:11px; color:#64748b; font-family:monospace;">${escapeHtml(k.evidence_basis || "-")}</td>
+                                </tr>
+                            `).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    renderAiInternalLinking() {
+        const links = this.aiState.currentRecommendations?.internal_linking || [];
+        if (!links.length) {
+            return '<div class="empty-state" style="padding:40px;">No internal linking equity transfers suggested.</div>';
+        }
+
+        return `
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                ${links.map(l => `
+                    <div class="card" style="padding:16px;">
+                        <div style="display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:16px; margin-bottom:10px;">
+                            <div style="background:#f8fafc; padding:8px 12px; border-radius:6px; font-size:12px; border:1px solid #e2e8f0;">
+                                <div style="font-size:11px; color:#64748b; font-weight:700;">SOURCE PAGE (High Authority)</div>
+                                <div style="font-family:monospace; color:#0f172a; word-break:break-all; margin-top:2px;">${escapeHtml(l.source_url)}</div>
+                            </div>
+                            <div style="font-size:20px; color:#4f46e5;">➔</div>
+                            <div style="background:#f8fafc; padding:8px 12px; border-radius:6px; font-size:12px; border:1px solid #e2e8f0;">
+                                <div style="font-size:11px; color:#64748b; font-weight:700;">TARGET PAGE (Priority Index)</div>
+                                <div style="font-family:monospace; color:#0f172a; word-break:break-all; margin-top:2px;">${escapeHtml(l.target_url)}</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; background:#f0fdf4; border:1px solid #bbf7d0; padding:8px 12px; border-radius:4px;">
+                            <div><b>Suggested Anchor Text:</b> <span style="color:#15803d; font-weight:700;">"${escapeHtml(l.suggested_anchor_text)}"</span></div>
+                            <div style="font-size:11px; color:#475569;"><b>Equity Strategy:</b> ${escapeHtml(l.rationale || "Redistribute link equity")}</div>
+                        </div>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    renderAiStructuredData() {
+        const schemas = this.aiState.currentRecommendations?.structured_data_schemas || [];
+        if (!schemas.length) {
+            return '<div class="empty-state" style="padding:40px;">No structured data schemas proposed.</div>';
+        }
+
+        return `
+            <div style="display:flex; flex-direction:column; gap:16px;">
+                ${schemas.map((s, idx) => `
+                    <div class="card" style="padding:18px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="badge" style="background:#10b981; color:#fff; font-size:11px;">${escapeHtml(s.schema_type)}</span>
+                                <h4 style="margin:0; font-size:14px; font-weight:700;">Target: ${escapeHtml(s.page_target || "Homepage")}</h4>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText($('schemaCode_${idx}').textContent); app.showNotification('JSON-LD copied!', 'success');" style="font-size:11px; padding:3px 8px;">
+                                📋 Copy JSON-LD
+                            </button>
+                        </div>
+                        <p style="margin:0 0 10px 0; font-size:12px; color:#475569;">${escapeHtml(s.implementation_guide || "Paste into page <head> section.")}</p>
+                        <pre style="margin:0; background:#0f172a; color:#34d399; padding:12px 16px; border-radius:6px; font-size:11px; font-family:monospace; overflow-x:auto;"><code id="schemaCode_${idx}">${escapeHtml(s.json_ld || "")}</code></pre>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    renderAiDevInstructions() {
+        const steps = this.aiState.currentRecommendations?.developer_instructions || [];
+        if (!steps.length) {
+            return '<div class="empty-state" style="padding:40px;">No developer tasks generated.</div>';
+        }
+
+        return `
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                ${steps.map(st => `
+                    <div class="card" style="padding:16px; display:flex; gap:14px; align-items:flex-start;">
+                        <div style="background:#4f46e5; color:#fff; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0;">
+                            ${st.step || "•"}
+                        </div>
+                        <div style="flex-grow:1;">
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                                <span class="badge" style="background:#f1f5f9; color:#475569; font-size:10px;">${escapeHtml(st.category || "Development")}</span>
+                                <h4 style="margin:0; font-size:14px; font-weight:700; color:#0f172a;">${escapeHtml(st.title)}</h4>
+                            </div>
+                            <div style="font-size:13px; color:#334155; margin-bottom:8px; line-height:1.45;">${escapeHtml(st.task)}</div>
+                            <div style="font-size:11px; background:#eff6ff; color:#1d4ed8; padding:6px 10px; border-radius:4px; font-family:monospace;">
+                                <b>QA Verification:</b> ${escapeHtml(st.verification || "Inspect via browser DevTools network tab.")}
+                            </div>
+                        </div>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    async sendAiChatMessage(customPrompt) {
+        const inp = $("aiChatInput");
+        const btn = $("btnAiChatSend");
+        const prompt = customPrompt || (inp ? inp.value.trim() : "");
+        if (!prompt) return;
+
+        if (inp && !customPrompt) inp.value = "";
+        if (btn) btn.disabled = true;
+
+        const chatLog = $("aiChatLog");
+        if (chatLog) {
+            // Append user message
+            const userMsg = document.createElement("div");
+            userMsg.style.cssText = "display:flex; gap:8px; align-items:flex-start; justify-content:flex-end;";
+            userMsg.innerHTML = `
+                <div style="background:#4f46e5; color:#fff; padding:8px 12px; border-radius:8px; font-size:13px; line-height:1.45; max-width:85%;">
+                    ${escapeHtml(prompt)}
+                </div>
+                <div style="font-size:18px;">👤</div>
+            `;
+            chatLog.appendChild(userMsg);
+
+            // Append thinking placeholder
+            const thinkingMsg = document.createElement("div");
+            thinkingMsg.id = "aiThinkingPlaceholder";
+            thinkingMsg.style.cssText = "display:flex; gap:8px; align-items:flex-start;";
+            thinkingMsg.innerHTML = `
+                <div style="font-size:18px;">🤖</div>
+                <div style="background:#f1f5f9; padding:8px 12px; border-radius:8px; font-size:13px; color:#64748b;">
+                    Consulting verified audit telemetry and search specs...
+                </div>
+            `;
+            chatLog.appendChild(thinkingMsg);
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        try {
+            const payload = {
+                prompt: prompt,
+                audit: this.state.currentAudit,
+                audit_id: this.aiState.activeAuditId
+            };
+
+            const res = await jsonFetch(`${API_BASE}/ai/chat`, {
+                method: "POST",
+                body: JSON.stringify(payload)
+            });
+
+            const ph = $("aiThinkingPlaceholder");
+            if (ph) ph.remove();
+
+            if (chatLog) {
+                const aiMsg = document.createElement("div");
+                aiMsg.style.cssText = "display:flex; gap:8px; align-items:flex-start;";
+                const formattedAnswer = (res.answer || "").replace(/\n/g, "<br>");
+                aiMsg.innerHTML = `
+                    <div style="font-size:18px;">🤖</div>
+                    <div style="background:#f1f5f9; padding:10px 14px; border-radius:8px; font-size:13px; line-height:1.5; max-width:85%; color:#0f172a;">
+                        ${formattedAnswer}
+                        <div style="margin-top:6px; font-size:10px; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:4px;">
+                            ${res.ai_generated ? "⚡ Answered by " + (res.source_model || "Ollama") : "🛡️ Grounded in Deterministic Knowledge Base"}
+                        </div>
+                    </div>
+                `;
+                chatLog.appendChild(aiMsg);
+                chatLog.scrollTop = chatLog.scrollHeight;
+            }
+        } catch (err) {
+            const ph = $("aiThinkingPlaceholder");
+            if (ph) ph.remove();
+            if (chatLog) {
+                const errMsg = document.createElement("div");
+                errMsg.style.cssText = "display:flex; gap:8px; align-items:flex-start;";
+                errMsg.innerHTML = `
+                    <div style="font-size:18px;">🤖</div>
+                    <div style="background:#fef2f2; color:#b91c1c; padding:8px 12px; border-radius:8px; font-size:12px;">
+                        Assistant communication error: ${escapeHtml(err.message || err)}
+                    </div>
+                `;
+                chatLog.appendChild(errMsg);
+                chatLog.scrollTop = chatLog.scrollHeight;
+            }
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    async exportAiRecommendations(format = "pdf") {
+        const menu = $("aiExportMenu");
+        if (menu) menu.style.display = "none";
+
+        const recs = this.aiState.currentRecommendations;
+        if (!recs) {
+            this.showNotification("Please generate AI recommendations first before exporting.", "warning");
+            return;
+        }
+
+        try {
+            this.showNotification(`Generating client-ready ${format.toUpperCase()} recommendation report...`, "info");
+            const res = await fetch(`${API_BASE}/ai/export/${format}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
+                },
+                body: JSON.stringify({
+                    recommendations: recs,
+                    audit_id: this.aiState.activeAuditId,
+                    audit: this.state.currentAudit
+                })
+            });
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            const target = (recs.target || "website").replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+            a.download = `ai_seo_recommendations_${target}_${new Date().toISOString().slice(0, 10)}.${format === "excel" ? "xls" : format}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            this.showNotification(`Downloaded ${format.toUpperCase()} report successfully.`, "success");
         } catch (err) {
             this.showNotification(`Export failed: ${err.message || err}`, "danger");
         }
