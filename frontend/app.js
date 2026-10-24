@@ -121,6 +121,16 @@ class SEOAdminApp {
             gapResults: null,
             loading: false
         };
+        this.gperfState = {
+            currentReport: null,
+            websiteId: null,
+            websiteUrl: "",
+            targetDomain: "",
+            days: 28,
+            loading: false,
+            websites: [],
+            activeTab: "gsc"
+        };
         this.init();
     }
 
@@ -358,7 +368,8 @@ class SEOAdminApp {
             profile: null,
             source_audit: "audits.run",
             technology_detector: "tech_detector.view",
-            backlink_analytics: "audits.view"
+            backlink_analytics: "audits.view",
+            google_performance: "audits.view"
         };
 
         const requiredPerm = viewPermissions[view];
@@ -414,7 +425,8 @@ class SEOAdminApp {
             domain_overview: { id: "viewDomainOverview", title: "Domain Overview", breadcrumb: "Telemetry • Domain Performance & Visibility" },
             keyword_magic: { id: "viewKeywordMagic", title: "Keyword Magic Tool", breadcrumb: "Research • SEMrush Inspired Keyword Intelligence" },
             competitor_analysis: { id: "viewCompetitorAnalysis", title: "Competitor Analysis", breadcrumb: "Intelligence • Head-to-Head Benchmarks & Market Gaps" },
-            backlink_analytics: { id: "viewBacklinkAnalytics", title: "Backlink Analytics", breadcrumb: "Intelligence • Indexed Backlinks & Internal Equity Modeling" }
+            backlink_analytics: { id: "viewBacklinkAnalytics", title: "Backlink Analytics", breadcrumb: "Intelligence • Indexed Backlinks & Internal Equity Modeling" },
+            google_performance: { id: "viewGooglePerformance", title: "Google & Performance", breadcrumb: "Telemetry • Search Console, Analytics 4 & Core Web Vitals" }
         };
 
         const target = viewMap[view] || viewMap.dashboard;
@@ -433,6 +445,7 @@ class SEOAdminApp {
         else if (view === "keyword_magic") this.loadKeywordMagic();
         else if (view === "competitor_analysis") this.loadCompetitorAnalysis();
         else if (view === "backlink_analytics") this.loadBacklinkAnalytics();
+        else if (view === "google_performance") this.loadGooglePerformance();
         else if (view === "clients") this.loadClients();
         else if (view === "audits") this.loadAudits();
         else if (view === "leads") this.loadLeads();
@@ -5578,6 +5591,670 @@ class SEOAdminApp {
             const a = document.createElement("a");
             a.href = url;
             a.download = `backlinks_${profile.target_domain}_${new Date().toISOString().slice(0, 10)}.${format === "excel" ? "xls" : format}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            this.showNotification(`Downloaded ${format.toUpperCase()} report successfully.`, "success");
+        } catch (err) {
+            this.showNotification(`Export failed: ${err.message || err}`, "danger");
+        }
+    }
+
+    /* -------------------------------------------------------------
+       PHASE 7: GOOGLE SEARCH CONSOLE, GA4 & PERFORMANCE INTELLIGENCE
+    -------------------------------------------------------------- */
+
+    async loadGooglePerformance() {
+        try {
+            const websites = await jsonFetch(`${API_BASE}/google/websites`);
+            this.gperfState.websites = websites || [];
+            const select = $("gperfWebsiteSelect");
+            if (select) {
+                if (websites && websites.length > 0) {
+                    select.innerHTML = websites.map(w => `
+                        <option value="${w.id}">${escapeHtml(w.name)} (${escapeHtml(w.url)})</option>
+                    `).join("");
+                    if (!this.gperfState.websiteId || !websites.some(w => w.id === this.gperfState.websiteId)) {
+                        this.gperfState.websiteId = websites[0].id;
+                        this.gperfState.websiteUrl = websites[0].url;
+                    }
+                    select.value = String(this.gperfState.websiteId);
+                    await this.checkGoogleConnections(this.gperfState.websiteId);
+                    await this.fetchGooglePerformanceReport();
+                } else {
+                    select.innerHTML = `<option value="">-- No client websites registered --</option>`;
+                }
+            }
+        } catch (err) {
+            console.error("Failed to load Google websites:", err);
+        }
+    }
+
+    async handleGoogleWebsiteChange() {
+        const select = $("gperfWebsiteSelect");
+        if (!select || !select.value) return;
+        const wid = parseInt(select.value, 10);
+        this.gperfState.websiteId = wid;
+        const site = this.gperfState.websites.find(w => w.id === wid);
+        if (site) this.gperfState.websiteUrl = site.url;
+        await this.checkGoogleConnections(wid);
+        await this.fetchGooglePerformanceReport();
+    }
+
+    async handleGoogleDaysChange() {
+        const select = $("gperfDaysSelect");
+        if (!select) return;
+        this.gperfState.days = parseInt(select.value, 10) || 28;
+        await this.fetchGooglePerformanceReport();
+    }
+
+    async checkGoogleConnections(websiteId) {
+        if (!websiteId) return;
+        try {
+            const data = await jsonFetch(`${API_BASE}/google/connections/${websiteId}`);
+            this.updateGoogleConnectionBadges(data);
+        } catch (err) {
+            console.warn("Connection check failed:", err);
+        }
+    }
+
+    updateGoogleConnectionBadges(data) {
+        if (!data) return;
+        const gscBadge = $("gperfGscStatusBadge");
+        const ga4Badge = $("gperfGa4StatusBadge");
+        const psiBadge = $("gperfPsiStatusBadge");
+        const lastChecked = $("gperfLastCheckedText");
+
+        if (gscBadge && data.search_console) {
+            const st = data.search_console.status;
+            if (st === "CONNECTED") {
+                gscBadge.style.background = "#DCFCE7";
+                gscBadge.style.color = "#15803D";
+                gscBadge.textContent = "✓ Connected";
+                gscBadge.title = data.search_console.detail || "Authorized";
+            } else if (st === "UNAUTHORIZED") {
+                gscBadge.style.background = "#FEF3C7";
+                gscBadge.style.color = "#B45309";
+                gscBadge.textContent = "⚠️ Unauthorized";
+                gscBadge.title = data.search_console.detail || "Unauthorized";
+            } else {
+                gscBadge.style.background = "#F1F5F9";
+                gscBadge.style.color = "#64748B";
+                gscBadge.textContent = "Not Configured";
+                gscBadge.title = data.search_console.detail || "No service account or property configured";
+            }
+        }
+
+        if (ga4Badge && data.google_analytics_4) {
+            const st = data.google_analytics_4.status;
+            if (st === "CONNECTED") {
+                ga4Badge.style.background = "#DCFCE7";
+                ga4Badge.style.color = "#15803D";
+                ga4Badge.textContent = "✓ Connected";
+                ga4Badge.title = data.google_analytics_4.detail || "Connected";
+            } else if (st === "UNAUTHORIZED") {
+                ga4Badge.style.background = "#FEF3C7";
+                ga4Badge.style.color = "#B45309";
+                ga4Badge.textContent = "⚠️ Permission Denied";
+                ga4Badge.title = data.google_analytics_4.detail || "Permission denied";
+            } else {
+                ga4Badge.style.background = "#F1F5F9";
+                ga4Badge.style.color = "#64748B";
+                ga4Badge.textContent = "Not Configured";
+                ga4Badge.title = data.google_analytics_4.detail || "No GA4 property configured";
+            }
+        }
+
+        if (psiBadge && data.pagespeed) {
+            psiBadge.style.background = "#DCFCE7";
+            psiBadge.style.color = "#15803D";
+            psiBadge.textContent = data.pagespeed.status === "CONNECTED" ? "✓ API Active" : "✓ Active";
+            psiBadge.title = data.pagespeed.detail || "PageSpeed Ready";
+        }
+
+        if (lastChecked && data.last_checked_at) {
+            try {
+                const dt = new Date(data.last_checked_at);
+                lastChecked.textContent = `Status verified at ${dt.toLocaleTimeString()}`;
+            } catch (_) {}
+        }
+    }
+
+    async fetchGooglePerformanceReport() {
+        const wid = this.gperfState.websiteId;
+        if (!wid) {
+            this.showNotification("Please select a website first.", "warning");
+            return;
+        }
+
+        const btn = $("btnFetchGooglePerf");
+        const content = $("gperfContentArea");
+        const days = this.gperfState.days || 28;
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spin">⏳</span> Fetching...`;
+        }
+
+        if (content) {
+            content.innerHTML = `
+                <div class="card" style="padding:48px 20px; text-align:center;">
+                    <div style="font-size:36px; margin-bottom:12px;">⏳</div>
+                    <h3 style="margin:0 0 8px 0;">Querying Google Telemetry...</h3>
+                    <p style="margin:0; font-size:13px; color:var(--text-muted);">Retrieving Search Console search analytics, GA4 sessions, and Core Web Vitals field data...</p>
+                </div>
+            `;
+        }
+
+        try {
+            const report = await jsonFetch(`${API_BASE}/google/performance/${wid}?days=${days}`);
+            this.gperfState.currentReport = report;
+            this.gperfState.targetDomain = report.target_domain || "";
+            if (report.connections) {
+                this.updateGoogleConnectionBadges(report.connections);
+            }
+            this.renderGooglePerformanceReport(report);
+        } catch (err) {
+            if (content) {
+                content.innerHTML = `
+                    <div class="card" style="padding:40px 20px; text-align:center;">
+                        <div style="font-size:36px; color:#EF4444; margin-bottom:12px;">⚠️</div>
+                        <h3 style="margin:0 0 8px 0; color:#EF4444;">Failed to Fetch Telemetry</h3>
+                        <p style="margin:0 0 16px 0; font-size:13px; color:var(--text-muted);">${escapeHtml(err.message || String(err))}</p>
+                        <button class="btn btn-secondary btn-sm" onclick="app.fetchGooglePerformanceReport()">Try Again</button>
+                    </div>
+                `;
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<span>⚡ Refresh Telemetry</span>`;
+            }
+        }
+    }
+
+    renderGooglePerformanceReport(report) {
+        const content = $("gperfContentArea");
+        if (!content || !report) return;
+
+        const gsc = report.search_console || {};
+        const ga4 = report.google_analytics_4 || {};
+        const cwv = report.core_web_vitals_field || {};
+        const lh = report.lighthouse_lab || {};
+
+        const gscTotals = gsc.totals || { clicks: 0, impressions: 0, ctr: 0, position: 0 };
+        const ga4Totals = ga4.totals || { sessions: 0, total_users: 0, active_users: 0, new_users: 0, engagement_rate: 0, average_session_duration: 0, bounce_rate: 0 };
+
+        // Real User CWV Assessment Color
+        const cwvAssessment = (cwv.assessment || "insufficient data").toUpperCase();
+        let cwvBadgeBg = "#FEF3C7";
+        let cwvBadgeFg = "#B45309";
+        if (cwvAssessment === "PASSED") {
+            cwvBadgeBg = "#DCFCE7";
+            cwvBadgeFg = "#15803D";
+        } else if (cwvAssessment === "FAILED") {
+            cwvBadgeBg = "#FEE2E2";
+            cwvBadgeFg = "#B91C1C";
+        }
+
+        const activeTab = this.gperfState.activeTab || "gsc";
+
+        content.innerHTML = `
+            <!-- 4 Top KPI Scorecards -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:16px; margin-bottom:20px;">
+                <div class="card" style="padding:18px;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Google Search Clicks</div>
+                    <div style="font-size:26px; font-weight:800; color:#1E293B; margin:6px 0 2px 0;">${(gscTotals.clicks || 0).toLocaleString()}</div>
+                    <div style="font-size:12px; color:#64748B;">CTR: <b>${gscTotals.ctr || 0}%</b></div>
+                </div>
+
+                <div class="card" style="padding:18px;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Search Impressions</div>
+                    <div style="font-size:26px; font-weight:800; color:#1E293B; margin:6px 0 2px 0;">${(gscTotals.impressions || 0).toLocaleString()}</div>
+                    <div style="font-size:12px; color:#64748B;">Avg Position: <b>${(gscTotals.position || 0).toFixed(1)}</b></div>
+                </div>
+
+                <div class="card" style="padding:18px;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">GA4 Total Sessions</div>
+                    <div style="font-size:26px; font-weight:800; color:#1E293B; margin:6px 0 2px 0;">${(ga4Totals.sessions || 0).toLocaleString()}</div>
+                    <div style="font-size:12px; color:#64748B;">Active Users: <b>${(ga4Totals.active_users || 0).toLocaleString()}</b></div>
+                </div>
+
+                <div class="card" style="padding:18px;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">GA4 Engagement Rate</div>
+                    <div style="font-size:26px; font-weight:800; color:#1E293B; margin:6px 0 2px 0;">${ga4Totals.engagement_rate || 0}%</div>
+                    <div style="font-size:12px; color:#64748B;">Avg Duration: <b>${ga4Totals.average_session_duration || 0}s</b> (Bounce: ${ga4Totals.bounce_rate || 0}%)</div>
+                </div>
+            </div>
+
+            <!-- Core Web Vitals Field (Real-User) vs Lighthouse Lab Simulation -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:20px; margin-bottom:24px;">
+                <!-- Real-User Field Card -->
+                <div class="card" style="padding:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div>
+                            <h3 style="margin:0; font-size:16px; font-weight:800; display:flex; align-items:center; gap:6px;">
+                                <span>👥 Real-User Core Web Vitals (CrUX)</span>
+                            </h3>
+                            <div style="font-size:11px; color:var(--text-muted);">75th percentile of real Chrome visits over 28-day window</div>
+                        </div>
+                        <span class="pill" style="background:${cwvBadgeBg}; color:${cwvBadgeFg}; font-weight:800; font-size:11px;">${cwvAssessment}</span>
+                    </div>
+
+                    ${this.renderCwvFieldMetrics(cwv)}
+                </div>
+
+                <!-- Synthetic Lighthouse Lab Card -->
+                <div class="card" style="padding:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div>
+                            <h3 style="margin:0; font-size:16px; font-weight:800; display:flex; align-items:center; gap:6px;">
+                                <span>🔬 Lighthouse Synthetic Lab Audit</span>
+                            </h3>
+                            <div style="font-size:11px; color:var(--text-muted);">Simulated browser audit executed in isolated test environment</div>
+                        </div>
+                        <span class="pill" style="background:#F1F5F9; color:#475569; font-size:11px;">Lab Simulation</span>
+                    </div>
+
+                    ${this.renderLighthouseLabScores(lh)}
+                </div>
+            </div>
+
+            <!-- Deep Dive Tabbed Section -->
+            <div class="card" style="padding:0; overflow:hidden;">
+                <div style="display:flex; border-bottom:1px solid var(--border); background:#F8FAFC;">
+                    <button class="tab-btn ${activeTab === 'gsc' ? 'active' : ''}" onclick="app.switchGooglePerfTab('gsc')" style="padding:14px 20px; font-size:13px; font-weight:700; border:none; background:none; cursor:pointer;">
+                        Google Search Console (${(gsc.top_queries || []).length} Queries)
+                    </button>
+                    <button class="tab-btn ${activeTab === 'ga4' ? 'active' : ''}" onclick="app.switchGooglePerfTab('ga4')" style="padding:14px 20px; font-size:13px; font-weight:700; border:none; background:none; cursor:pointer;">
+                        Google Analytics 4 (${(ga4.channels || []).length} Channels)
+                    </button>
+                </div>
+
+                <div style="padding:20px;">
+                    ${activeTab === 'gsc' ? this.renderGscTabContent(gsc) : this.renderGa4TabContent(ga4)}
+                </div>
+            </div>
+        `;
+    }
+
+    renderCwvFieldMetrics(cwv) {
+        const mob = (cwv && cwv.mobile) || {};
+        const desk = (cwv && cwv.desktop) || {};
+        const hasData = cwv && cwv.has_real_user_data;
+
+        if (!hasData) {
+            return `
+                <div style="background:#F8FAFC; border:1px dashed #CBD5E1; border-radius:8px; padding:24px 16px; text-align:center; color:#64748B;">
+                    <div style="font-size:24px; margin-bottom:6px;">📉</div>
+                    <div style="font-weight:700; font-size:13px; color:#334155; margin-bottom:4px;">Insufficient Real-User Field Data</div>
+                    <div style="font-size:11px; line-height:1.4;">
+                        The Chrome User Experience Report requires a minimum threshold of real visits before publishing p75 metrics for this specific URL or origin.
+                    </div>
+                </div>
+            `;
+        }
+
+        const metrics = [
+            { key: "largest_contentful_paint", label: "LCP (Loading)", unit: "ms" },
+            { key: "interaction_to_next_paint", label: "INP (Responsiveness)", unit: "ms" },
+            { key: "cumulative_layout_shift", label: "CLS (Visual Stability)", unit: "" },
+            { key: "first_contentful_paint", label: "FCP (First Paint)", unit: "ms" },
+            { key: "experimental_time_to_first_byte", label: "TTFB (Server Response)", unit: "ms" }
+        ];
+
+        return `
+            <div class="table-container">
+                <table style="font-size:12px; margin:0;">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Mobile (p75)</th>
+                            <th>Desktop (p75)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${metrics.map(m => {
+                            const mVal = mob[m.key] ? (mob[m.key].value !== undefined ? `${mob[m.key].value}${m.unit}` : "-") : "-";
+                            const mCat = mob[m.key] ? (mob[m.key].category || "").toLowerCase() : "";
+                            const dVal = desk[m.key] ? (desk[m.key].value !== undefined ? `${desk[m.key].value}${m.unit}` : "-") : "-";
+                            const dCat = desk[m.key] ? (desk[m.key].category || "").toLowerCase() : "";
+                            return `
+                                <tr>
+                                    <td><b>${m.label}</b></td>
+                                    <td><span class="pill pill-${mCat === 'fast' || mCat === 'good' ? 'success' : (mCat === 'slow' || mCat === 'poor' ? 'danger' : 'warning')}">${mVal}</span></td>
+                                    <td><span class="pill pill-${dCat === 'fast' || dCat === 'good' ? 'success' : (dCat === 'slow' || dCat === 'poor' ? 'danger' : 'warning')}">${dVal}</span></td>
+                                </tr>
+                            `;
+                        }).join("")}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    renderLighthouseLabScores(lh) {
+        const mobScore = lh.mobile_score !== undefined && lh.mobile_score !== null ? lh.mobile_score : "N/A";
+        const deskScore = lh.desktop_score !== undefined && lh.desktop_score !== null ? lh.desktop_score : "N/A";
+        const catsMob = lh.categories_mobile || {};
+
+        return `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px; text-align:center;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted);">MOBILE PERFORMANCE</div>
+                    <div style="font-size:24px; font-weight:800; color:${mobScore >= 90 ? '#10B981' : (mobScore >= 50 ? '#F59E0B' : '#EF4444')}; margin-top:4px;">
+                        ${mobScore} <span style="font-size:12px; color:#64748B;">/ 100</span>
+                    </div>
+                </div>
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px; text-align:center;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted);">DESKTOP PERFORMANCE</div>
+                    <div style="font-size:24px; font-weight:800; color:${deskScore >= 90 ? '#10B981' : (deskScore >= 50 ? '#F59E0B' : '#EF4444')}; margin-top:4px;">
+                        ${deskScore} <span style="font-size:12px; color:#64748B;">/ 100</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="font-size:12px; color:#475569;">
+                <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #F1F5F9;">
+                    <span>Accessibility Score:</span>
+                    <b>${catsMob.accessibility !== undefined ? catsMob.accessibility + '/100' : 'N/A'}</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #F1F5F9;">
+                    <span>Best Practices Score:</span>
+                    <b>${catsMob.best_practices !== undefined ? catsMob.best_practices + '/100' : 'N/A'}</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:4px 0;">
+                    <span>SEO Audit Score:</span>
+                    <b>${catsMob.seo !== undefined ? catsMob.seo + '/100' : 'N/A'}</b>
+                </div>
+            </div>
+        `;
+    }
+
+    switchGooglePerfTab(tabName) {
+        this.gperfState.activeTab = tabName;
+        if (this.gperfState.currentReport) {
+            this.renderGooglePerformanceReport(this.gperfState.currentReport);
+        }
+    }
+
+    renderGscTabContent(gsc) {
+        if (!gsc.is_connected && gsc.error) {
+            return `
+                <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:20px; color:#92400E; text-align:center;">
+                    <div style="font-size:24px; margin-bottom:6px;">⚠️</div>
+                    <div style="font-weight:700; font-size:14px; margin-bottom:4px;">Google Search Console Not Connected</div>
+                    <div style="font-size:12px; margin-bottom:12px;">${escapeHtml(gsc.error)}</div>
+                    <button class="btn btn-secondary btn-sm" onclick="app.openGoogleSettingsModal()">Configure Search Console Property</button>
+                </div>
+            `;
+        }
+
+        const queries = gsc.top_queries || [];
+        const pages = gsc.top_pages || [];
+        const devices = gsc.devices || [];
+        const countries = gsc.countries || [];
+
+        return `
+            <!-- Top Queries & Top Pages Grid -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(400px, 1fr)); gap:20px; margin-bottom:24px;">
+                <!-- Queries Table -->
+                <div>
+                    <h4 style="margin:0 0 10px 0; font-size:14px; font-weight:700;">Top Google Search Queries</h4>
+                    <div class="table-container" style="max-height:360px; overflow-y:auto;">
+                        <table style="font-size:12px; margin:0;">
+                            <thead>
+                                <tr>
+                                    <th>Query</th>
+                                    <th style="text-align:right;">Clicks</th>
+                                    <th style="text-align:right;">Impr</th>
+                                    <th style="text-align:right;">CTR</th>
+                                    <th style="text-align:right;">Avg Pos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${queries.length === 0 ? `<tr><td colspan="5" class="empty-state">No search queries recorded.</td></tr>` : queries.map(q => `
+                                    <tr>
+                                        <td><b>${escapeHtml(q.query || "")}</b></td>
+                                        <td style="text-align:right;">${(q.clicks || 0).toLocaleString()}</td>
+                                        <td style="text-align:right;">${(q.impressions || 0).toLocaleString()}</td>
+                                        <td style="text-align:right;">${(q.ctr || 0)}%</td>
+                                        <td style="text-align:right;">${(q.position || 0).toFixed(1)}</td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Pages Table -->
+                <div>
+                    <h4 style="margin:0 0 10px 0; font-size:14px; font-weight:700;">Top Search Landing Pages</h4>
+                    <div class="table-container" style="max-height:360px; overflow-y:auto;">
+                        <table style="font-size:12px; margin:0;">
+                            <thead>
+                                <tr>
+                                    <th>Page URL</th>
+                                    <th style="text-align:right;">Clicks</th>
+                                    <th style="text-align:right;">Impr</th>
+                                    <th style="text-align:right;">CTR</th>
+                                    <th style="text-align:right;">Avg Pos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${pages.length === 0 ? `<tr><td colspan="5" class="empty-state">No pages recorded.</td></tr>` : pages.map(p => `
+                                    <tr>
+                                        <td style="max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(p.page || "")}">
+                                            <a href="${escapeHtml(p.page || "")}" target="_blank" rel="noopener" style="color:#2563EB; text-decoration:none;">${escapeHtml(p.page || "")}</a>
+                                        </td>
+                                        <td style="text-align:right;">${(p.clicks || 0).toLocaleString()}</td>
+                                        <td style="text-align:right;">${(p.impressions || 0).toLocaleString()}</td>
+                                        <td style="text-align:right;">${(p.ctr || 0)}%</td>
+                                        <td style="text-align:right;">${(p.position || 0).toFixed(1)}</td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Devices and Countries Breakdown -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px;">
+                <!-- Device Breakdown -->
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:16px;">
+                    <h5 style="margin:0 0 12px 0; font-size:13px; font-weight:700;">Device Breakdown</h5>
+                    ${devices.length === 0 ? `<div style="font-size:12px; color:#64748B;">No device telemetry recorded.</div>` : devices.map(d => `
+                        <div style="margin-bottom:8px;">
+                            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
+                                <span style="font-weight:600; text-transform:capitalize;">${escapeHtml(d.device || "Unknown")}</span>
+                                <span>${(d.clicks || 0).toLocaleString()} clicks (${(d.impressions || 0).toLocaleString()} impr)</span>
+                            </div>
+                        </div>
+                    `).join("")}
+                </div>
+
+                <!-- Top Countries Breakdown -->
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:16px;">
+                    <h5 style="margin:0 0 12px 0; font-size:13px; font-weight:700;">Top Geographic Markets</h5>
+                    ${countries.length === 0 ? `<div style="font-size:12px; color:#64748B;">No country telemetry recorded.</div>` : countries.slice(0, 6).map(c => `
+                        <div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #F1F5F9;">
+                            <span style="font-weight:600; text-transform:uppercase;">${escapeHtml(c.country || "Unknown")}</span>
+                            <span>${(c.clicks || 0).toLocaleString()} clicks</span>
+                        </div>
+                    `).join("")}
+                </div>
+            </div>
+        `;
+    }
+
+    renderGa4TabContent(ga4) {
+        if (!ga4.is_connected && ga4.error) {
+            return `
+                <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:20px; color:#92400E; text-align:center;">
+                    <div style="font-size:24px; margin-bottom:6px;">⚠️</div>
+                    <div style="font-weight:700; font-size:14px; margin-bottom:4px;">Google Analytics 4 Not Connected</div>
+                    <div style="font-size:12px; margin-bottom:12px;">${escapeHtml(ga4.error)}</div>
+                    <button class="btn btn-secondary btn-sm" onclick="app.openGoogleSettingsModal()">Configure GA4 Property ID</button>
+                </div>
+            `;
+        }
+
+        const channels = ga4.channels || [];
+        const topPages = ga4.top_pages || [];
+        const countries = ga4.countries || [];
+
+        return `
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:20px; margin-bottom:24px;">
+                <!-- Acquisition Channels -->
+                <div>
+                    <h4 style="margin:0 0 10px 0; font-size:14px; font-weight:700;">Traffic Acquisition Channels</h4>
+                    <div class="table-container">
+                        <table style="font-size:12px; margin:0;">
+                            <thead>
+                                <tr>
+                                    <th>Channel Group</th>
+                                    <th style="text-align:right;">Sessions</th>
+                                    <th style="text-align:right;">Users</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${channels.length === 0 ? `<tr><td colspan="3" class="empty-state">No channel traffic recorded.</td></tr>` : channels.map(ch => `
+                                    <tr>
+                                        <td><b>${escapeHtml(ch.channel || "Unassigned")}</b></td>
+                                        <td style="text-align:right;">${(ch.sessions || 0).toLocaleString()}</td>
+                                        <td style="text-align:right;">${(ch.users || 0).toLocaleString()}</td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Top GA4 Landing Pages -->
+                <div>
+                    <h4 style="margin:0 0 10px 0; font-size:14px; font-weight:700;">Top Landing Pages (Views &amp; Sessions)</h4>
+                    <div class="table-container">
+                        <table style="font-size:12px; margin:0;">
+                            <thead>
+                                <tr>
+                                    <th>Page Path</th>
+                                    <th style="text-align:right;">Views</th>
+                                    <th style="text-align:right;">Sessions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${topPages.length === 0 ? `<tr><td colspan="3" class="empty-state">No page telemetry recorded.</td></tr>` : topPages.slice(0, 15).map(p => `
+                                    <tr>
+                                        <td style="max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(p.page_path || "")}">
+                                            <code>${escapeHtml(p.page_path || "")}</code>
+                                        </td>
+                                        <td style="text-align:right;">${(p.page_views || 0).toLocaleString()}</td>
+                                        <td style="text-align:right;">${(p.sessions || 0).toLocaleString()}</td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Country breakdown -->
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:16px;">
+                <h5 style="margin:0 0 12px 0; font-size:13px; font-weight:700;">GA4 Geographic Distribution</h5>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
+                    ${countries.length === 0 ? `<div style="font-size:12px; color:#64748B;">No country data recorded.</div>` : countries.slice(0, 8).map(c => `
+                        <div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 8px; background:#FFFFFF; border:1px solid #E2E8F0; border-radius:6px;">
+                            <span style="font-weight:600;">${escapeHtml(c.country || "Unknown")}</span>
+                            <span>${(c.sessions || 0).toLocaleString()} sessions</span>
+                        </div>
+                    `).join("")}
+                </div>
+            </div>
+        `;
+    }
+
+    openGoogleSettingsModal() {
+        const modal = $("googleSettingsModal");
+        if (!modal) return;
+        const wid = this.gperfState.websiteId;
+        const site = this.gperfState.websites.find(w => w.id === wid);
+        if (site) {
+            if ($("gperfModalWebsiteId")) $("gperfModalWebsiteId").value = site.id;
+            if ($("gperfModalWebsiteUrl")) $("gperfModalWebsiteUrl").value = `${site.name} (${site.url})`;
+            if ($("gperfModalGscProp")) $("gperfModalGscProp").value = site.gsc_property || "";
+            if ($("gperfModalGa4Id")) $("gperfModalGa4Id").value = site.ga4_property_id || "";
+        }
+        modal.classList.remove("hidden");
+    }
+
+    closeGoogleSettingsModal() {
+        const modal = $("googleSettingsModal");
+        if (modal) modal.classList.add("hidden");
+    }
+
+    async saveGoogleSettings() {
+        const wid = parseInt($("gperfModalWebsiteId").value, 10);
+        if (!wid) return;
+        const gscProp = ($("gperfModalGscProp").value || "").trim();
+        const ga4Id = ($("gperfModalGa4Id").value || "").trim();
+        const btn = $("btnSaveGoogleSettings");
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Saving...";
+        }
+        try {
+            const res = await jsonFetch(`${API_BASE}/google/settings/${wid}`, {
+                method: "POST",
+                body: JSON.stringify({ gsc_property: gscProp, ga4_property_id: ga4Id })
+            });
+            this.showNotification("Google connection settings saved successfully.", "success");
+            this.closeGoogleSettingsModal();
+            // Update cached website details
+            const site = this.gperfState.websites.find(w => w.id === wid);
+            if (site) {
+                site.gsc_property = gscProp;
+                site.ga4_property_id = ga4Id;
+            }
+            this.updateGoogleConnectionBadges(res);
+            await this.fetchGooglePerformanceReport();
+        } catch (err) {
+            this.showNotification("Failed to save settings: " + (err.message || err), "danger");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = "Save & Test Connection";
+            }
+        }
+    }
+
+    async exportGooglePerformance(format = "pdf") {
+        const rep = this.gperfState.currentReport;
+        if (!rep) {
+            this.showNotification("Please load website telemetry first to export data.", "warning");
+            return;
+        }
+
+        try {
+            this.showNotification(`Generating ${format.toUpperCase()} performance report...`, "info");
+            const res = await fetch(`${API_BASE}/google/export/${format}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
+                },
+                body: JSON.stringify(rep)
+            });
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            const target = rep.target_domain || "website";
+            a.download = `google_performance_${target}_${new Date().toISOString().slice(0, 10)}.${format === "excel" ? "xls" : format}`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

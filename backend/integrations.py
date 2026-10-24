@@ -53,6 +53,10 @@ BING_BASE = "https://ssl.bing.com/webmaster/api.svc/json"
 PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 GSC_BASE = "https://www.googleapis.com/webmasters/v3"
 GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly"
+GA4_PROPERTY_ID = os.getenv("GA4_PROPERTY_ID", "").strip()
+GA4_BASE = "https://analyticsdata.googleapis.com/v1beta"
+GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
+GOOGLE_COMBINED_SCOPES = [GSC_SCOPE, GA4_SCOPE]
 DFS_BASE = "https://api.dataforseo.com/v3"
 
 EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=6)
@@ -137,6 +141,8 @@ def status() -> dict[str, Any]:
                       "note": ps_note},
         "search_console": {"configured": gsc_configured(), "service_account_email": gsc_email,
                            "note": "Add the service-account email as a user on each Search Console property."},
+        "google_analytics_4": {"configured": ga4_configured(), "property_id": GA4_PROPERTY_ID,
+                               "note": "Google Analytics 4 Data API via service account or per-website property ID."},
         "bing_webmaster": {"configured": bing_configured(),
                            "note": "Free. Real Bing crawl stats and query telemetry. Set BING_API_KEY in .env."},
         "openpagerank": {"configured": openpagerank_configured(),
@@ -361,7 +367,7 @@ def _gsc_token() -> str:
         raise IntegrationError("google-auth is not installed. Run: pip install -r requirements.txt") from exc
     with _GSC_LOCK:
         if _GSC_CREDS is None:
-            _GSC_CREDS = service_account.Credentials.from_service_account_info(_gsc_info(), scopes=[GSC_SCOPE])
+            _GSC_CREDS = service_account.Credentials.from_service_account_info(_gsc_info(), scopes=GOOGLE_COMBINED_SCOPES)
         if not _GSC_CREDS.valid:
             _GSC_CREDS.refresh(GoogleAuthRequest())
         return _GSC_CREDS.token
@@ -414,7 +420,7 @@ def _gsc_query(site: str, start: str, end: str, dimensions: list[str], row_limit
     return out
 
 
-def search_console(target_url: str, days: int = 28) -> dict[str, Any]:
+def search_console(target_url: str, days: int = 28, property_url: Optional[str] = None) -> dict[str, Any]:
     if not gsc_configured():
         return {"ok": False, "configured": False, "error": "Search Console service account not configured."}
     days = max(1, min(int(days), 480))
@@ -423,7 +429,7 @@ def search_console(target_url: str, days: int = 28) -> dict[str, Any]:
     start = end - timedelta(days=days - 1)
 
     def run() -> dict[str, Any]:
-        site = gsc_match_property(target_url)
+        site = property_url or gsc_match_property(target_url)
         if not site:
             email = _gsc_info().get("client_email", "the service account")
             raise IntegrationError(f"No Search Console property found for {bare_domain(target_url)}. Add {email} as a user on the property in Search Console.")
@@ -436,13 +442,155 @@ def search_console(target_url: str, days: int = 28) -> dict[str, Any]:
             "top_pages": _gsc_query(site, s, e, ["page"], 100),
             "devices": _gsc_query(site, s, e, ["device"], 10),
             "countries": _gsc_query(site, s, e, ["country"], 15),
+            "dates": _gsc_query(site, s, e, ["date"], days),
             "source": "Google Search Console Search Analytics API (web search, final data)",
         }
 
     try:
-        return _cached("gsc", [target_url, days, start.isoformat()], run)
+        return _cached("gsc", [target_url, days, start.isoformat(), property_url or ""], run)
     except (requests.RequestException, IntegrationError, ValueError, OSError) as exc:
         return {"ok": False, "configured": True, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Google Analytics 4 (GA4 Data API, service account)
+# ---------------------------------------------------------------------------
+def ga4_configured(property_id: Optional[str] = None) -> bool:
+    """Returns True if Google service account and a GA4 property ID are present."""
+    return bool(gsc_configured() and ((property_id or "").strip() or GA4_PROPERTY_ID))
+
+
+def ga4(target_url: str, property_id: Optional[str] = None, days: int = 28) -> dict[str, Any]:
+    """Retrieve Google Analytics 4 traffic, user engagement, and acquisition data."""
+    pid = (property_id or GA4_PROPERTY_ID or "").strip()
+    if not pid:
+        return {
+            "ok": False,
+            "configured": False,
+            "error": "Google Analytics 4 Property ID not configured. Connect GA4 in website settings or set GA4_PROPERTY_ID in .env."
+        }
+    if not gsc_configured():
+        return {
+            "ok": False,
+            "configured": False,
+            "error": "Google Service Account key is required for GA4 Data API authentication."
+        }
+
+    days = max(1, min(int(days), 365))
+    end_date = "today"
+    start_date = f"{days}daysAgo"
+
+    def run() -> dict[str, Any]:
+        token = _gsc_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        # Query 1: Totals & Engagement Overview
+        body_totals = {
+            "dateRanges": [{"startDate": start_date, "endDate": end_date}],
+            "metrics": [
+                {"name": "sessions"},
+                {"name": "totalUsers"},
+                {"name": "activeUsers"},
+                {"name": "newUsers"},
+                {"name": "engagementRate"},
+                {"name": "averageSessionDuration"},
+                {"name": "bounceRate"}
+            ]
+        }
+        r_totals = requests.post(f"{GA4_BASE}/properties/{pid}:runReport", headers=headers, json=body_totals, timeout=30)
+        if r_totals.status_code != 200:
+            try:
+                err_msg = r_totals.json().get("error", {}).get("message", r_totals.text[:200])
+            except ValueError:
+                err_msg = f"HTTP {r_totals.status_code}"
+            raise IntegrationError(f"GA4 Data API Error ({r_totals.status_code}): {err_msg}")
+
+        d_totals = r_totals.json()
+        row_vals = (d_totals.get("rows") or [{}])[0].get("metricValues", [])
+        totals = {
+            "sessions": int(row_vals[0].get("value", 0)) if len(row_vals) > 0 else 0,
+            "total_users": int(row_vals[1].get("value", 0)) if len(row_vals) > 1 else 0,
+            "active_users": int(row_vals[2].get("value", 0)) if len(row_vals) > 2 else 0,
+            "new_users": int(row_vals[3].get("value", 0)) if len(row_vals) > 3 else 0,
+            "engagement_rate": round(float(row_vals[4].get("value", 0)) * 100, 2) if len(row_vals) > 4 else 0.0,
+            "average_session_duration": round(float(row_vals[5].get("value", 0)), 1) if len(row_vals) > 5 else 0.0,
+            "bounce_rate": round(float(row_vals[6].get("value", 0)) * 100, 2) if len(row_vals) > 6 else 0.0,
+        }
+
+        # Query 2: Traffic Channels (sessionDefaultChannelGroup)
+        body_channels = {
+            "dateRanges": [{"startDate": start_date, "endDate": end_date}],
+            "dimensions": [{"name": "sessionDefaultChannelGroup"}],
+            "metrics": [{"name": "sessions"}, {"name": "totalUsers"}]
+        }
+        r_channels = requests.post(f"{GA4_BASE}/properties/{pid}:runReport", headers=headers, json=body_channels, timeout=30)
+        channels = []
+        if r_channels.status_code == 200:
+            for row in (r_channels.json().get("rows") or []):
+                dim_vals = row.get("dimensionValues", [])
+                met_vals = row.get("metricValues", [])
+                channels.append({
+                    "channel": dim_vals[0].get("value", "Unassigned") if dim_vals else "Unassigned",
+                    "sessions": int(met_vals[0].get("value", 0)) if len(met_vals) > 0 else 0,
+                    "users": int(met_vals[1].get("value", 0)) if len(met_vals) > 1 else 0,
+                })
+
+        # Query 3: Top Landing Pages (pagePath)
+        body_pages = {
+            "dateRanges": [{"startDate": start_date, "endDate": end_date}],
+            "dimensions": [{"name": "pagePath"}],
+            "metrics": [{"name": "screenPageViews"}, {"name": "sessions"}],
+            "limit": 50
+        }
+        r_pages = requests.post(f"{GA4_BASE}/properties/{pid}:runReport", headers=headers, json=body_pages, timeout=30)
+        top_pages = []
+        if r_pages.status_code == 200:
+            for row in (r_pages.json().get("rows") or []):
+                dim_vals = row.get("dimensionValues", [])
+                met_vals = row.get("metricValues", [])
+                top_pages.append({
+                    "page_path": dim_vals[0].get("value", "") if dim_vals else "",
+                    "page_views": int(met_vals[0].get("value", 0)) if len(met_vals) > 0 else 0,
+                    "sessions": int(met_vals[1].get("value", 0)) if len(met_vals) > 0 else 0,
+                })
+
+        # Query 4: Countries
+        body_geo = {
+            "dateRanges": [{"startDate": start_date, "endDate": end_date}],
+            "dimensions": [{"name": "country"}],
+            "metrics": [{"name": "sessions"}],
+            "limit": 15
+        }
+        r_geo = requests.post(f"{GA4_BASE}/properties/{pid}:runReport", headers=headers, json=body_geo, timeout=30)
+        countries = []
+        if r_geo.status_code == 200:
+            for row in (r_geo.json().get("rows") or []):
+                dim_vals = row.get("dimensionValues", [])
+                met_vals = row.get("metricValues", [])
+                countries.append({
+                    "country": dim_vals[0].get("value", "") if dim_vals else "",
+                    "sessions": int(met_vals[0].get("value", 0)) if len(met_vals) > 0 else 0,
+                })
+
+        return {
+            "ok": True,
+            "configured": True,
+            "property_id": pid,
+            "days": days,
+            "totals": totals,
+            "channels": channels,
+            "top_pages": top_pages,
+            "countries": countries,
+            "source": "Google Analytics 4 Data API (v1beta, authorized service account)",
+        }
+
+    try:
+        return _cached("ga4", [pid, days, start_date], run)
+    except (requests.RequestException, IntegrationError, ValueError, OSError) as exc:
+        return {"ok": False, "configured": True, "property_id": pid, "error": str(exc)}
 
 
 # ---------------------------------------------------------------------------

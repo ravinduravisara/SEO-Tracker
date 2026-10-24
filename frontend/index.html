@@ -77,6 +77,10 @@
                 <span class="nav-icon">🔗</span>
                 <span>Backlink Analytics</span>
             </div>
+            <div class="nav-item" data-view="google_performance" data-permission="audits.view" onclick="app.navigate('google_performance')">
+                <span class="nav-icon">📊</span>
+                <span>Google &amp; Performance</span>
+            </div>
             <div class="nav-item" data-view="technical_report" data-permission="technical_report.view" onclick="app.navigate('technical_report')">
                 <span class="nav-icon">🛠️</span>
                 <span>Technical Report</span>
@@ -1272,6 +1276,96 @@
                 </div>
             </div>
         </div>
+
+        <!-- VIEW: GOOGLE & PERFORMANCE (PHASE 7) -->
+        <div id="viewGooglePerformance" class="admin-view">
+            <!-- Hero Search and Controls Card -->
+            <div class="card" style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h2 style="margin:0; font-size:22px; display:flex; align-items:center; gap:8px;">
+                            <span>📊 Google &amp; Performance Telemetry</span>
+                            <span class="pill" style="background:#EEF2FF; color:#4F46E5; font-size:11px;">Phase 7</span>
+                        </h2>
+                        <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">
+                            Authorized Google Search Console, Google Analytics 4, and real-user Core Web Vitals telemetry.
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <button class="btn btn-secondary btn-sm" onclick="app.openGoogleSettingsModal()">⚙️ Configure Properties</button>
+                        <div style="display:inline-flex; gap:4px;">
+                            <button class="btn btn-secondary btn-sm" onclick="app.exportGooglePerformance('pdf')" title="Export Vector PDF">📄 PDF</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.exportGooglePerformance('excel')" title="Export Excel Workbook">📊 Excel</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.exportGooglePerformance('csv')" title="Export CSV Data">📋 CSV</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Controls Bar -->
+                <div style="display:grid; grid-template-columns: 2fr 1fr auto; gap:12px; align-items:center; margin-bottom:14px;">
+                    <div>
+                        <label style="display:block; font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase;">Select Client Website</label>
+                        <select id="gperfWebsiteSelect" class="form-input" style="width:100%;" onchange="app.handleGoogleWebsiteChange()">
+                            <option value="">-- Choose website --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase;">Date Range</label>
+                        <select id="gperfDaysSelect" class="form-input" style="width:100%;" onchange="app.handleGoogleDaysChange()">
+                            <option value="7">Last 7 Days</option>
+                            <option value="28" selected>Last 28 Days (Default)</option>
+                            <option value="90">Last 90 Days (Quarter)</option>
+                            <option value="180">Last 6 Months</option>
+                            <option value="365">Last 12 Months</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; align-items:flex-end;">
+                        <button id="btnFetchGooglePerf" class="btn btn-primary" onclick="app.fetchGooglePerformanceReport()" style="height:38px; display:inline-flex; align-items:center; gap:6px;">
+                            <span>⚡ Refresh Telemetry</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Connection Status Ribbon -->
+                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:12px;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span style="font-weight:700; color:#334155;">Search Console:</span>
+                            <span id="gperfGscStatusBadge" class="pill" style="background:#F1F5F9; color:#475569; font-size:11px;">Checking...</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span style="font-weight:700; color:#334155;">Google Analytics 4:</span>
+                            <span id="gperfGa4StatusBadge" class="pill" style="background:#F1F5F9; color:#475569; font-size:11px;">Checking...</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span style="font-weight:700; color:#334155;">PageSpeed &amp; CWV:</span>
+                            <span id="gperfPsiStatusBadge" class="pill" style="background:#F1F5F9; color:#475569; font-size:11px;">Checking...</span>
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:#64748B;" id="gperfLastCheckedText">
+                        Status verified on load
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ranking Disclaimer Banner -->
+            <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px 16px; margin-bottom:20px; display:flex; align-items:flex-start; gap:12px;">
+                <span style="font-size:18px; line-height:1;">ℹ️</span>
+                <div style="font-size:12px; color:#1E40AF; line-height:1.5;">
+                    <b>Data Measurement Boundaries &amp; Ranking Disclaimer:</b> Google Search Console average position represents aggregated impressions and geographic query distribution over time. It does not represent an exact live rank on any single searcher's device. Real-user Core Web Vitals field data represents 75th percentile (p75) Chrome UX Report measurements and is strictly separated from synthetic Lighthouse lab simulations.
+                </div>
+            </div>
+
+            <!-- Dynamic Content Area -->
+            <div id="gperfContentArea">
+                <div class="empty-state" style="padding:48px 20px;">
+                    <div style="font-size:36px; margin-bottom:12px;">📊</div>
+                    <h3 style="margin:0 0 6px 0;">No Website Telemetry Loaded</h3>
+                    <p style="margin:0; font-size:13px; color:var(--text-muted);">Select a client website from the dropdown above to load verified Google Search Console, GA4, and Core Web Vitals telemetry.</p>
+                </div>
+            </div>
+        </div>
+
         <div id="viewClients" class="admin-view">
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
@@ -2172,6 +2266,57 @@
         </div>
         <div id="blSavedModalBody">
             <div style="text-align:center; padding:32px; color:var(--text-muted);">Loading snapshots...</div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: GOOGLE SETTINGS & CONNECTION CONFIGURATION (PHASE 7) -->
+<div id="googleSettingsModal" class="login-modal-overlay hidden" style="align-items:flex-start; padding:40px 16px; overflow-y:auto; z-index:9999;">
+    <div class="card" style="max-width:620px; width:100%; margin:0 auto; padding:28px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+            <h3 style="margin:0; font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                <span>⚙️ Configure Google Connections</span>
+            </h3>
+            <button class="btn btn-secondary btn-sm" onclick="app.closeGoogleSettingsModal()">✕ Close</button>
+        </div>
+        <div style="font-size:13px; line-height:1.5; color:#334155;">
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#1E293B; margin-bottom:4px;">Website Target</label>
+                <input id="gperfModalWebsiteUrl" type="text" class="form-input" readonly style="width:100%; background:#F8FAFC; color:#64748B;">
+                <input id="gperfModalWebsiteId" type="hidden">
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#1E293B; margin-bottom:4px;">
+                    Google Search Console Property URL
+                </label>
+                <input id="gperfModalGscProp" type="text" class="form-input" placeholder="e.g. sc-domain:example.com or https://example.com/" style="width:100%;">
+                <div style="font-size:11px; color:#64748B; margin-top:4px;">
+                    Leave blank to auto-match domain, or provide exact Search Console URL or domain property identifier.
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#1E293B; margin-bottom:4px;">
+                    Google Analytics 4 Property ID
+                </label>
+                <input id="gperfModalGa4Id" type="text" class="form-input" placeholder="e.g. 123456789" style="width:100%;">
+                <div style="font-size:11px; color:#64748B; margin-top:4px;">
+                    Numeric GA4 Property ID (Admin &gt; Property Settings &gt; Property Details).
+                </div>
+            </div>
+
+            <div style="background:#F1F5F9; border:1px solid #CBD5E1; border-radius:8px; padding:12px; margin-bottom:18px;">
+                <div style="font-size:12px; font-weight:700; color:#0F172A; margin-bottom:4px;">🔑 Service Account Access Requirement</div>
+                <div style="font-size:11px; color:#475569; line-height:1.4;">
+                    Ensure your Google service account email has been added as a <b>Viewer</b> (or Read-Only user) in both Google Search Console and GA4 Property Access Management.
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button class="btn btn-secondary" onclick="app.closeGoogleSettingsModal()">Cancel</button>
+                <button class="btn btn-primary" id="btnSaveGoogleSettings" onclick="app.saveGoogleSettings()">Save &amp; Test Connection</button>
+            </div>
         </div>
     </div>
 </div>

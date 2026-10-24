@@ -726,6 +726,9 @@ class Website(Base):
     url = Column(String, nullable=False)
     name = Column(String, default="")
     status = Column(String, default="ACTIVE", nullable=False)
+    gsc_property = Column(String, default="")
+    ga4_property_id = Column(String, default="")
+    connection_status_json = Column(Text, default="{}")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -1059,6 +1062,11 @@ def init_db():
             "status": "VARCHAR NOT NULL DEFAULT 'ACTIVE'",
             "last_login_at": "DATETIME",
             "updated_at": "DATETIME",
+        },
+        "websites": {
+            "gsc_property": "VARCHAR DEFAULT ''",
+            "ga4_property_id": "VARCHAR DEFAULT ''",
+            "connection_status_json": "TEXT NOT NULL DEFAULT '{}'",
         },
     }
     with engine.begin() as connection:

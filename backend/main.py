@@ -76,6 +76,7 @@ from . import integrations
 from . import keyword_engine
 from . import competitor_engine
 from . import backlink_engine
+from . import google_service
 from .seo_engine.signals import extract_signals
 from .seo_engine import run_engine, RULESET_VERSION, WEIGHTS as ENGINE_WEIGHTS, band as engine_band, maturity as engine_maturity
 from .seo_engine.narrative import category_explanations, clean_prose
@@ -2551,6 +2552,129 @@ def backlink_export_pdf_endpoint(
     pdf_bytes = backlink_engine.generate_backlink_pdf(payload)
     target = backlink_engine.bare_domain(payload.get("target_domain") or "domain")
     filename = f"backlinks_report_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+# -----------------------------------------------------------------------------
+# PHASE 7: GOOGLE SEARCH CONSOLE, ANALYTICS 4 & PERFORMANCE
+# -----------------------------------------------------------------------------
+
+class GoogleSettingsRequest(BaseModel):
+    gsc_property: Optional[str] = None
+    ga4_property_id: Optional[str] = None
+
+
+@app.get("/api/google/websites")
+def google_websites_list(
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    websites = db.query(Website).order_by(Website.name.asc(), Website.url.asc()).all()
+    out = []
+    for w in websites:
+        client = db.query(Client).filter(Client.id == w.client_id).first() if w.client_id else None
+        out.append({
+            "id": w.id,
+            "url": w.url,
+            "name": w.name or (client.company if client else "") or integrations.bare_domain(w.url),
+            "client_name": client.name if client else "",
+            "client_company": client.company if client else "",
+            "gsc_property": w.gsc_property or "",
+            "ga4_property_id": w.ga4_property_id or "",
+            "status": w.status
+        })
+    return out
+
+
+@app.get("/api/google/connections/{website_id}")
+def google_connections_endpoint(
+    website_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    website = db.query(Website).filter(Website.id == website_id).first()
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found.")
+    return google_service.check_google_connections(website, db=db)
+
+
+@app.post("/api/google/settings/{website_id}")
+def google_settings_endpoint(
+    website_id: int,
+    req: GoogleSettingsRequest,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    website = db.query(Website).filter(Website.id == website_id).first()
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found.")
+    if req.gsc_property is not None:
+        website.gsc_property = req.gsc_property.strip()
+    if req.ga4_property_id is not None:
+        website.ga4_property_id = req.ga4_property_id.strip()
+    db.commit()
+    db.refresh(website)
+    return google_service.check_google_connections(website, db=db)
+
+
+@app.get("/api/google/performance/{website_id}")
+def google_performance_endpoint(
+    website_id: int,
+    days: int = Query(28, ge=1, le=480),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    website = db.query(Website).filter(Website.id == website_id).first()
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found.")
+    return google_service.get_client_performance_report(website, days=days, db=db)
+
+
+@app.post("/api/google/export/csv")
+def google_export_csv_endpoint(
+    payload: dict[str, Any] = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    rep = payload.get("report") if "report" in payload else payload
+    csv_text = google_service.generate_performance_csv(rep)
+    target = google_service.integrations.bare_domain(rep.get("target_domain") or "website")
+    filename = f"google_performance_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    return Response(
+        content=csv_text.encode("utf-8"),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/google/export/excel")
+def google_export_excel_endpoint(
+    payload: dict[str, Any] = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    rep = payload.get("report") if "report" in payload else payload
+    xml_text = google_service.generate_performance_excel_xml(rep)
+    target = google_service.integrations.bare_domain(rep.get("target_domain") or "website")
+    filename = f"google_performance_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.xls"
+    return Response(
+        content=xml_text.encode("utf-8"),
+        media_type="application/vnd.ms-excel",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/google/export/pdf")
+def google_export_pdf_endpoint(
+    payload: dict[str, Any] = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    rep = payload.get("report") if "report" in payload else payload
+    pdf_bytes = google_service.generate_performance_pdf(rep)
+    target = google_service.integrations.bare_domain(rep.get("target_domain") or "website")
+    filename = f"google_performance_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
