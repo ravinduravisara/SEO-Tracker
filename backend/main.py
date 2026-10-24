@@ -18,7 +18,7 @@ from collections import Counter, defaultdict, deque
 from datetime import datetime, timezone, timedelta
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 from urllib.parse import parse_qsl, urlencode, urldefrag, urljoin, urlparse, urlunparse, quote, quote_plus
 from urllib.robotparser import RobotFileParser
 
@@ -36,7 +36,8 @@ from .database import (
     Base, engine, SessionLocal, get_db,
     Client, Website, Audit, PublicReport, SEOLead,
     TeamInvitation, ActivityLog, LeadNote, init_db, PublicScan,
-    ScheduledAudit, KeywordProject, SavedKeyword
+    ScheduledAudit, KeywordProject, SavedKeyword,
+    TrackedKeyword, RankingObservation, RankingAlert
 )
 from .security import (
     bootstrap_admin_account,
@@ -77,6 +78,7 @@ from . import keyword_engine
 from . import competitor_engine
 from . import backlink_engine
 from . import google_service
+from . import rank_tracker
 from .seo_engine.signals import extract_signals
 from .seo_engine import run_engine, RULESET_VERSION, WEIGHTS as ENGINE_WEIGHTS, band as engine_band, maturity as engine_maturity
 from .seo_engine.narrative import category_explanations, clean_prose
@@ -2675,6 +2677,299 @@ def google_export_pdf_endpoint(
     pdf_bytes = google_service.generate_performance_pdf(rep)
     target = google_service.integrations.bare_domain(rep.get("target_domain") or "website")
     filename = f"google_performance_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+# -----------------------------------------------------------------------------
+# PHASE 8: KEYWORD RANK TRACKING & LIVE SERP MONITORING
+# -----------------------------------------------------------------------------
+
+class AddTrackedKeywordsRequest(BaseModel):
+    keywords: List[str]
+    target_domain: str
+    client_id: Optional[int] = None
+    website_id: Optional[int] = None
+    location_code: int = 2840
+    location_name: str = "United States"
+    language_code: str = "en"
+    device: str = "desktop"
+    competitor_domains: Optional[List[str]] = None
+    tags: str = ""
+    check_frequency: str = "daily"
+    run_initial_check: bool = True
+
+
+class UpdateTrackedKeywordRequest(BaseModel):
+    competitor_domains: Optional[List[str]] = None
+    device: Optional[str] = None
+    check_frequency: Optional[str] = None
+    tags: Optional[str] = None
+    alert_enabled: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
+@app.get("/api/rankings/overview")
+def rankings_overview_endpoint(
+    target_domain: Optional[str] = Query(None),
+    website_id: Optional[int] = Query(None),
+    device: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    return rank_tracker.get_rankings_overview(
+        db, target_domain=target_domain, website_id=website_id, device=device
+    )
+
+
+@app.get("/api/rankings/keywords")
+def rankings_list_keywords_endpoint(
+    target_domain: Optional[str] = Query(None),
+    website_id: Optional[int] = Query(None),
+    tag: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    query = db.query(TrackedKeyword).filter(TrackedKeyword.is_active == 1)
+    if target_domain:
+        query = query.filter(TrackedKeyword.target_domain == rank_tracker.bare_domain(target_domain))
+    if website_id:
+        query = query.filter(TrackedKeyword.website_id == website_id)
+    if tag:
+        query = query.filter(TrackedKeyword.tags.contains(tag))
+
+    items = query.order_by(TrackedKeyword.keyword.asc()).all()
+    out = []
+    for k in items:
+        out.append({
+            "id": k.id,
+            "keyword": k.keyword,
+            "target_domain": k.target_domain,
+            "device": k.device,
+            "location_name": k.location_name,
+            "location_code": k.location_code,
+            "language_code": k.language_code,
+            "competitor_domains": json.loads(k.competitor_domains or "[]"),
+            "current_position": k.current_position,
+            "previous_position": k.previous_position,
+            "position_change": k.position_change,
+            "best_position": k.best_position,
+            "latest_url": k.latest_url,
+            "search_volume": k.search_volume,
+            "cpc": k.cpc,
+            "keyword_difficulty": k.keyword_difficulty,
+            "check_frequency": k.check_frequency,
+            "tags": k.tags,
+            "alert_enabled": bool(k.alert_enabled),
+            "last_checked_at": k.last_checked_at.isoformat() if k.last_checked_at else None,
+            "created_at": k.created_at.isoformat() if k.created_at else None,
+        })
+    return out
+
+
+@app.post("/api/rankings/keywords")
+def rankings_add_keywords_endpoint(
+    req: AddTrackedKeywordsRequest,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    if not req.keywords:
+        raise HTTPException(status_code=400, detail="Please provide at least one keyword.")
+    if not req.target_domain:
+        raise HTTPException(status_code=400, detail="Target domain is required.")
+
+    created = rank_tracker.add_tracked_keywords(
+        db=db,
+        keywords=req.keywords,
+        target_domain=req.target_domain,
+        client_id=req.client_id,
+        website_id=req.website_id,
+        location_code=req.location_code,
+        location_name=req.location_name,
+        language_code=req.language_code,
+        device=req.device,
+        competitor_domains=req.competitor_domains,
+        tags=req.tags,
+        check_frequency=req.check_frequency,
+    )
+
+    if req.run_initial_check:
+        for tk in created:
+            try:
+                rank_tracker.check_keyword_ranking(db, tk.id)
+            except Exception as exc:
+                logger.warning("Initial ranking check error for keyword %s: %s", tk.id, exc)
+
+    return {"status": "success", "count": len(created), "ids": [k.id for k in created]}
+
+
+@app.get("/api/rankings/keywords/{keyword_id}")
+def rankings_keyword_history_endpoint(
+    keyword_id: int,
+    days: int = Query(90, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    try:
+        return rank_tracker.get_keyword_history(db, keyword_id, days=days)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.put("/api/rankings/keywords/{keyword_id}")
+def rankings_update_keyword_endpoint(
+    keyword_id: int,
+    req: UpdateTrackedKeywordRequest,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    tk = db.query(TrackedKeyword).filter(TrackedKeyword.id == keyword_id).first()
+    if not tk:
+        raise HTTPException(status_code=404, detail="Tracked keyword not found.")
+
+    if req.competitor_domains is not None:
+        comps = [rank_tracker.bare_domain(c) for c in req.competitor_domains if rank_tracker.bare_domain(c)]
+        tk.competitor_domains = json.dumps(comps)
+    if req.device is not None:
+        tk.device = "mobile" if req.device.lower() == "mobile" else "desktop"
+    if req.check_frequency is not None:
+        tk.check_frequency = req.check_frequency
+    if req.tags is not None:
+        tk.tags = req.tags
+    if req.alert_enabled is not None:
+        tk.alert_enabled = 1 if req.alert_enabled else 0
+    if req.is_active is not None:
+        tk.is_active = 1 if req.is_active else 0
+
+    db.commit()
+    db.refresh(tk)
+    return {"status": "success", "keyword_id": tk.id}
+
+
+@app.delete("/api/rankings/keywords/{keyword_id}")
+def rankings_delete_keyword_endpoint(
+    keyword_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    tk = db.query(TrackedKeyword).filter(TrackedKeyword.id == keyword_id).first()
+    if not tk:
+        raise HTTPException(status_code=404, detail="Tracked keyword not found.")
+    db.delete(tk)
+    db.commit()
+    return {"status": "success", "message": f"Keyword '{tk.keyword}' deleted successfully."}
+
+
+@app.post("/api/rankings/check/{keyword_id}")
+def rankings_check_keyword_endpoint(
+    keyword_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    try:
+        return rank_tracker.check_keyword_ranking(db, keyword_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/rankings/check-all")
+def rankings_check_all_endpoint(
+    target_domain: Optional[str] = Query(None),
+    website_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    return rank_tracker.check_all_rankings(db, target_domain=target_domain, website_id=website_id)
+
+
+@app.get("/api/rankings/alerts")
+def rankings_list_alerts_endpoint(
+    target_domain: Optional[str] = Query(None),
+    unread_only: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    query = db.query(RankingAlert)
+    if target_domain:
+        query = query.filter(RankingAlert.target_domain == rank_tracker.bare_domain(target_domain))
+    if unread_only:
+        query = query.filter(RankingAlert.is_read == 0)
+    alerts = query.order_by(RankingAlert.created_at.desc()).limit(100).all()
+    return [{
+        "id": a.id,
+        "tracked_keyword_id": a.tracked_keyword_id,
+        "target_domain": a.target_domain,
+        "keyword": a.keyword,
+        "alert_type": a.alert_type,
+        "severity": a.severity,
+        "message": a.message,
+        "previous_position": a.previous_position,
+        "new_position": a.new_position,
+        "is_read": bool(a.is_read),
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    } for a in alerts]
+
+
+@app.post("/api/rankings/alerts/{alert_id}/read")
+def rankings_mark_alert_read_endpoint(
+    alert_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    alert = db.query(RankingAlert).filter(RankingAlert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found.")
+    alert.is_read = 1
+    db.commit()
+    return {"status": "success", "alert_id": alert.id}
+
+
+@app.post("/api/rankings/export/csv")
+def rankings_export_csv_endpoint(
+    payload: dict[str, Any] = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    overview = payload.get("overview") if "overview" in payload else payload
+    csv_text = rank_tracker.generate_rankings_csv(overview)
+    target = rank_tracker.bare_domain(overview.get("target_domain") or "rankings")
+    filename = f"keyword_rankings_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    return Response(
+        content=csv_text.encode("utf-8"),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/rankings/export/excel")
+def rankings_export_excel_endpoint(
+    payload: dict[str, Any] = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    overview = payload.get("overview") if "overview" in payload else payload
+    xml_text = rank_tracker.generate_rankings_excel_xml(overview)
+    target = rank_tracker.bare_domain(overview.get("target_domain") or "rankings")
+    filename = f"keyword_rankings_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.xls"
+    return Response(
+        content=xml_text.encode("utf-8"),
+        media_type="application/vnd.ms-excel",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/rankings/export/pdf")
+def rankings_export_pdf_endpoint(
+    payload: dict[str, Any] = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    overview = payload.get("overview") if "overview" in payload else payload
+    pdf_bytes = rank_tracker.generate_rankings_pdf(overview)
+    target = rank_tracker.bare_domain(overview.get("target_domain") or "rankings")
+    filename = f"keyword_rankings_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

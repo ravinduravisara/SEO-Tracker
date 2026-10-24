@@ -131,6 +131,16 @@ class SEOAdminApp {
             websites: [],
             activeTab: "gsc"
         };
+        this.rankState = {
+            currentOverview: null,
+            targetDomain: "",
+            websiteId: null,
+            device: "desktop",
+            activeFilter: "all",
+            activeTab: "keywords",
+            searchQuery: "",
+            loading: false
+        };
         this.init();
     }
 
@@ -369,7 +379,8 @@ class SEOAdminApp {
             source_audit: "audits.run",
             technology_detector: "tech_detector.view",
             backlink_analytics: "audits.view",
-            google_performance: "audits.view"
+            google_performance: "audits.view",
+            rank_tracking: "audits.view"
         };
 
         const requiredPerm = viewPermissions[view];
@@ -426,7 +437,8 @@ class SEOAdminApp {
             keyword_magic: { id: "viewKeywordMagic", title: "Keyword Magic Tool", breadcrumb: "Research • SEMrush Inspired Keyword Intelligence" },
             competitor_analysis: { id: "viewCompetitorAnalysis", title: "Competitor Analysis", breadcrumb: "Intelligence • Head-to-Head Benchmarks & Market Gaps" },
             backlink_analytics: { id: "viewBacklinkAnalytics", title: "Backlink Analytics", breadcrumb: "Intelligence • Indexed Backlinks & Internal Equity Modeling" },
-            google_performance: { id: "viewGooglePerformance", title: "Google & Performance", breadcrumb: "Telemetry • Search Console, Analytics 4 & Core Web Vitals" }
+            google_performance: { id: "viewGooglePerformance", title: "Google & Performance", breadcrumb: "Telemetry • Search Console, Analytics 4 & Core Web Vitals" },
+            rank_tracking: { id: "viewRankTracking", title: "Keyword Rank Tracking", breadcrumb: "Telemetry • Live Google SERP Positions & Competitor Benchmarks" }
         };
 
         const target = viewMap[view] || viewMap.dashboard;
@@ -446,6 +458,7 @@ class SEOAdminApp {
         else if (view === "competitor_analysis") this.loadCompetitorAnalysis();
         else if (view === "backlink_analytics") this.loadBacklinkAnalytics();
         else if (view === "google_performance") this.loadGooglePerformance();
+        else if (view === "rank_tracking") this.loadRankings();
         else if (view === "clients") this.loadClients();
         else if (view === "audits") this.loadAudits();
         else if (view === "leads") this.loadLeads();
@@ -6260,6 +6273,790 @@ class SEOAdminApp {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
             this.showNotification(`Downloaded ${format.toUpperCase()} report successfully.`, "success");
+        } catch (err) {
+            this.showNotification(`Export failed: ${err.message || err}`, "danger");
+        }
+    }
+
+    /* -------------------------------------------------------------
+       PHASE 8: KEYWORD RANK TRACKING & LIVE SERP MONITORING
+    -------------------------------------------------------------- */
+
+    async loadRankings() {
+        try {
+            // Load available client websites for dropdown
+            const websites = await jsonFetch(`${API_BASE}/google/websites`);
+            const select = $("rankDomainSelect");
+            if (select) {
+                if (websites && websites.length > 0) {
+                    select.innerHTML = websites.map(w => {
+                        const dom = (w.url || "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").replace(/^www\./i, "");
+                        return `<option value="${dom}" data-wid="${w.id}">${escapeHtml(w.name)} (${dom})</option>`;
+                    }).join("");
+
+                    if (!this.rankState.targetDomain || !websites.some(w => w.url.includes(this.rankState.targetDomain))) {
+                        const firstDom = (websites[0].url || "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").replace(/^www\./i, "");
+                        this.rankState.targetDomain = firstDom;
+                        this.rankState.websiteId = websites[0].id;
+                    }
+                    select.value = this.rankState.targetDomain;
+                } else {
+                    select.innerHTML = `<option value="">-- No websites registered --</option>`;
+                }
+            }
+            await this.loadRankingsOverview();
+        } catch (err) {
+            console.error("Failed to load ranking domains:", err);
+            await this.loadRankingsOverview();
+        }
+    }
+
+    async handleRankDomainChange() {
+        const select = $("rankDomainSelect");
+        if (!select || !select.value) return;
+        this.rankState.targetDomain = select.value.trim();
+        const opt = select.options[select.selectedIndex];
+        if (opt && opt.dataset.wid) {
+            this.rankState.websiteId = parseInt(opt.dataset.wid, 10);
+        }
+        await this.loadRankingsOverview();
+    }
+
+    async handleRankDeviceChange() {
+        const select = $("rankDeviceSelect");
+        if (!select) return;
+        this.rankState.device = select.value;
+        await this.loadRankingsOverview();
+    }
+
+    async loadRankingsOverview() {
+        const domain = this.rankState.targetDomain || "";
+        const device = this.rankState.device || "";
+        const content = $("rankContentArea");
+
+        if (content) {
+            content.innerHTML = `
+                <div class="card" style="padding:48px 20px; text-align:center;">
+                    <div style="font-size:36px; margin-bottom:12px;">⏳</div>
+                    <h3 style="margin:0 0 8px 0;">Loading Keyword Rankings...</h3>
+                    <p style="margin:0; font-size:13px; color:var(--text-muted);">Fetching live SERP positions, competitor benchmarks, and rank volatility analytics...</p>
+                </div>
+            `;
+        }
+
+        try {
+            let url = `${API_BASE}/rankings/overview?`;
+            if (domain) url += `target_domain=${encodeURIComponent(domain)}&`;
+            if (device) url += `device=${encodeURIComponent(device)}&`;
+            const data = await jsonFetch(url);
+            this.rankState.currentOverview = data;
+            this.renderRankingsContent();
+        } catch (err) {
+            if (content) {
+                content.innerHTML = `
+                    <div class="card" style="padding:40px 20px; text-align:center;">
+                        <div style="font-size:36px; color:#EF4444; margin-bottom:12px;">⚠️</div>
+                        <h3 style="margin:0 0 8px 0; color:#EF4444;">Failed to Load Rankings</h3>
+                        <p style="margin:0 0 16px 0; font-size:13px; color:var(--text-muted);">${escapeHtml(err.message || String(err))}</p>
+                        <button class="btn btn-secondary btn-sm" onclick="app.loadRankingsOverview()">Try Again</button>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    renderRankingsContent() {
+        const content = $("rankContentArea");
+        const data = this.rankState.currentOverview;
+        if (!content || !data) return;
+
+        const total = data.total_keywords || 0;
+        const avgPos = data.average_position || 0.0;
+        const vis = data.visibility_score || 0.0;
+        const dist = data.distribution || {};
+        const winners = data.winners || [];
+        const losers = data.losers || [];
+        const alerts = data.recent_alerts || [];
+        const unreadAlerts = alerts.filter(a => !a.is_read);
+
+        // Update badge counters
+        const alertsBadge = $("rankAlertsBadge");
+        if (alertsBadge) {
+            if (unreadAlerts.length > 0) {
+                alertsBadge.style.display = "inline";
+                alertsBadge.textContent = String(unreadAlerts.length);
+            } else {
+                alertsBadge.style.display = "none";
+            }
+        }
+
+        if ($("countFilterAll")) $("countFilterAll").textContent = String(total);
+        if ($("countFilterTop3")) $("countFilterTop3").textContent = String(dist.top_3 || 0);
+        if ($("countFilterTop10")) $("countFilterTop10").textContent = String(dist.top_10 || 0);
+        if ($("countFilterTop20")) $("countFilterTop20").textContent = String(dist.top_20 || 0);
+        if ($("countFilterWinners")) $("countFilterWinners").textContent = String(winners.length);
+        if ($("countFilterLosers")) $("countFilterLosers").textContent = String(losers.length);
+        if ($("countFilterUnranked")) $("countFilterUnranked").textContent = String(dist.unranked || 0);
+
+        if (total === 0) {
+            content.innerHTML = `
+                <div class="card" style="padding:48px 20px; text-align:center;">
+                    <div style="font-size:36px; margin-bottom:12px;">🎯</div>
+                    <h3 style="margin:0 0 6px 0;">No Tracked Keywords Registered</h3>
+                    <p style="margin:0 0 16px 0; font-size:13px; color:var(--text-muted);">
+                        No active keywords found for <b>${escapeHtml(this.rankState.targetDomain || "this domain")}</b>.
+                        Add target search terms to monitor live Google rankings and competitor movements.
+                    </p>
+                    <button class="btn btn-primary btn-sm" onclick="app.openAddKeywordsModal()">+ Add Target Keywords</button>
+                </div>
+            `;
+            return;
+        }
+
+        const activeTab = this.rankState.activeTab || "keywords";
+
+        content.innerHTML = `
+            <!-- 4 Top KPI Scorecards -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:16px; margin-bottom:20px;">
+                <div class="card" style="padding:18px;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Tracked Keywords</div>
+                    <div style="font-size:26px; font-weight:800; color:#1E293B; margin:6px 0 2px 0;">${total.toLocaleString()}</div>
+                    <div style="font-size:12px; color:#64748B;">Device: <b style="text-transform:capitalize;">${this.rankState.device || "All"}</b></div>
+                </div>
+
+                <div class="card" style="padding:18px;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Average SERP Position</div>
+                    <div style="font-size:26px; font-weight:800; color:#4F46E5; margin:6px 0 2px 0;">#${avgPos.toFixed(1)}</div>
+                    <div style="font-size:12px; color:#64748B;">Top 10 Terms: <b>${(dist.top_10 || 0).toLocaleString()}</b></div>
+                </div>
+
+                <div class="card" style="padding:18px;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Visibility Index (SOV)</div>
+                    <div style="font-size:26px; font-weight:800; color:#10B981; margin:6px 0 2px 0;">${vis.toFixed(1)}%</div>
+                    <div style="font-size:12px; color:#64748B;">Organic CTR Share of Voice</div>
+                </div>
+
+                <div class="card" style="padding:18px;">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Ranking Volatility</div>
+                    <div style="font-size:22px; font-weight:800; color:#1E293B; margin:8px 0 2px 0; display:flex; align-items:center; gap:8px;">
+                        <span style="color:#10B981; font-size:18px;">🟢 +${winners.length}</span>
+                        <span style="color:#EF4444; font-size:18px;">🔴 -${losers.length}</span>
+                    </div>
+                    <div style="font-size:12px; color:#64748B;">${winners.length} improved, ${losers.length} dropped</div>
+                </div>
+            </div>
+
+            <!-- Position Distribution Stacked Bar -->
+            <div class="card" style="padding:16px 20px; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div style="font-size:12px; font-weight:700; color:#1E293B;">Google SERP Position Distribution</div>
+                    <div style="font-size:11px; color:#64748B;">
+                        Top 3: <b>${dist.top_3 || 0}</b> | Top 10: <b>${dist.top_10 || 0}</b> | Top 20: <b>${dist.top_20 || 0}</b> | Unranked: <b>${dist.unranked || 0}</b>
+                    </div>
+                </div>
+                <div style="height:12px; border-radius:6px; background:#F1F5F9; overflow:hidden; display:flex;">
+                    <div style="width:${(dist.top_3 / total * 100).toFixed(1)}%; background:#10B981;" title="Top 3: ${dist.top_3}"></div>
+                    <div style="width:${((dist.top_10 - dist.top_3) / total * 100).toFixed(1)}%; background:#3B82F6;" title="Pos 4-10: ${dist.top_10 - dist.top_3}"></div>
+                    <div style="width:${((dist.top_20 - dist.top_10) / total * 100).toFixed(1)}%; background:#6366F1;" title="Pos 11-20: ${dist.top_20 - dist.top_10}"></div>
+                    <div style="width:${((dist.top_50 - dist.top_20) / total * 100).toFixed(1)}%; background:#F59E0B;" title="Pos 21-50: ${dist.top_50 - dist.top_20}"></div>
+                    <div style="width:${((dist.top_100 - dist.top_50) / total * 100).toFixed(1)}%; background:#94A3B8;" title="Pos 51-100: ${dist.top_100 - dist.top_50}"></div>
+                    <div style="width:${(dist.unranked / total * 100).toFixed(1)}%; background:#E2E8F0;" title="Unranked: ${dist.unranked}"></div>
+                </div>
+            </div>
+
+            <!-- Deep-Dive Tabs -->
+            <div class="card" style="padding:0; overflow:hidden;">
+                <div style="display:flex; border-bottom:1px solid var(--border); background:#F8FAFC;">
+                    <button class="tab-btn ${activeTab === 'keywords' ? 'active' : ''}" onclick="app.switchRankTab('keywords')" style="padding:14px 20px; font-size:13px; font-weight:700; border:none; background:none; cursor:pointer;">
+                        Tracked Keywords (${total})
+                    </button>
+                    <button class="tab-btn ${activeTab === 'competitors' ? 'active' : ''}" onclick="app.switchRankTab('competitors')" style="padding:14px 20px; font-size:13px; font-weight:700; border:none; background:none; cursor:pointer;">
+                        Competitor Comparison (${Object.keys(data.competitor_summary || {}).length} Domains)
+                    </button>
+                    <button class="tab-btn ${activeTab === 'volatility' ? 'active' : ''}" onclick="app.switchRankTab('volatility')" style="padding:14px 20px; font-size:13px; font-weight:700; border:none; background:none; cursor:pointer;">
+                        Winners &amp; Losers
+                    </button>
+                    <button class="tab-btn ${activeTab === 'alerts' ? 'active' : ''}" onclick="app.switchRankTab('alerts')" style="padding:14px 20px; font-size:13px; font-weight:700; border:none; background:none; cursor:pointer;">
+                        Volatility Alerts (${alerts.length})
+                    </button>
+                </div>
+
+                <div style="padding:20px;">
+                    ${this.renderActiveRankTabContent(activeTab)}
+                </div>
+            </div>
+        `;
+    }
+
+    renderActiveRankTabContent(tab) {
+        if (tab === "competitors") return this.renderRankCompetitors();
+        if (tab === "volatility") return this.renderRankVolatility();
+        if (tab === "alerts") return this.renderRankAlerts();
+        return this.renderRankingsTable();
+    }
+
+    switchRankTab(tab) {
+        this.rankState.activeTab = tab;
+        this.renderRankingsContent();
+    }
+
+    setRankFilter(filter) {
+        this.rankState.activeFilter = filter;
+        document.querySelectorAll(".rank-filter-pill").forEach(p => {
+            p.classList.toggle("active", p.dataset.filter === filter);
+        });
+        if (this.rankState.activeTab !== "keywords") {
+            this.rankState.activeTab = "keywords";
+            this.renderRankingsContent();
+        } else {
+            const container = $("rankTableContainer");
+            if (container) container.innerHTML = this.renderRankingsTableRows();
+        }
+    }
+
+    filterRankingsTable() {
+        const inp = $("rankSearchInput");
+        this.rankState.searchQuery = (inp ? inp.value : "").trim().toLowerCase();
+        const container = $("rankTableContainer");
+        if (container) container.innerHTML = this.renderRankingsTableRows();
+    }
+
+    renderRankingsTable() {
+        return `
+            <div id="rankTableContainer" class="table-container">
+                ${this.renderRankingsTableRows()}
+            </div>
+        `;
+    }
+
+    renderRankingsTableRows() {
+        const data = this.rankState.currentOverview;
+        if (!data) return "";
+
+        let items = data.keywords || [];
+        const filter = this.rankState.activeFilter || "all";
+        const query = this.rankState.searchQuery || "";
+
+        // Apply quick filter
+        if (filter === "top3") items = items.filter(k => k.current_position && k.current_position <= 3);
+        else if (filter === "top10") items = items.filter(k => k.current_position && k.current_position <= 10);
+        else if (filter === "top20") items = items.filter(k => k.current_position && k.current_position <= 20);
+        else if (filter === "improved") items = items.filter(k => (k.position_change || 0) > 0);
+        else if (filter === "declined") items = items.filter(k => (k.position_change || 0) < 0);
+        else if (filter === "unranked") items = items.filter(k => !k.current_position);
+
+        // Apply text search
+        if (query) {
+            items = items.filter(k => (k.keyword || "").toLowerCase().includes(query) || (k.tags || "").toLowerCase().includes(query));
+        }
+
+        if (items.length === 0) {
+            return `<div class="empty-state" style="padding:32px;">No keywords match your selected filter criteria.</div>`;
+        }
+
+        return `
+            <table style="font-size:12px; margin:0;">
+                <thead>
+                    <tr>
+                        <th>Keyword</th>
+                        <th>Device / Market</th>
+                        <th style="text-align:center;">SERP Rank</th>
+                        <th style="text-align:center;">Change</th>
+                        <th style="text-align:center;">Best</th>
+                        <th>Landing URL</th>
+                        <th>Competitor SERP Ranks</th>
+                        <th style="text-align:right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${items.map(k => {
+                        const pos = k.current_position;
+                        const posStr = pos ? `#${pos}` : `<span style="color:#94A3B8;">>100</span>`;
+                        let posBadge = `<span class="pill" style="background:#F1F5F9; color:#475569; font-weight:800;">${posStr}</span>`;
+                        if (pos && pos <= 3) posBadge = `<span class="pill" style="background:#DCFCE7; color:#15803D; font-weight:800;">${posStr}</span>`;
+                        else if (pos && pos <= 10) posBadge = `<span class="pill" style="background:#EEF2FF; color:#4F46E5; font-weight:800;">${posStr}</span>`;
+
+                        const ch = k.position_change || 0;
+                        let chBadge = `<span style="color:#94A3B8;">0</span>`;
+                        if (ch > 0) chBadge = `<span class="pill" style="background:#DCFCE7; color:#15803D; font-weight:700;">+${ch}</span>`;
+                        else if (ch < 0) chBadge = `<span class="pill" style="background:#FEE2E2; color:#B91C1C; font-weight:700;">${ch}</span>`;
+
+                        const comps = k.competitors || {};
+                        const compBadges = Object.keys(comps).map(cDom => {
+                            const cPos = comps[cDom];
+                            return `<span class="pill" style="font-size:10px; margin-right:4px; background:#F8FAFC; border:1px solid #E2E8F0;" title="${escapeHtml(cDom)}: #${cPos || '>100'}"><b>${escapeHtml(cDom.slice(0, 10))}:</b> ${cPos ? '#' + cPos : '>100'}</span>`;
+                        }).join("");
+
+                        return `
+                            <tr>
+                                <td>
+                                    <div style="font-weight:700; color:#1E293B;">${escapeHtml(k.keyword)}</div>
+                                    ${k.tags ? `<div style="font-size:10px; color:#64748B; margin-top:2px;">Tags: ${escapeHtml(k.tags)}</div>` : ''}
+                                </td>
+                                <td>
+                                    <span style="text-transform:capitalize; font-weight:600;">${k.device || 'desktop'}</span>
+                                    <div style="font-size:10px; color:#64748B;">${escapeHtml(k.location_name || 'US')}</div>
+                                </td>
+                                <td style="text-align:center;">${posBadge}</td>
+                                <td style="text-align:center;">${chBadge}</td>
+                                <td style="text-align:center; font-weight:700; color:#475569;">${k.best_position ? '#' + k.best_position : '-'}</td>
+                                <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                    ${k.latest_url ? `<a href="${escapeHtml(k.latest_url)}" target="_blank" rel="noopener" style="color:#2563EB; text-decoration:none;" title="${escapeHtml(k.latest_url)}">${escapeHtml(k.latest_url)}</a>` : '<span style="color:#94A3B8;">-</span>'}
+                                </td>
+                                <td>${compBadges || '<span style="color:#94A3B8; font-size:11px;">None tracked</span>'}</td>
+                                <td style="text-align:right; white-space:nowrap;">
+                                    <button class="btn btn-secondary btn-sm" onclick="app.triggerCheckKeyword(${k.id})" title="Re-check SERP Now" style="padding:4px 8px;">⚡ Check</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="app.openKeywordHistory(${k.id})" title="View Historical Trajectory" style="padding:4px 8px;">📈 History</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="app.deleteTrackedKeyword(${k.id}, '${escapeHtml(k.keyword)}')" title="Delete" style="padding:4px 8px; color:#EF4444;">✕</button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join("")}
+                </tbody>
+            </table>
+        `;
+    }
+
+    renderRankCompetitors() {
+        const data = this.rankState.currentOverview;
+        const compSummary = (data && data.competitor_summary) || {};
+        const compDomains = Object.keys(compSummary);
+
+        if (compDomains.length === 0) {
+            return `
+                <div class="empty-state" style="padding:32px;">
+                    <div style="font-size:28px; margin-bottom:8px;">⚔️</div>
+                    <div style="font-weight:700; font-size:14px; margin-bottom:4px;">No Competitors Configured</div>
+                    <div style="font-size:12px; color:var(--text-muted);">Edit your tracked keywords or add competitor domains to view head-to-head SERP comparisons.</div>
+                </div>
+            `;
+        }
+
+        return `
+            <div style="margin-bottom:20px;">
+                <h4 style="margin:0 0 12px 0; font-size:14px; font-weight:700;">Competitor SERP Benchmark Summary</h4>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+                    ${compDomains.map(dom => {
+                        const s = compSummary[dom] || {};
+                        return `
+                            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:14px;">
+                                <div style="font-weight:700; color:#1E293B; margin-bottom:6px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(dom)}</div>
+                                <div style="font-size:12px; color:#475569; margin-bottom:2px;">Avg Position: <b>#${s.average_position || '-'}</b></div>
+                                <div style="font-size:12px; color:#475569; margin-bottom:2px;">Top 3 Terms: <b>${s.top_3_count || 0}</b></div>
+                                <div style="font-size:12px; color:#475569;">Top 10 Terms: <b>${s.top_10_count || 0}</b></div>
+                            </div>
+                        `;
+                    }).join("")}
+                </div>
+            </div>
+
+            <h4 style="margin:0 0 10px 0; font-size:14px; font-weight:700;">Head-to-Head Keyword Comparison Matrix</h4>
+            <div class="table-container">
+                <table style="font-size:12px; margin:0;">
+                    <thead>
+                        <tr>
+                            <th>Keyword</th>
+                            <th>Target Domain (${escapeHtml(data.target_domain || 'You')})</th>
+                            ${compDomains.map(d => `<th>${escapeHtml(d)}</th>`).join("")}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(data.keywords || []).map(k => {
+                            const targetPos = k.current_position;
+                            const comps = k.competitors || {};
+                            return `
+                                <tr>
+                                    <td><b>${escapeHtml(k.keyword)}</b></td>
+                                    <td>
+                                        <span class="pill" style="font-weight:800; background:${targetPos && targetPos <= 10 ? '#DCFCE7' : '#F1F5F9'}; color:${targetPos && targetPos <= 10 ? '#15803D' : '#475569'};">
+                                            ${targetPos ? '#' + targetPos : '>100'}
+                                        </span>
+                                    </td>
+                                    ${compDomains.map(d => {
+                                        const cPos = comps[d];
+                                        return `
+                                            <td>
+                                                <span class="pill" style="font-weight:600; background:#F8FAFC; color:#334155;">
+                                                    ${cPos ? '#' + cPos : '>100'}
+                                                </span>
+                                            </td>
+                                        `;
+                                    }).join("")}
+                                </tr>
+                            `;
+                        }).join("")}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    renderRankVolatility() {
+        const data = this.rankState.currentOverview || {};
+        const winners = data.winners || [];
+        const losers = data.losers || [];
+
+        return `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+                <!-- Winners -->
+                <div>
+                    <h4 style="margin:0 0 10px 0; font-size:14px; font-weight:700; color:#15803D; display:flex; align-items:center; gap:6px;">
+                        <span>🟢 Top Ranking Gainers (Winners)</span>
+                    </h4>
+                    ${winners.length === 0 ? `<div style="font-size:12px; color:#64748B;">No ranking gains observed in recent checks.</div>` : `
+                        <div class="table-container">
+                            <table style="font-size:12px; margin:0;">
+                                <thead>
+                                    <tr>
+                                        <th>Keyword</th>
+                                        <th style="text-align:center;">Current Rank</th>
+                                        <th style="text-align:right;">Position Surge</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${winners.map(w => `
+                                        <tr>
+                                            <td><b>${escapeHtml(w.keyword)}</b></td>
+                                            <td style="text-align:center;"><span class="pill" style="background:#DCFCE7; color:#15803D; font-weight:800;">#${w.position}</span></td>
+                                            <td style="text-align:right;"><span class="pill" style="background:#DCFCE7; color:#15803D; font-weight:800;">+${w.change}</span></td>
+                                        </tr>
+                                    `).join("")}
+                                </tbody>
+                            </table>
+                        </div>
+                    `}
+                </div>
+
+                <!-- Losers -->
+                <div>
+                    <h4 style="margin:0 0 10px 0; font-size:14px; font-weight:700; color:#B91C1C; display:flex; align-items:center; gap:6px;">
+                        <span>🔴 Top Ranking Declines (Losers)</span>
+                    </h4>
+                    ${losers.length === 0 ? `<div style="font-size:12px; color:#64748B;">No ranking drops observed in recent checks.</div>` : `
+                        <div class="table-container">
+                            <table style="font-size:12px; margin:0;">
+                                <thead>
+                                    <tr>
+                                        <th>Keyword</th>
+                                        <th style="text-align:center;">Current Rank</th>
+                                        <th style="text-align:right;">Position Drop</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${losers.map(l => `
+                                        <tr>
+                                            <td><b>${escapeHtml(l.keyword)}</b></td>
+                                            <td style="text-align:center;"><span class="pill" style="background:#FEE2E2; color:#B91C1C; font-weight:800;">#${l.position || '>100'}</span></td>
+                                            <td style="text-align:right;"><span class="pill" style="background:#FEE2E2; color:#B91C1C; font-weight:800;">${l.change}</span></td>
+                                        </tr>
+                                    `).join("")}
+                                </tbody>
+                            </table>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    }
+
+    renderRankAlerts() {
+        const data = this.rankState.currentOverview || {};
+        const alerts = data.recent_alerts || [];
+
+        if (alerts.length === 0) {
+            return `
+                <div class="empty-state" style="padding:32px;">
+                    <div style="font-size:28px; margin-bottom:8px;">🔔</div>
+                    <div style="font-weight:700; font-size:14px; margin-bottom:4px;">No Volatility Alerts</div>
+                    <div style="font-size:12px; color:var(--text-muted);">Ranking positions are stable. Alerts trigger automatically when keywords jump into Top 3, reach Page 1, or surge/drop 5+ spots.</div>
+                </div>
+            `;
+        }
+
+        return `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h4 style="margin:0; font-size:14px; font-weight:700;">Recent Volatility Alerts Log</h4>
+                <div style="font-size:12px; color:#64748B;">${alerts.length} total events recorded</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                ${alerts.map(a => {
+                    let sevBg = "#F1F5F9";
+                    let sevFg = "#475569";
+                    if (a.severity === "SUCCESS") { sevBg = "#DCFCE7"; sevFg = "#15803D"; }
+                    else if (a.severity === "WARNING") { sevBg = "#FEF3C7"; sevFg = "#B45309"; }
+                    else if (a.severity === "DANGER") { sevBg = "#FEE2E2"; sevFg = "#B91C1C"; }
+
+                    return `
+                        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <span class="pill" style="background:${sevBg}; color:${sevFg}; font-weight:800; font-size:10px;">${escapeHtml(a.alert_type)}</span>
+                                <div style="font-size:13px; font-weight:600; color:#1E293B;">${escapeHtml(a.message)}</div>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <div style="font-size:11px; color:#94A3B8;">${a.created_at ? new Date(a.created_at).toLocaleDateString() : ''}</div>
+                                ${!a.is_read ? `<button class="btn btn-secondary btn-sm" onclick="app.markAlertRead(${a.id})" style="font-size:11px; padding:3px 8px;">Dismiss</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join("")}
+            </div>
+        `;
+    }
+
+    openAddKeywordsModal() {
+        const modal = $("addKeywordsModal");
+        if (!modal) return;
+        if ($("addKwTargetDomain")) $("addKwTargetDomain").value = this.rankState.targetDomain || "";
+        modal.classList.remove("hidden");
+    }
+
+    closeAddKeywordsModal() {
+        const modal = $("addKeywordsModal");
+        if (modal) modal.classList.add("hidden");
+    }
+
+    async submitAddTrackedKeywords() {
+        const target = ($("addKwTargetDomain").value || "").trim();
+        const rawKw = ($("addKwTextarea").value || "").trim();
+        if (!target) {
+            this.showNotification("Please enter target domain.", "warning");
+            return;
+        }
+        if (!rawKw) {
+            this.showNotification("Please enter at least one keyword.", "warning");
+            return;
+        }
+
+        const keywords = rawKw.split(/[\r\n,]+/).map(k => k.trim()).filter(Boolean);
+        const locVal = $("addKwLocationSelect").value.split("|");
+        const locCode = parseInt(locVal[0], 10) || 2840;
+        const locName = locVal[1] || "United States";
+        const lang = $("addKwLanguageSelect").value || "en";
+        const device = $("addKwDeviceSelect").value || "desktop";
+        const rawComps = ($("addKwCompetitors").value || "").trim();
+        const comps = rawComps ? rawComps.split(/[\r\n,]+/).map(c => c.trim()).filter(Boolean) : [];
+        const tags = ($("addKwTags").value || "").trim();
+        const freq = $("addKwFrequency").value || "daily";
+
+        const btn = $("btnAddKwSubmit");
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spin">⏳</span> Checking SERPs...`;
+        }
+
+        try {
+            const resp = await jsonFetch(`${API_BASE}/rankings/keywords`, {
+                method: "POST",
+                body: JSON.stringify({
+                    keywords: keywords,
+                    target_domain: target,
+                    website_id: this.rankState.websiteId,
+                    location_code: locCode,
+                    location_name: locName,
+                    language_code: lang,
+                    device: device,
+                    competitor_domains: comps,
+                    tags: tags,
+                    check_frequency: freq,
+                    run_initial_check: true
+                })
+            });
+
+            this.showNotification(`Successfully added ${resp.count} target keyword(s)!`, "success");
+            this.closeAddKeywordsModal();
+            $("addKwTextarea").value = "";
+            this.rankState.targetDomain = target;
+            await this.loadRankings();
+        } catch (err) {
+            this.showNotification("Failed to add keywords: " + (err.message || err), "danger");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = "Start Tracking &amp; Check SERPs";
+            }
+        }
+    }
+
+    async triggerCheckKeyword(kwId) {
+        try {
+            this.showNotification("Checking live Google SERP position...", "info");
+            const res = await jsonFetch(`${API_BASE}/rankings/check/${kwId}`, { method: "POST" });
+            const pos = res.current_position ? `#${res.current_position}` : ">100";
+            this.showNotification(`Keyword '${res.keyword}' checked: Position ${pos}.`, "success");
+            await this.loadRankingsOverview();
+        } catch (err) {
+            this.showNotification("Ranking check failed: " + (err.message || err), "danger");
+        }
+    }
+
+    async triggerCheckAllRankings() {
+        const btn = $("btnCheckAllRankings");
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spin">⏳</span> Checking Positions...`;
+        }
+        try {
+            this.showNotification("Querying live SERPs across all active keywords...", "info");
+            const domain = this.rankState.targetDomain || "";
+            const res = await jsonFetch(`${API_BASE}/rankings/check-all?target_domain=${encodeURIComponent(domain)}`, { method: "POST" });
+            this.showNotification(`Checked ${res.total_checked} keywords (${res.improved_count} improved, ${res.declined_count} dropped).`, "success");
+            await this.loadRankingsOverview();
+        } catch (err) {
+            this.showNotification("Batch ranking check failed: " + (err.message || err), "danger");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `⚡ Check All Positions`;
+            }
+        }
+    }
+
+    async deleteTrackedKeyword(kwId, kwText) {
+        if (!confirm(`Are you sure you want to stop tracking '${kwText}'? Historical observations will be removed.`)) return;
+        try {
+            await jsonFetch(`${API_BASE}/rankings/keywords/${kwId}`, { method: "DELETE" });
+            this.showNotification(`Stopped tracking '${kwText}'.`, "success");
+            await this.loadRankingsOverview();
+        } catch (err) {
+            this.showNotification("Failed to delete keyword: " + (err.message || err), "danger");
+        }
+    }
+
+    async openKeywordHistory(kwId) {
+        const modal = $("keywordHistoryModal");
+        const body = $("kwHistModalBody");
+        if (!modal || !body) return;
+
+        body.innerHTML = `<div style="text-align:center; padding:32px; color:var(--text-muted);"><span class="spin">⏳</span> Loading historical trajectory...</div>`;
+        modal.classList.remove("hidden");
+
+        try {
+            const data = await jsonFetch(`${API_BASE}/rankings/keywords/${kwId}`);
+            if ($("kwHistTitle")) $("kwHistTitle").textContent = `History: ${data.keyword}`;
+            if ($("kwHistSubtitle")) $("kwHistSubtitle").textContent = `Domain: ${data.target_domain} • Best Rank: #${data.best_position || '-'} • Current: #${data.current_position || '>100'}`;
+
+            const timeline = data.timeline || [];
+            if (timeline.length === 0) {
+                body.innerHTML = `<div class="empty-state" style="padding:32px;">No historical observations recorded yet. Click 'Check' to run an initial observation.</div>`;
+                return;
+            }
+
+            body.innerHTML = `
+                <div style="margin-bottom:18px;">
+                    <h5 style="margin:0 0 10px 0; font-size:13px; font-weight:700;">Historical SERP Position Trajectory</h5>
+                    <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:16px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end; height:120px; gap:8px;">
+                            ${timeline.slice(-15).map(t => {
+                                const p = t.position || 100;
+                                const heightPct = Math.max(10, Math.min(100, 100 - p));
+                                const barColor = p <= 3 ? '#10B981' : (p <= 10 ? '#3B82F6' : '#94A3B8');
+                                return `
+                                    <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;" title="${t.date}: #${t.position || '>100'}">
+                                        <span style="font-size:9px; font-weight:700; color:#334155; margin-bottom:2px;">#${t.position || '>100'}</span>
+                                        <div style="width:100%; max-width:24px; height:${heightPct}%; background:${barColor}; border-radius:3px 3px 0 0;"></div>
+                                        <span style="font-size:8px; color:#94A3B8; margin-top:4px; transform:rotate(-45deg); white-space:nowrap;">${t.date ? t.date.slice(5) : ''}</span>
+                                    </div>
+                                `;
+                            }).join("")}
+                        </div>
+                    </div>
+                </div>
+
+                <h5 style="margin:0 0 10px 0; font-size:13px; font-weight:700;">Observations Log</h5>
+                <div class="table-container" style="max-height:220px; overflow-y:auto;">
+                    <table style="font-size:12px; margin:0;">
+                        <thead>
+                            <tr>
+                                <th>Date &amp; Time</th>
+                                <th style="text-align:center;">SERP Rank</th>
+                                <th>Ranking URL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${timeline.slice().reverse().map(t => `
+                                <tr>
+                                    <td>${t.collected_at ? new Date(t.collected_at).toLocaleString() : '-'}</td>
+                                    <td style="text-align:center;"><b>${t.position ? '#' + t.position : '>100'}</b></td>
+                                    <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                        ${t.ranked_url ? `<a href="${escapeHtml(t.ranked_url)}" target="_blank" rel="noopener" style="color:#2563EB;">${escapeHtml(t.ranked_url)}</a>` : '-'}
+                                    </td>
+                                </tr>
+                            `).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        } catch (err) {
+            body.innerHTML = `<div style="color:#EF4444; padding:20px; text-align:center;">Failed to load history: ${escapeHtml(err.message || String(err))}</div>`;
+        }
+    }
+
+    closeKeywordHistoryModal() {
+        const modal = $("keywordHistoryModal");
+        if (modal) modal.classList.add("hidden");
+    }
+
+    openRankAlertsModal() {
+        const modal = $("rankAlertsModal");
+        const body = $("rankAlertsModalBody");
+        if (!modal || !body) return;
+
+        modal.classList.remove("hidden");
+        const alerts = (this.rankState.currentOverview && this.rankState.currentOverview.recent_alerts) || [];
+        if (alerts.length === 0) {
+            body.innerHTML = `<div class="empty-state" style="padding:32px;">No volatility alerts recorded.</div>`;
+            return;
+        }
+
+        body.innerHTML = this.renderRankAlerts();
+    }
+
+    closeRankAlertsModal() {
+        const modal = $("rankAlertsModal");
+        if (modal) modal.classList.add("hidden");
+    }
+
+    async markAlertRead(alertId) {
+        try {
+            await jsonFetch(`${API_BASE}/rankings/alerts/${alertId}/read`, { method: "POST" });
+            this.showNotification("Alert marked as read.", "success");
+            await this.loadRankingsOverview();
+        } catch (err) {
+            this.showNotification("Failed to update alert: " + (err.message || err), "danger");
+        }
+    }
+
+    async exportRankings(format = "pdf") {
+        const overview = this.rankState.currentOverview;
+        if (!overview || !overview.total_keywords) {
+            this.showNotification("Please load keyword rankings first to export data.", "warning");
+            return;
+        }
+
+        try {
+            this.showNotification(`Generating ${format.toUpperCase()} rankings report...`, "info");
+            const res = await fetch(`${API_BASE}/rankings/export/${format}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
+                },
+                body: JSON.stringify(overview)
+            });
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            const target = overview.target_domain || "rankings";
+            a.download = `keyword_rankings_${target}_${new Date().toISOString().slice(0, 10)}.${format === "excel" ? "xls" : format}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            this.showNotification(`Downloaded ${format.toUpperCase()} rankings report successfully.`, "success");
         } catch (err) {
             this.showNotification(`Export failed: ${err.message || err}`, "danger");
         }

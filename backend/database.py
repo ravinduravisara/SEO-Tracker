@@ -974,6 +974,77 @@ class BacklinkSnapshot(Base):
     client = relationship("Client")
 
 
+class TrackedKeyword(Base):
+    __tablename__ = "tracked_keywords"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), index=True, nullable=True)
+    website_id = Column(Integer, ForeignKey("websites.id"), index=True, nullable=True)
+    keyword = Column(String, nullable=False, index=True)
+    target_domain = Column(String, nullable=False, index=True)
+    location_code = Column(Integer, default=2840)  # Default 2840 (US)
+    location_name = Column(String, default="United States")
+    language_code = Column(String, default="en")
+    device = Column(String, default="desktop")  # desktop or mobile
+    competitor_domains = Column(String, default="[]")  # JSON list of competitor domains
+    check_frequency = Column(String, default="daily")  # daily, weekly, manual
+    tags = Column(String, default="")  # Comma-separated tags
+    current_position = Column(Integer, nullable=True)
+    previous_position = Column(Integer, nullable=True)
+    best_position = Column(Integer, nullable=True)
+    position_change = Column(Integer, default=0)
+    latest_url = Column(String, default="")
+    search_volume = Column(Integer, nullable=True)
+    cpc = Column(Float, nullable=True)
+    keyword_difficulty = Column(Float, nullable=True)
+    last_checked_at = Column(DateTime, nullable=True)
+    is_active = Column(Integer, default=1)
+    alert_enabled = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+    website = relationship("Website")
+    observations = relationship("RankingObservation", back_populates="tracked_keyword", cascade="all, delete-orphan")
+    alerts = relationship("RankingAlert", back_populates="tracked_keyword", cascade="all, delete-orphan")
+
+
+class RankingObservation(Base):
+    __tablename__ = "ranking_observations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tracked_keyword_id = Column(Integer, ForeignKey("tracked_keywords.id", ondelete="CASCADE"), index=True, nullable=False)
+    collected_at = Column(DateTime, default=datetime.utcnow, index=True)
+    target_domain = Column(String, nullable=False, index=True)
+    device = Column(String, default="desktop")
+    position = Column(Integer, nullable=True)
+    absolute_position = Column(Integer, nullable=True)
+    ranked_url = Column(String, default="")
+    serp_features_json = Column(Text, default="[]")
+    competitor_positions_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    tracked_keyword = relationship("TrackedKeyword", back_populates="observations")
+
+
+class RankingAlert(Base):
+    __tablename__ = "ranking_alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tracked_keyword_id = Column(Integer, ForeignKey("tracked_keywords.id", ondelete="CASCADE"), index=True, nullable=False)
+    target_domain = Column(String, nullable=False, index=True)
+    keyword = Column(String, nullable=False)
+    alert_type = Column(String, nullable=False)
+    severity = Column(String, default="INFO")
+    message = Column(Text, nullable=False)
+    previous_position = Column(Integer, nullable=True)
+    new_position = Column(Integer, nullable=True)
+    is_read = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    tracked_keyword = relationship("TrackedKeyword", back_populates="alerts")
+
+
 def init_db():
     if IS_MONGO:
         try:
@@ -1012,6 +1083,11 @@ def init_db():
                 db["competitor_comparisons"].create_index("target_domain")
                 db["backlink_snapshots"].create_index("id", unique=True)
                 db["backlink_snapshots"].create_index("target_domain")
+                db["tracked_keywords"].create_index("id", unique=True)
+                db["tracked_keywords"].create_index("target_domain")
+                db["tracked_keywords"].create_index("keyword")
+                db["ranking_observations"].create_index("tracked_keyword_id")
+                db["ranking_alerts"].create_index("tracked_keyword_id")
             except Exception as e:
                 logger.warning(f"Error ensuring MongoDB indexes: {e}")
 
@@ -1020,7 +1096,8 @@ def init_db():
                 "admin_users", "clients", "websites", "audits", "public_reports",
                 "team_invitations", "admin_sessions", "activity_logs", "lead_notes",
                 "seo_leads", "public_scans", "scheduled_audits", "keyword_projects",
-                "saved_keywords", "competitor_comparisons", "backlink_snapshots"
+                "saved_keywords", "competitor_comparisons", "backlink_snapshots",
+                "tracked_keywords", "ranking_observations", "ranking_alerts"
             ]
             for t in tables:
                 try:

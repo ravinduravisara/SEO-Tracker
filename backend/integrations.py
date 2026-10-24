@@ -881,6 +881,79 @@ def domain_intersection(target1: str, target2: str, limit: int = 100, location_c
         return {"ok": False, "target1": d1, "target2": d2, "error": str(exc), "keywords": []}
 
 
+def google_live_serp(
+    keyword: str,
+    location_code: Optional[int] = None,
+    language_code: Optional[str] = None,
+    device: str = "desktop",
+    depth: int = 100
+) -> dict[str, Any]:
+    """
+    Retrieves live top 100 Google organic SERP results via DataForSEO SERP API.
+    Returns individual ranking elements with domains, URLs, titles, and SERP features.
+    """
+    clean_kw = keyword.strip()
+    if not clean_kw:
+        return {"ok": False, "error": "Empty keyword provided.", "items": []}
+
+    loc = _loc(location_code, language_code)
+    device_norm = "mobile" if str(device).lower() == "mobile" else "desktop"
+
+    def run() -> dict[str, Any]:
+        task_payload = {
+            "keyword": clean_kw,
+            "device": device_norm,
+            "depth": min(max(int(depth), 10), 100),
+            **loc
+        }
+        result, cost = _dfs_post("serp/google/organic/live/advanced", task_payload)
+        r0 = result[0] if result else {}
+        items = r0.get("items") or []
+
+        serp_items = []
+        serp_features = set()
+        for it in items:
+            it_type = it.get("type") or "organic"
+            if it_type != "organic":
+                serp_features.add(it_type)
+            if it_type == "organic" or it.get("url"):
+                serp_items.append({
+                    "type": it_type,
+                    "rank_group": it.get("rank_group"),
+                    "rank_absolute": it.get("rank_absolute"),
+                    "domain": bare_domain(it.get("domain") or it.get("url") or ""),
+                    "url": it.get("url", ""),
+                    "title": it.get("title", ""),
+                    "description": it.get("description", ""),
+                })
+
+        return {
+            "ok": True,
+            "keyword": clean_kw,
+            "device": device_norm,
+            **loc,
+            "total_results_count": r0.get("se_results_count"),
+            "items_count": len(serp_items),
+            "serp_features": sorted(list(serp_features)),
+            "items": serp_items,
+            "cost_usd": cost,
+            "source": f"DataForSEO Google Organic SERP API ({device_norm})",
+            "fetched_at": datetime.now(timezone.utc).isoformat()
+        }
+
+    try:
+        return _cached("dfs_serp", [clean_kw, loc, device_norm, depth], run)
+    except (requests.RequestException, IntegrationError, ValueError) as exc:
+        return {
+            "ok": False,
+            "keyword": clean_kw,
+            "device": device_norm,
+            **loc,
+            "error": str(exc),
+            "items": []
+        }
+
+
 def backlinks(target_url: str) -> dict[str, Any]:
     """Real backlink profile summary and top referring domains."""
     domain = bare_domain(target_url)

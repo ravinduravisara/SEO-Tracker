@@ -81,6 +81,10 @@
                 <span class="nav-icon">📊</span>
                 <span>Google &amp; Performance</span>
             </div>
+            <div class="nav-item" data-view="rank_tracking" data-permission="audits.view" onclick="app.navigate('rank_tracking')">
+                <span class="nav-icon">🎯</span>
+                <span>Rank Tracking</span>
+            </div>
             <div class="nav-item" data-view="technical_report" data-permission="technical_report.view" onclick="app.navigate('technical_report')">
                 <span class="nav-icon">🛠️</span>
                 <span>Technical Report</span>
@@ -1366,6 +1370,93 @@
             </div>
         </div>
 
+        <!-- VIEW: KEYWORD RANK TRACKING (PHASE 8) -->
+        <div id="viewRankTracking" class="admin-view">
+            <!-- Hero Search and Controls Card -->
+            <div class="card" style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h2 style="margin:0; font-size:22px; display:flex; align-items:center; gap:8px;">
+                            <span>🎯 Keyword Rank Tracking &amp; SERP Monitoring</span>
+                            <span class="pill" style="background:#EEF2FF; color:#4F46E5; font-size:11px;">Phase 8</span>
+                        </h2>
+                        <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">
+                            Live Google organic SERP rank monitoring, competitor benchmarking, and position volatility alerts.
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <button class="btn btn-primary btn-sm" onclick="app.openAddKeywordsModal()">+ Add Keywords</button>
+                        <button class="btn btn-secondary btn-sm" id="btnCheckAllRankings" onclick="app.triggerCheckAllRankings()">⚡ Check All Positions</button>
+                        <button class="btn btn-secondary btn-sm" onclick="app.openRankAlertsModal()">
+                            🔔 Alerts <span id="rankAlertsBadge" class="pill" style="background:#EF4444; color:#fff; font-size:10px; margin-left:4px; display:none;">0</span>
+                        </button>
+                        <div style="display:inline-flex; gap:4px;">
+                            <button class="btn btn-secondary btn-sm" onclick="app.exportRankings('pdf')" title="Export Vector PDF">📄 PDF</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.exportRankings('excel')" title="Export Excel Workbook">📊 Excel</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.exportRankings('csv')" title="Export CSV Data">📋 CSV</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Controls Bar -->
+                <div style="display:grid; grid-template-columns: 2fr 1fr 2fr auto; gap:12px; align-items:center; margin-bottom:14px;">
+                    <div>
+                        <label style="display:block; font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase;">Select Domain</label>
+                        <select id="rankDomainSelect" class="form-input" style="width:100%;" onchange="app.handleRankDomainChange()">
+                            <option value="">-- Choose domain or site --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase;">Device</label>
+                        <select id="rankDeviceSelect" class="form-input" style="width:100%;" onchange="app.handleRankDeviceChange()">
+                            <option value="">All Devices</option>
+                            <option value="desktop" selected>Desktop</option>
+                            <option value="mobile">Mobile</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase;">Search Keywords</label>
+                        <input id="rankSearchInput" type="text" class="form-input" placeholder="Filter tracked terms..." style="width:100%;" oninput="app.filterRankingsTable()">
+                    </div>
+                    <div style="display:flex; align-items:flex-end;">
+                        <button class="btn btn-secondary" onclick="app.loadRankingsOverview()" style="height:38px;">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter Pills -->
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:12px;">
+                    <span style="font-weight:700; color:#64748B;">Quick Filters:</span>
+                    <button class="btn btn-sm rank-filter-pill active" data-filter="all" onclick="app.setRankFilter('all')">All Terms (<span id="countFilterAll">0</span>)</button>
+                    <button class="btn btn-sm rank-filter-pill" data-filter="top3" onclick="app.setRankFilter('top3')">Top 3 (<span id="countFilterTop3">0</span>)</button>
+                    <button class="btn btn-sm rank-filter-pill" data-filter="top10" onclick="app.setRankFilter('top10')">Top 10 (<span id="countFilterTop10">0</span>)</button>
+                    <button class="btn btn-sm rank-filter-pill" data-filter="top20" onclick="app.setRankFilter('top20')">Top 20 (<span id="countFilterTop20">0</span>)</button>
+                    <button class="btn btn-sm rank-filter-pill" data-filter="improved" onclick="app.setRankFilter('improved')" style="color:#15803D;">🟢 Winners (<span id="countFilterWinners">0</span>)</button>
+                    <button class="btn btn-sm rank-filter-pill" data-filter="declined" onclick="app.setRankFilter('declined')" style="color:#B91C1C;">🔴 Losers (<span id="countFilterLosers">0</span>)</button>
+                    <button class="btn btn-sm rank-filter-pill" data-filter="unranked" onclick="app.setRankFilter('unranked')">Unranked (<span id="countFilterUnranked">0</span>)</button>
+                </div>
+            </div>
+
+            <!-- Disclaimer Banner -->
+            <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:12px 16px; margin-bottom:20px; display:flex; align-items:flex-start; gap:12px;">
+                <span style="font-size:18px; line-height:1;">ℹ️</span>
+                <div style="font-size:12px; color:#1E40AF; line-height:1.5;">
+                    <b>Data Measurement Boundaries &amp; Ranking Disclaimer:</b> Live SERP checks represent verified snapshot rankings in Google organic search for the configured location, language, and device at the collection timestamp. Search Console average position represents aggregated searcher impressions over time and is not an exact live rank on any single searcher's device.
+                </div>
+            </div>
+
+            <!-- Dynamic Content Area -->
+            <div id="rankContentArea">
+                <div class="empty-state" style="padding:48px 20px;">
+                    <div style="font-size:36px; margin-bottom:12px;">🎯</div>
+                    <h3 style="margin:0 0 6px 0;">No Tracked Keywords Loaded</h3>
+                    <p style="margin:0 0 16px 0; font-size:13px; color:var(--text-muted);">Choose a website from the dropdown above or click '+ Add Keywords' to begin monitoring organic search positions.</p>
+                    <button class="btn btn-primary btn-sm" onclick="app.openAddKeywordsModal()">+ Add Keywords</button>
+                </div>
+            </div>
+        </div>
+
         <div id="viewClients" class="admin-view">
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
@@ -2317,6 +2408,123 @@
                 <button class="btn btn-secondary" onclick="app.closeGoogleSettingsModal()">Cancel</button>
                 <button class="btn btn-primary" id="btnSaveGoogleSettings" onclick="app.saveGoogleSettings()">Save &amp; Test Connection</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: ADD TRACKED KEYWORDS (PHASE 8) -->
+<div id="addKeywordsModal" class="login-modal-overlay hidden" style="align-items:flex-start; padding:40px 16px; overflow-y:auto; z-index:9999;">
+    <div class="card" style="max-width:640px; width:100%; margin:0 auto; padding:28px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+            <h3 style="margin:0; font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                <span>🎯 Track Target Keywords (SERP Position Monitor)</span>
+            </h3>
+            <button class="btn btn-secondary btn-sm" onclick="app.closeAddKeywordsModal()">✕ Close</button>
+        </div>
+        <div style="font-size:13px; line-height:1.5; color:#334155;">
+            <div style="margin-bottom:14px;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#1E293B; margin-bottom:4px;">Target Website / Domain *</label>
+                <input id="addKwTargetDomain" type="text" class="form-input" placeholder="e.g. esupport.live or shwoah.com" style="width:100%;">
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#1E293B; margin-bottom:4px;">
+                    Keywords to Track * (One per line or comma-separated)
+                </label>
+                <textarea id="addKwTextarea" class="form-input" rows="4" placeholder="seo audit tool&#10;website speed optimization&#10;backlink checker&#10;technical seo checklist" style="width:100%; resize:vertical; font-family:inherit;"></textarea>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:14px;">
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:700; color:#1E293B; margin-bottom:4px;">Location</label>
+                    <select id="addKwLocationSelect" class="form-input" style="width:100%;">
+                        <option value="2840|United States" selected>United States (2840)</option>
+                        <option value="2826|United Kingdom">United Kingdom (2826)</option>
+                        <option value="2124|Canada">Canada (2124)</option>
+                        <option value="2036|Australia">Australia (2036)</option>
+                        <option value="2276|Germany">Germany (2276)</option>
+                        <option value="2250|France">France (2250)</option>
+                        <option value="2356|India">India (2356)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:700; color:#1E293B; margin-bottom:4px;">Language</label>
+                    <select id="addKwLanguageSelect" class="form-input" style="width:100%;">
+                        <option value="en" selected>English (en)</option>
+                        <option value="de">German (de)</option>
+                        <option value="fr">French (fr)</option>
+                        <option value="es">Spanish (es)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:700; color:#1E293B; margin-bottom:4px;">Device</label>
+                    <select id="addKwDeviceSelect" class="form-input" style="width:100%;">
+                        <option value="desktop" selected>Desktop</option>
+                        <option value="mobile">Mobile</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#1E293B; margin-bottom:4px;">
+                    Competitor Domains (Optional, comma or newline separated)
+                </label>
+                <input id="addKwCompetitors" type="text" class="form-input" placeholder="e.g. competitor1.com, competitor2.org" style="width:100%;">
+            </div>
+
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px; margin-bottom:18px;">
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:700; color:#1E293B; margin-bottom:4px;">Tags / Category</label>
+                    <input id="addKwTags" type="text" class="form-input" placeholder="e.g. core, brand, blog" style="width:100%;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:700; color:#1E293B; margin-bottom:4px;">Check Schedule</label>
+                    <select id="addKwFrequency" class="form-input" style="width:100%;">
+                        <option value="daily" selected>Daily Checks</option>
+                        <option value="weekly">Weekly Checks</option>
+                        <option value="manual">Manual Checks</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button class="btn btn-secondary" onclick="app.closeAddKeywordsModal()">Cancel</button>
+                <button class="btn btn-primary" id="btnAddKwSubmit" onclick="app.submitAddTrackedKeywords()">Start Tracking &amp; Check SERPs</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: KEYWORD RANK HISTORY (PHASE 8) -->
+<div id="keywordHistoryModal" class="login-modal-overlay hidden" style="align-items:flex-start; padding:40px 16px; overflow-y:auto; z-index:9999;">
+    <div class="card" style="max-width:760px; width:100%; margin:0 auto; padding:28px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+            <div>
+                <h3 id="kwHistTitle" style="margin:0; font-size:18px; font-weight:800;">Keyword Ranking History</h3>
+                <div id="kwHistSubtitle" style="font-size:12px; color:var(--text-muted); margin-top:2px;">Chronological SERP observations &amp; competitor comparison</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="app.closeKeywordHistoryModal()">✕ Close</button>
+        </div>
+        <div id="kwHistModalBody" style="font-size:13px; line-height:1.5;">
+            <div style="text-align:center; padding:32px; color:var(--text-muted);">Loading historical trajectory...</div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: RANKING VOLATILITY ALERTS (PHASE 8) -->
+<div id="rankAlertsModal" class="login-modal-overlay hidden" style="align-items:flex-start; padding:40px 16px; overflow-y:auto; z-index:9999;">
+    <div class="card" style="max-width:720px; width:100%; margin:0 auto; padding:28px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+            <div>
+                <h3 style="margin:0; font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                    <span>🔔 Ranking Volatility Alerts</span>
+                </h3>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Significant keyword position jumps, page-1 entries, and drops</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="app.closeRankAlertsModal()">✕ Close</button>
+        </div>
+        <div id="rankAlertsModalBody">
+            <div style="text-align:center; padding:32px; color:var(--text-muted);">Loading alerts...</div>
         </div>
     </div>
 </div>
