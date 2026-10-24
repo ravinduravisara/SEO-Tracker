@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="/static/tech_detector.css?v=10.4.6">
 </head>
 <body>
-<div class="layout" id="appLayout">
+<div class="layout" id="appLayout" style="display:none;">
     <!-- ADMIN SIDEBAR -->
     <aside class="sidebar" id="adminSidebar">
         <div class="sidebar-header" style="display:flex; align-items:center; gap:12px; justify-content:space-between;">
@@ -72,6 +72,10 @@
             <div class="nav-item" data-view="competitor_analysis" data-permission="audits.view" onclick="app.navigate('competitor_analysis')">
                 <span class="nav-icon">⚔️</span>
                 <span>Competitor Analysis</span>
+            </div>
+            <div class="nav-item" data-view="backlink_analytics" data-permission="audits.view" onclick="app.navigate('backlink_analytics')">
+                <span class="nav-icon">🔗</span>
+                <span>Backlink Analytics</span>
             </div>
             <div class="nav-item" data-view="technical_report" data-permission="technical_report.view" onclick="app.navigate('technical_report')">
                 <span class="nav-icon">🛠️</span>
@@ -1205,6 +1209,69 @@
                 </div>
             </div>
         </div>
+
+        <!-- VIEW: BACKLINK ANALYTICS (PHASE 6) -->
+        <div id="viewBacklinkAnalytics" class="admin-view">
+            <!-- Hero Search and Controls Card -->
+            <div class="card" style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h2 style="margin:0; font-size:22px; display:flex; align-items:center; gap:8px;">
+                            <span>🔗 Backlink Analytics &amp; Link Intelligence</span>
+                            <span class="pill" style="background:#EEF2FF; color:#4F46E5; font-size:11px;">Phase 6</span>
+                        </h2>
+                        <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">
+                            Ahrefs &amp; SEMrush inspired link intelligence. Referring domains, anchor profile classification, toxicity radar, and on-site equity modeling.
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <span id="blProviderBadge" class="pill" style="background:#F1F5F9; color:#475569; font-size:11px;">Checking Provider...</span>
+                        <button class="btn btn-secondary btn-sm" onclick="app.openSavedBacklinkSnapshotsModal()">📂 Saved Snapshots</button>
+                        <button class="btn btn-secondary btn-sm" id="btnSaveBacklinkSnapshot" onclick="app.saveCurrentBacklinkSnapshot()">💾 Save Snapshot</button>
+                        <div style="display:inline-flex; gap:4px;">
+                            <button class="btn btn-secondary btn-sm" onclick="app.exportBacklinks('pdf')" title="Export Vector PDF">📄 PDF</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.exportBacklinks('excel')" title="Export Excel Workbook">📊 Excel</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.exportBacklinks('csv')" title="Export CSV Data">📋 CSV</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Controls Bar -->
+                <div style="display:grid; grid-template-columns: 2fr 3fr auto auto; gap:12px; align-items:center; margin-bottom:14px;">
+                    <div>
+                        <label style="display:block; font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase;">Select Audited Site</label>
+                        <select id="blTargetDropdown" class="form-input" style="width:100%;" onchange="app.handleBacklinkDropdownChange()">
+                            <option value="">-- Choose audited domain --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase;">Target Domain or URL</label>
+                        <input id="blTargetInput" type="text" class="form-input" placeholder="e.g. esupport.live or https://shwoah.com" style="width:100%;">
+                    </div>
+                    <div style="align-self:flex-end;">
+                        <button class="btn btn-primary" onclick="app.runBacklinkAnalysis(false)" style="height:38px; white-space:nowrap;">Inspect Backlinks</button>
+                    </div>
+                    <div style="align-self:flex-end;">
+                        <button class="btn btn-secondary" onclick="app.runBacklinkAnalysis(true)" title="Force fresh fetch from provider" style="height:38px; white-space:nowrap;">🔄 Refresh</button>
+                    </div>
+                </div>
+
+                <!-- Methodology / Provenance Disclosure Banner -->
+                <div id="blProvenanceBanner" style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:10px 14px; font-size:12px; color:#475569; display:flex; justify-content:space-between; align-items:center;">
+                    <div id="blProvenanceText">Select or enter a domain above to inspect backlink metrics.</div>
+                    <a href="javascript:void(0)" onclick="app.showPaiMethodologyModal()" style="font-weight:600; color:#2563EB; text-decoration:none; white-space:nowrap; margin-left:12px;">Methodology &amp; Limits ↗</a>
+                </div>
+            </div>
+
+            <!-- Backlink Content Area (populated dynamically) -->
+            <div id="blContentArea">
+                <div class="empty-state" style="padding:48px 20px;">
+                    <div style="font-size:36px; margin-bottom:12px;">🔗</div>
+                    <h3 style="margin:0 0 6px 0;">No Backlink Profile Loaded</h3>
+                    <p style="margin:0; font-size:13px; color:var(--text-muted);">Choose a website from the dropdown above or enter any domain to run backlink analytics.</p>
+                </div>
+            </div>
+        </div>
         <div id="viewClients" class="admin-view">
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
@@ -2089,6 +2156,62 @@
         </div>
         <div id="compareAuditsBody">
             <div style="text-align:center; padding:32px; color:var(--text-muted);">Loading comparison data...</div>
+        </div>
+    </div>
+</div>
+
+<!-- BACKLINK SAVED SNAPSHOTS MODAL -->
+<div id="backlinkSnapshotsModal" class="login-modal-overlay hidden" style="align-items:flex-start; padding:40px 16px; overflow-y:auto; z-index:9999;">
+    <div class="card" style="max-width:880px; width:100%; margin:0 auto; padding:28px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:14px;">
+            <div>
+                <h3 style="margin:0; font-size:20px; font-weight:800;">Saved Backlink Snapshots</h3>
+                <div style="font-size:13px; color:var(--text-muted);">Stored historical point-in-time link profiles and internal equity calculations</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="app.closeSavedBacklinkSnapshotsModal()">✕ Close</button>
+        </div>
+        <div id="blSavedModalBody">
+            <div style="text-align:center; padding:32px; color:var(--text-muted);">Loading snapshots...</div>
+        </div>
+    </div>
+</div>
+
+<!-- BACKLINK METHODOLOGY MODAL -->
+<div id="backlinkMethodologyModal" class="login-modal-overlay hidden" style="align-items:flex-start; padding:40px 16px; overflow-y:auto; z-index:9999;">
+    <div class="card" style="max-width:760px; width:100%; margin:0 auto; padding:28px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+            <h3 style="margin:0; font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                <span>📐 Link Intelligence Methodology &amp; Boundaries</span>
+            </h3>
+            <button class="btn btn-secondary btn-sm" onclick="app.closePaiMethodologyModal()">✕ Close</button>
+        </div>
+        <div style="font-size:13px; line-height:1.6; color:#334155;">
+            <h4 style="margin:12px 0 6px 0; color:#0F172A;">1. Internal Page Equity Score (IPES) &amp; Platform Authority Index (PAI)</h4>
+            <p style="margin:0 0 10px 0;">
+                Calculated strictly from first-party on-site crawl evidence using an iterative PageRank power algorithm (<b>damping factor d = 0.85</b>, 30 iterations) across all discovered canonical pages:
+            </p>
+            <div style="background:#F1F5F9; padding:10px 14px; border-radius:8px; font-family:monospace; font-size:12px; margin-bottom:10px;">
+                PR(u) = (1 - d) / N + d * Σ [ PR(v) / L(v) * W(v) ] * DepthMultiplier(u)
+            </div>
+            <ul style="margin:0 0 14px 18px; padding:0;">
+                <li><b>Status Code Weights W(v):</b> HTTP 200 = 1.0, 3xx Redirects = 0.5, 4xx/5xx Errors = 0.0.</li>
+                <li><b>Crawl Depth Penalty:</b> Pages at depth 3 receive a 0.92 damping multiplier; depth ≥ 4 receives 0.85.</li>
+                <li><b>Orphan Page Rule:</b> Pages discovered with 0 internal inbound links receive an IPES of 0.0.</li>
+                <li><b>PAI Domain Score:</b> The weighted average equity of the top 15% highest-equity page hubs.</li>
+            </ul>
+
+            <h4 style="margin:12px 0 6px 0; color:#0F172A;">2. Third-Party External Backlink Indexes</h4>
+            <p style="margin:0 0 10px 0;">
+                External referring domains, live backlinks, and historical link velocity are retrieved directly from licensed data providers (DataForSEO Backlinks API or OpenPageRank).
+            </p>
+            <p style="margin:0 0 10px 0;">
+                When an external provider is not connected, the application will <b>never generate fabricated backlink numbers</b>. Instead, it clearly states provider unavailability while displaying verified on-site link equity calculations.
+            </p>
+
+            <h4 style="margin:12px 0 6px 0; color:#0F172A;">3. Search Engine Ranking Disclaimer</h4>
+            <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:10px 12px; color:#1E40AF; font-size:12px;">
+                Neither the Platform Authority Index (PAI) nor third-party Domain Rank scores are endorsed by or affiliated with Google LLC. They represent algorithmic link architecture models and must never be represented as guaranteed Google ranking indicators.
+            </div>
         </div>
     </div>
 </div>

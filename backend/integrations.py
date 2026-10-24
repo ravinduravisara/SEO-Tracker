@@ -780,6 +780,167 @@ def backlinks(target_url: str) -> dict[str, Any]:
         return {"ok": False, "connected": False, "target": domain, "error": str(exc)}
 
 
+def backlinks_referring_domains(target_url: str, limit: int = 100, filter_type: str = "all") -> dict[str, Any]:
+    """Retrieve referring domains with filtering by dofollow / nofollow."""
+    domain = bare_domain(target_url)
+
+    def run() -> dict[str, Any]:
+        task: dict[str, Any] = {
+            "target": domain,
+            "limit": min(max(1, limit), 200),
+            "order_by": ["rank,desc"],
+            "exclude_internal_backlinks": True,
+        }
+        if filter_type == "dofollow":
+            task["filters"] = ["dofollow", ">", 0]
+        elif filter_type == "nofollow":
+            task["filters"] = ["nofollow", ">", 0]
+
+        res, cost = _dfs_post("backlinks/referring_domains/live", task)
+        items = (res[0].get("items") if res else None) or []
+        domains = []
+        for it in items:
+            domains.append({
+                "domain": it.get("domain"),
+                "rank": it.get("rank"),
+                "backlinks": it.get("backlinks", 0),
+                "dofollow": it.get("dofollow", 0),
+                "nofollow": it.get("nofollow", 0),
+                "first_seen": it.get("first_seen"),
+                "last_visited": it.get("last_visited"),
+                "tld": it.get("tld"),
+                "ip": it.get("ip"),
+            })
+        return {
+            "ok": True,
+            "connected": True,
+            "target": domain,
+            "filter_type": filter_type,
+            "total_count": len(domains),
+            "items": domains,
+            "cost_usd": cost,
+            "source": "DataForSEO Backlinks API - Referring Domains",
+        }
+
+    try:
+        return _cached("dfs_ref_doms", [domain, limit, filter_type], run)
+    except (requests.RequestException, IntegrationError) as exc:
+        return {"ok": False, "connected": False, "target": domain, "error": str(exc), "items": []}
+
+
+def backlinks_anchors(target_url: str, limit: int = 50) -> dict[str, Any]:
+    """Retrieve anchor text distribution profile."""
+    domain = bare_domain(target_url)
+
+    def run() -> dict[str, Any]:
+        task = {
+            "target": domain,
+            "limit": min(max(1, limit), 200),
+            "order_by": ["backlinks,desc"],
+        }
+        res, cost = _dfs_post("backlinks/anchors/live", task)
+        items = (res[0].get("items") if res else None) or []
+        anchors = []
+        for it in items:
+            anchors.append({
+                "anchor": it.get("anchor") or "<empty>",
+                "backlinks": it.get("backlinks", 0),
+                "referring_domains": it.get("referring_domains", 0),
+                "dofollow": it.get("dofollow", 0),
+                "nofollow": it.get("nofollow", 0),
+                "first_seen": it.get("first_seen"),
+            })
+        return {
+            "ok": True,
+            "connected": True,
+            "target": domain,
+            "total_count": len(anchors),
+            "items": anchors,
+            "cost_usd": cost,
+            "source": "DataForSEO Backlinks API - Anchors",
+        }
+
+    try:
+        return _cached("dfs_anchors", [domain, limit], run)
+    except (requests.RequestException, IntegrationError) as exc:
+        return {"ok": False, "connected": False, "target": domain, "error": str(exc), "items": []}
+
+
+def backlinks_timeseries(target_url: str) -> dict[str, Any]:
+    """Retrieve historical backlink and referring domain time series."""
+    domain = bare_domain(target_url)
+
+    def run() -> dict[str, Any]:
+        task = {
+            "target": domain,
+            "group_by": "month",
+        }
+        res, cost = _dfs_post("backlinks/timeseries_summary/live", task)
+        items = (res[0].get("items") if res else None) or []
+        series = []
+        for it in items:
+            series.append({
+                "date": it.get("date"),
+                "backlinks": it.get("backlinks", 0),
+                "referring_domains": it.get("referring_domains", 0),
+                "new_backlinks": it.get("new_backlinks", 0),
+                "lost_backlinks": it.get("lost_backlinks", 0),
+                "new_referring_domains": it.get("new_referring_domains", 0),
+                "lost_referring_domains": it.get("lost_referring_domains", 0),
+            })
+        return {
+            "ok": True,
+            "connected": True,
+            "target": domain,
+            "items": series,
+            "cost_usd": cost,
+            "source": "DataForSEO Backlinks API - Time Series",
+        }
+
+    try:
+        return _cached("dfs_timeseries", [domain], run)
+    except (requests.RequestException, IntegrationError) as exc:
+        return {"ok": False, "connected": False, "target": domain, "error": str(exc), "items": []}
+
+
+def backlinks_pages(target_url: str, limit: int = 50) -> dict[str, Any]:
+    """Retrieve top linked target pages from external index."""
+    domain = bare_domain(target_url)
+
+    def run() -> dict[str, Any]:
+        task = {
+            "target": domain,
+            "limit": min(max(1, limit), 200),
+            "order_by": ["backlinks,desc"],
+        }
+        res, cost = _dfs_post("backlinks/pages/live", task)
+        items = (res[0].get("items") if res else None) or []
+        pages = []
+        for it in items:
+            pages.append({
+                "url": it.get("url"),
+                "backlinks": it.get("backlinks", 0),
+                "dofollow": it.get("dofollow", 0),
+                "nofollow": it.get("nofollow", 0),
+                "referring_domains": it.get("referring_domains", 0),
+                "rank": it.get("rank"),
+                "first_seen": it.get("first_seen"),
+            })
+        return {
+            "ok": True,
+            "connected": True,
+            "target": domain,
+            "items": pages,
+            "cost_usd": cost,
+            "source": "DataForSEO Backlinks API - Pages",
+        }
+
+    try:
+        return _cached("dfs_pages", [domain, limit], run)
+    except (requests.RequestException, IntegrationError) as exc:
+        return {"ok": False, "connected": False, "target": domain, "error": str(exc), "items": []}
+
+
 # ---------------------------------------------------------------------------
 # Audit enrichment
 # ---------------------------------------------------------------------------

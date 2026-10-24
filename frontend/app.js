@@ -58,24 +58,34 @@ async function jsonFetch(url, opts = {}) {
     if (csrfToken) {
         headers["X-CSRF-Token"] = csrfToken;
     }
+    const controller = new AbortController();
+    const timeoutMs = opts.timeout || 15000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const finalOpts = {
         credentials: "include",
+        signal: opts.signal || controller.signal,
         ...opts,
         headers
     };
-    const r = await fetch(url, finalOpts);
-    let d;
     try {
-        d = await r.json();
-    } catch {
-        d = {};
-    }
-    if (!r.ok) {
-        const err = new Error(d.detail || d.error || `HTTP error ${r.status}`);
-        err.status = r.status;
+        const r = await fetch(url, finalOpts);
+        clearTimeout(timeoutId);
+        let d;
+        try {
+            d = await r.json();
+        } catch {
+            d = {};
+        }
+        if (!r.ok) {
+            const err = new Error(d.detail || d.error || `HTTP error ${r.status}`);
+            err.status = r.status;
+            throw err;
+        }
+        return d;
+    } catch (err) {
+        clearTimeout(timeoutId);
         throw err;
     }
-    return d;
 }
 
 class SEOAdminApp {
@@ -101,6 +111,15 @@ class SEOAdminApp {
             previewToken: null,
             editingClientId: null,
             inviteToken: null
+        };
+        this.blState = {
+            targetDomain: "",
+            currentProfile: null,
+            activeTab: "domains",
+            referringFilter: "all",
+            referringSearch: "",
+            gapResults: null,
+            loading: false
         };
         this.init();
     }
@@ -338,7 +357,8 @@ class SEOAdminApp {
             activity_logs: "activity_logs.view",
             profile: null,
             source_audit: "audits.run",
-            technology_detector: "tech_detector.view"
+            technology_detector: "tech_detector.view",
+            backlink_analytics: "audits.view"
         };
 
         const requiredPerm = viewPermissions[view];
@@ -393,7 +413,8 @@ class SEOAdminApp {
             technology_detector: { id: "viewTechDetector", title: "Website Technology Detector", breadcrumb: "Analysis • CMS, Framework & Platform Detection" },
             domain_overview: { id: "viewDomainOverview", title: "Domain Overview", breadcrumb: "Telemetry • Domain Performance & Visibility" },
             keyword_magic: { id: "viewKeywordMagic", title: "Keyword Magic Tool", breadcrumb: "Research • SEMrush Inspired Keyword Intelligence" },
-            competitor_analysis: { id: "viewCompetitorAnalysis", title: "Competitor Analysis", breadcrumb: "Intelligence • Head-to-Head Benchmarks & Market Gaps" }
+            competitor_analysis: { id: "viewCompetitorAnalysis", title: "Competitor Analysis", breadcrumb: "Intelligence • Head-to-Head Benchmarks & Market Gaps" },
+            backlink_analytics: { id: "viewBacklinkAnalytics", title: "Backlink Analytics", breadcrumb: "Intelligence • Indexed Backlinks & Internal Equity Modeling" }
         };
 
         const target = viewMap[view] || viewMap.dashboard;
@@ -411,6 +432,7 @@ class SEOAdminApp {
         else if (view === "domain_overview") this.loadDomainOverview();
         else if (view === "keyword_magic") this.loadKeywordMagic();
         else if (view === "competitor_analysis") this.loadCompetitorAnalysis();
+        else if (view === "backlink_analytics") this.loadBacklinkAnalytics();
         else if (view === "clients") this.loadClients();
         else if (view === "audits") this.loadAudits();
         else if (view === "leads") this.loadLeads();
@@ -439,10 +461,14 @@ class SEOAdminApp {
 
     async checkHealth() {
         try {
-            const d = await jsonFetch(`${API_BASE}/health`);
-            $("healthBadge").innerHTML = `<span style="color:var(--success)">●</span> API Ready • v${esc(d.version || "10.4.0")}`;
+            const d = await jsonFetch(`${API_BASE}/health`, { timeout: 4000 });
+            if ($("healthBadge")) {
+                $("healthBadge").innerHTML = `<span style="color:var(--success)">●</span> API Ready • v${esc(d.version || "10.4.0")}`;
+            }
         } catch {
-            $("healthBadge").innerHTML = `<span style="color:var(--danger)">●</span> Backend Offline`;
+            if ($("healthBadge")) {
+                $("healthBadge").innerHTML = `<span style="color:var(--danger)">●</span> Backend Offline`;
+            }
         }
     }
 
@@ -468,6 +494,11 @@ class SEOAdminApp {
             } catch (_) {}
         } catch (e) {
             console.error("Dashboard stats error:", e);
+            if (e.status === 401) {
+                this.state.authenticated = false;
+                if ($("adminLoginScreen")) $("adminLoginScreen").style.display = "flex";
+                if ($("appLayout")) $("appLayout").style.display = "none";
+            }
         }
     }
 
@@ -4767,6 +4798,793 @@ class SEOAdminApp {
             this.showNotification(`Saved '${kwStr}' to project '${projName}'.`, "success");
         } catch (err) {
             this.showNotification("Failed to save to project: " + (err.message || err), "danger");
+        }
+    }
+
+    /* -------------------------------------------------------------
+       PHASE 6: BACKLINK ANALYTICS & LINK INTELLIGENCE
+    -------------------------------------------------------------- */
+    async loadBacklinkAnalytics() {
+        const select = $("blTargetDropdown");
+        if (select) {
+            try {
+                const audits = await jsonFetch(`${API_BASE}/audits?limit=50`);
+                const seen = new Set();
+                const options = ['<option value="">-- Choose audited domain --</option>'];
+                (audits || []).forEach(a => {
+                    const host = (a.target_url || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].toLowerCase();
+                    if (host && !seen.has(host)) {
+                        seen.add(host);
+                        options.push(`<option value="${esc(host)}">${esc(host)}</option>`);
+                    }
+                });
+                select.innerHTML = options.join("");
+            } catch (_) {}
+        }
+
+        const input = $("blTargetInput");
+        if (input && input.value.trim()) {
+            this.runBacklinkAnalysis(false);
+        } else if (select && select.options.length > 1) {
+            select.selectedIndex = 1;
+            this.handleBacklinkDropdownChange();
+        }
+    }
+
+    handleBacklinkDropdownChange() {
+        const select = $("blTargetDropdown");
+        const input = $("blTargetInput");
+        if (select && input && select.value) {
+            input.value = select.value;
+            this.runBacklinkAnalysis(false);
+        }
+    }
+
+    async runBacklinkAnalysis(refresh = false) {
+        const input = $("blTargetInput");
+        const domain = (input ? input.value : "").trim();
+        if (!domain) {
+            this.showNotification("Please select or enter a target domain to inspect backlinks.", "warning");
+            return;
+        }
+
+        this.blState.targetDomain = domain;
+        this.blState.loading = true;
+
+        const content = $("blContentArea");
+        if (content) {
+            content.innerHTML = `
+                <div class="card" style="text-align:center; padding:60px 20px;">
+                    <div class="spinner" style="width:36px; height:36px; margin:0 auto 16px auto; border-width:3px;"></div>
+                    <h3 style="margin:0 0 6px 0; font-size:18px;">Analyzing Backlink Architecture...</h3>
+                    <div style="font-size:13px; color:var(--text-muted);">
+                        Retrieving indexed backlinks, referring domains, anchor classifications, and calculating internal equity modeling (PAI)...
+                    </div>
+                </div>
+            `;
+        }
+
+        try {
+            const profile = await jsonFetch(`${API_BASE}/backlinks/overview?target=${encodeURIComponent(domain)}&refresh=${refresh ? 1 : 0}`);
+            this.blState.currentProfile = profile;
+            this.blState.loading = false;
+            this.renderBacklinkProfile(profile);
+        } catch (err) {
+            this.blState.loading = false;
+            if (content) {
+                content.innerHTML = `
+                    <div class="card" style="padding:40px 20px; text-align:center;">
+                        <div style="font-size:32px; margin-bottom:10px;">⚠️</div>
+                        <h3 style="margin:0 0 8px 0; color:var(--danger);">Failed to Retrieve Backlink Profile</h3>
+                        <p style="margin:0 0 16px 0; font-size:13px; color:var(--text-muted);">${esc(err.message || err)}</p>
+                        <button class="btn btn-secondary btn-sm" onclick="app.runBacklinkAnalysis(true)">Retry Analysis</button>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    renderBacklinkProfile(profile) {
+        const content = $("blContentArea");
+        if (!content || !profile) return;
+
+        // 1. Update Provider Status Pill & Provenance
+        const badge = $("blProviderBadge");
+        if (badge) {
+            if (profile.has_external_provider) {
+                badge.style.background = "#ECFDF5";
+                badge.style.color = "#047857";
+                badge.textContent = "● Live External Provider Active";
+            } else {
+                badge.style.background = "#EFF6FF";
+                badge.style.color = "#1D4ED8";
+                badge.textContent = "● On-Site Link Equity Engine";
+            }
+        }
+
+        const provText = $("blProvenanceText");
+        if (provText) {
+            provText.innerHTML = `<b>Data Provenance:</b> ${esc(profile.data_provider_note || "")}`;
+        }
+
+        const ov = profile.overview || {};
+        const da = profile.domain_authority || {};
+        const pai = profile.platform_authority_index || {};
+        const tox = profile.toxicity_radar || {};
+
+        const totalBlStr = ov.total_backlinks != null ? fmt(ov.total_backlinks) : '<span style="color:var(--text-muted); font-size:16px;">Requires Provider</span>';
+        const refDomStr = ov.referring_domains != null ? fmt(ov.referring_domains) : '<span style="color:var(--text-muted); font-size:16px;">Requires Provider</span>';
+        const dofollowPctStr = ov.dofollow_percentage != null ? `${ov.dofollow_percentage}%` : '—';
+        const paiScore = (pai.score || 0).toFixed(1);
+        const paiColor = getScoreColor(pai.score);
+
+        const toxLevel = tox.risk_level || "LOW";
+        const toxBadgeColor = toxLevel === "LOW" ? "#10B981" : (toxLevel === "MODERATE" ? "#F59E0B" : "#EF4444");
+
+        content.innerHTML = `
+            <!-- 4 Top KPI Scoreboard Cards -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-bottom:20px;">
+                <!-- Total Backlinks -->
+                <div class="card stat-card" style="border-top:3px solid #2563EB;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; font-weight:700; color:var(--text-muted);">Total Indexed Backlinks</span>
+                            <div class="stat-value" style="color:#2563EB; font-size:28px; margin:4px 0;">${totalBlStr}</div>
+                        </div>
+                        <div style="width:36px; height:36px; border-radius:8px; background:#EFF6FF; display:flex; align-items:center; justify-content:center; font-size:16px;">🔗</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+                        ${ov.broken_backlinks ? `<span style="color:var(--danger); font-weight:600;">${fmt(ov.broken_backlinks)} broken</span>` : "Live external link index"}
+                    </div>
+                </div>
+
+                <!-- Referring Domains -->
+                <div class="card stat-card" style="border-top:3px solid #10B981;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; font-weight:700; color:var(--text-muted);">Referring Domains</span>
+                            <div class="stat-value" style="color:#10B981; font-size:28px; margin:4px 0;">${refDomStr}</div>
+                        </div>
+                        <div style="width:36px; height:36px; border-radius:8px; background:#ECFDF5; display:flex; align-items:center; justify-content:center; font-size:16px;">🌐</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+                        ${ov.referring_ips ? `${fmt(ov.referring_ips)} distinct IPs • ${fmt(ov.referring_main_domains || 0)} main domains` : "Unique domain origins"}
+                    </div>
+                </div>
+
+                <!-- Dofollow Ratio -->
+                <div class="card stat-card" style="border-top:3px solid #06B6D4;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; font-weight:700; color:var(--text-muted);">Dofollow Link Ratio</span>
+                            <div class="stat-value" style="color:#06B6D4; font-size:28px; margin:4px 0;">${dofollowPctStr}</div>
+                        </div>
+                        <div style="width:36px; height:36px; border-radius:8px; background:#ECFEFF; display:flex; align-items:center; justify-content:center; font-size:16px;">⚡</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+                        ${ov.dofollow_backlinks != null ? `${fmt(ov.dofollow_backlinks)} dofollow • ${fmt(ov.nofollow_backlinks || 0)} nofollow` : "Authority passing links"}
+                    </div>
+                </div>
+
+                <!-- Platform Authority Index (PAI) -->
+                <div class="card stat-card" style="border-top:3px solid ${paiColor}; cursor:pointer;" onclick="app.showPaiMethodologyModal()" title="Click to view mathematical methodology">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="stat-label" style="text-transform:uppercase; font-size:11px; font-weight:700; color:var(--text-muted);">Platform Authority (PAI)</span>
+                            <div class="stat-value" style="color:${paiColor}; font-size:28px; margin:4px 0;">${paiScore}<span style="font-size:14px; color:var(--text-muted);">/100</span></div>
+                        </div>
+                        <div style="width:36px; height:36px; border-radius:8px; background:${paiColor}15; display:flex; align-items:center; justify-content:center; font-size:16px;">🏆</div>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+                        Internal PageRank equity • <span style="color:#2563EB; font-weight:600;">Methodology ↗</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabbed Navigation Bar -->
+            <div class="card" style="padding:0; overflow:hidden; margin-bottom:20px;">
+                <div style="display:flex; border-bottom:1px solid var(--border); background:#F8FAFC; overflow-x:auto;">
+                    <button class="bl-tab-btn ${this.blState.activeTab === 'domains' ? 'active' : ''}" onclick="app.switchBacklinkTab('domains')">
+                        🌐 Referring Domains <span class="pill" style="font-size:10px; margin-left:4px;">${(profile.referring_domains || []).length}</span>
+                    </button>
+                    <button class="bl-tab-btn ${this.blState.activeTab === 'anchors' ? 'active' : ''}" onclick="app.switchBacklinkTab('anchors')">
+                        ⚓ Anchor Profile <span class="pill" style="font-size:10px; margin-left:4px;">${(profile.anchor_profile || []).length}</span>
+                    </button>
+                    <button class="bl-tab-btn ${this.blState.activeTab === 'equity' ? 'active' : ''}" onclick="app.switchBacklinkTab('equity')">
+                        🌳 Internal Equity (IPES) <span class="pill" style="font-size:10px; margin-left:4px;">${((profile.internal_equity || {}).top_equity_pages || []).length}</span>
+                    </button>
+                    <button class="bl-tab-btn ${this.blState.activeTab === 'gap' ? 'active' : ''}" onclick="app.switchBacklinkTab('gap')">
+                        ⚔️ Competitor Backlink Gap
+                    </button>
+                    <button class="bl-tab-btn ${this.blState.activeTab === 'toxicity' ? 'active' : ''}" onclick="app.switchBacklinkTab('toxicity')">
+                        ⚠️ Toxicity Radar <span class="pill" style="background:${toxBadgeColor}20; color:${toxBadgeColor}; font-size:10px; margin-left:4px;">${toxLevel}</span>
+                    </button>
+                </div>
+                <div id="blTabContent" style="padding:20px;"></div>
+            </div>
+        `;
+
+        this.renderActiveBacklinkTab();
+    }
+
+    switchBacklinkTab(tabKey) {
+        this.blState.activeTab = tabKey;
+        document.querySelectorAll(".bl-tab-btn").forEach(btn => {
+            const isMatch = (tabKey === "domains" && btn.textContent.includes("Referring Domains")) ||
+                            (tabKey === "anchors" && btn.textContent.includes("Anchor Profile")) ||
+                            (tabKey === "equity" && btn.textContent.includes("Internal Equity")) ||
+                            (tabKey === "gap" && btn.textContent.includes("Competitor Backlink Gap")) ||
+                            (tabKey === "toxicity" && btn.textContent.includes("Toxicity Radar"));
+            btn.classList.toggle("active", isMatch);
+        });
+        this.renderActiveBacklinkTab();
+    }
+
+    renderActiveBacklinkTab() {
+        const tabKey = this.blState.activeTab;
+        const profile = this.blState.currentProfile;
+        if (!profile) return;
+
+        if (tabKey === "domains") this.renderBacklinkDomainsTab(profile);
+        else if (tabKey === "anchors") this.renderBacklinkAnchorsTab(profile);
+        else if (tabKey === "equity") this.renderBacklinkEquityTab(profile);
+        else if (tabKey === "gap") this.renderBacklinkGapTab(profile);
+        else if (tabKey === "toxicity") this.renderBacklinkToxicityTab(profile);
+    }
+
+    renderBacklinkDomainsTab(profile) {
+        const container = $("blTabContent");
+        if (!container) return;
+
+        let items = profile.referring_domains || [];
+
+        // Apply filters
+        if (this.blState.referringSearch) {
+            const s = this.blState.referringSearch.toLowerCase();
+            items = items.filter(it => (it.domain || "").toLowerCase().includes(s));
+        }
+        if (this.blState.referringFilter === "dofollow") {
+            items = items.filter(it => (it.dofollow || 0) > 0);
+        } else if (this.blState.referringFilter === "nofollow") {
+            items = items.filter(it => (it.nofollow || 0) > 0);
+        }
+
+        container.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" class="form-input form-input-sm" placeholder="Filter domains..." value="${esc(this.blState.referringSearch)}" oninput="app.blState.referringSearch = this.value; app.renderBacklinkDomainsTab(app.blState.currentProfile);" style="width:200px;">
+                    <div style="display:flex; gap:4px;">
+                        <button class="btn btn-sm ${this.blState.referringFilter === 'all' ? 'btn-primary' : 'btn-secondary'}" onclick="app.blState.referringFilter = 'all'; app.renderBacklinkDomainsTab(app.blState.currentProfile);">All</button>
+                        <button class="btn btn-sm ${this.blState.referringFilter === 'dofollow' ? 'btn-primary' : 'btn-secondary'}" onclick="app.blState.referringFilter = 'dofollow'; app.renderBacklinkDomainsTab(app.blState.currentProfile);">Dofollow</button>
+                        <button class="btn btn-sm ${this.blState.referringFilter === 'nofollow' ? 'btn-primary' : 'btn-secondary'}" onclick="app.blState.referringFilter = 'nofollow'; app.renderBacklinkDomainsTab(app.blState.currentProfile);">Nofollow</button>
+                    </div>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted);">
+                    Showing <b>${items.length}</b> referring domains
+                </div>
+            </div>
+
+            ${items.length ? `
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Referring Domain</th>
+                                <th style="text-align:right;">Provider Rank</th>
+                                <th style="text-align:right;">Total Links</th>
+                                <th style="text-align:right;">Dofollow</th>
+                                <th style="text-align:right;">Nofollow</th>
+                                <th>First Seen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${items.map(r => `
+                                <tr>
+                                    <td>
+                                        <b style="color:var(--text);">${esc(r.domain || "")}</b>
+                                        ${r.tld ? `<span class="pill" style="font-size:10px; margin-left:6px; background:#F1F5F9;">.${esc(r.tld)}</span>` : ""}
+                                    </td>
+                                    <td style="text-align:right;">
+                                        <span class="pill" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">${r.rank != null ? esc(r.rank) : "—"}</span>
+                                    </td>
+                                    <td style="text-align:right; font-weight:700;">${fmt(r.backlinks)}</td>
+                                    <td style="text-align:right; color:#10B981; font-weight:600;">${fmt(r.dofollow)}</td>
+                                    <td style="text-align:right; color:#64748B;">${fmt(r.nofollow)}</td>
+                                    <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">${esc(String(r.first_seen || "—").slice(0, 10))}</td>
+                                </tr>
+                            `).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            ` : `
+                <div class="empty-state" style="padding:32px;">
+                    <p style="margin:0; font-size:13px; color:var(--text-muted);">
+                        ${profile.has_external_provider ? "No referring domains match your filter criteria." : "External referring domains require a connected backlink provider (DataForSEO Backlinks API)."}
+                    </p>
+                </div>
+            `}
+        `;
+    }
+
+    renderBacklinkAnchorsTab(profile) {
+        const container = $("blTabContent");
+        if (!container) return;
+
+        const anchors = profile.anchor_profile || [];
+
+        // Check for commercial anchor over-optimization
+        const exactMatches = anchors.filter(a => a.category === "Exact Match" || a.category === "Target Commercial");
+        const totalAnchorBl = anchors.reduce((acc, a) => acc + (a.backlinks || 0), 0);
+        const exactBl = exactMatches.reduce((acc, a) => acc + (a.backlinks || 0), 0);
+        const exactRatio = totalAnchorBl > 0 ? (exactBl / totalAnchorBl) * 100 : 0;
+        const isOverfit = exactRatio > 25;
+
+        container.innerHTML = `
+            ${isOverfit ? `
+                <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:8px; padding:12px 16px; margin-bottom:16px; display:flex; gap:12px; align-items:flex-start;">
+                    <div style="font-size:20px;">⚠️</div>
+                    <div>
+                        <b style="color:#B91C1C; font-size:13px;">Commercial Anchor Over-Optimization Warning</b>
+                        <div style="font-size:12px; color:#7F1D1D; margin-top:2px;">
+                            ${exactRatio.toFixed(1)}% of your backlinks use exact commercial anchor text. Natural link profiles typically feature over 60% branded or naked URL anchors. Excessive exact-match anchors may trigger search engine spam filtering.
+                        </div>
+                    </div>
+                </div>
+            ` : ""}
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <div style="font-size:13px; color:var(--text-muted);">
+                    Anchor texts classified across Branded, Exact Match, Partial Match, Generic, and Naked URL categories.
+                </div>
+                <div style="font-size:12px; color:var(--text-muted);">
+                    <b>${anchors.length}</b> distinct anchor terms
+                </div>
+            </div>
+
+            ${anchors.length ? `
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Anchor Text</th>
+                                <th>Classification</th>
+                                <th style="text-align:right;">Backlinks</th>
+                                <th style="text-align:right;">Referring Domains</th>
+                                <th style="text-align:right;">Dofollow</th>
+                                <th>Origin</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${anchors.map(a => `
+                                <tr>
+                                    <td><b style="color:var(--text);">"${esc(a.anchor || "")}"</b></td>
+                                    <td>
+                                        <span class="pill" style="background:${a.badge_color || '#64748B'}20; color:${a.badge_color || '#64748B'}; font-weight:700; font-size:10px;">
+                                            ${esc(a.category || "Unclassified")}
+                                        </span>
+                                    </td>
+                                    <td style="text-align:right; font-weight:700;">${fmt(a.backlinks)}</td>
+                                    <td style="text-align:right; color:#2563EB;">${fmt(a.referring_domains)}</td>
+                                    <td style="text-align:right; color:#10B981;">${fmt(a.dofollow)}</td>
+                                    <td style="font-size:11px; color:var(--text-muted);">${a.is_internal ? "On-Site Internal" : "External Index"}</td>
+                                </tr>
+                            `).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            ` : `
+                <div class="empty-state" style="padding:32px;">
+                    <p style="margin:0; font-size:13px; color:var(--text-muted);">No anchor profiles recorded for this target domain.</p>
+                </div>
+            `}
+        `;
+    }
+
+    renderBacklinkEquityTab(profile) {
+        const container = $("blTabContent");
+        if (!container) return;
+
+        const equity = profile.internal_equity || {};
+        const pages = equity.top_equity_pages || [];
+        const orphans = equity.orphan_pages || [];
+
+        container.innerHTML = `
+            <div style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:12px 16px; margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <b style="color:#15803D; font-size:13px;">Internal Link Equity Simulation (PageRank d=0.85)</b>
+                        <div style="font-size:12px; color:#166534; margin-top:2px;">
+                            ${esc(equity.methodology || "")}
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="app.showPaiMethodologyModal()" style="white-space:nowrap; margin-left:12px;">Methodology Details</button>
+                </div>
+            </div>
+
+            ${orphans.length ? `
+                <div style="background:#FEF3C7; border:1px solid #FCD34D; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:12px; color:#92400E;">
+                    <b>Orphan Pages Detected:</b> Found <b>${orphans.length}</b> page(s) on your website with 0 internal inbound links (IPES = 0.0). These pages receive zero internal link authority.
+                </div>
+            ` : ""}
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <div style="font-size:12px; color:var(--text-muted);">
+                    Evaluated <b>${equity.internal_pages_evaluated || pages.length}</b> crawled URLs. Sorted by equity score.
+                </div>
+            </div>
+
+            ${pages.length ? `
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Page URL &amp; Title</th>
+                                <th style="text-align:right;">Equity Score (IPES)</th>
+                                <th style="text-align:right;">Internal Inlinks</th>
+                                <th style="text-align:right;">Outlinks</th>
+                                <th style="text-align:right;">Crawl Depth</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${pages.map(p => {
+                                const score = p.internal_equity_score || 0;
+                                const color = getScoreColor(score);
+                                return `
+                                    <tr>
+                                        <td>
+                                            <div style="font-weight:600; color:var(--text); max-width:440px; word-break:break-all;">${esc(p.url || "")}</div>
+                                            <div style="font-size:11px; color:var(--text-muted);">${esc(p.title || "")}</div>
+                                            ${p.is_orphan ? `<span class="pill" style="background:#FEF2F2; color:#DC2626; font-size:9px; margin-top:2px;">ORPHAN PAGE</span>` : ""}
+                                        </td>
+                                        <td style="text-align:right;">
+                                            <div style="display:inline-flex; align-items:center; gap:6px;">
+                                                <div style="width:60px; height:6px; background:#E2E8F0; border-radius:3px; overflow:hidden;">
+                                                    <div style="width:${score}%; height:100%; background:${color};"></div>
+                                                </div>
+                                                <b style="color:${color}; font-size:13px;">${score.toFixed(1)}</b>
+                                            </div>
+                                        </td>
+                                        <td style="text-align:right; font-weight:700;">${fmt(p.inbound_internal_links)}</td>
+                                        <td style="text-align:right; color:var(--text-muted);">${fmt(p.outbound_internal_links)}</td>
+                                        <td style="text-align:right;"><span class="pill" style="font-size:10px;">Depth ${p.depth || 1}</span></td>
+                                        <td><span class="pill" style="background:${p.status === 200 ? '#ECFDF5' : '#FEF2F2'}; color:${p.status === 200 ? '#047857' : '#DC2626'}; font-size:10px;">HTTP ${p.status}</span></td>
+                                    </tr>
+                                `;
+                            }).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            ` : `
+                <div class="empty-state" style="padding:32px;">
+                    <p style="margin:0; font-size:13px; color:var(--text-muted);">Run a technical crawl audit on this website first to generate its internal link equity graph.</p>
+                </div>
+            `}
+        `;
+    }
+
+    renderBacklinkGapTab(profile) {
+        const container = $("blTabContent");
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="card" style="background:#F8FAFC; border:1px solid var(--border); margin-bottom:20px;">
+                <h4 style="margin:0 0 8px 0; font-size:14px;">Find Competitor Backlink Opportunities</h4>
+                <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+                    Discover referring domains that link to your competitors but have not yet linked to <b>${esc(profile.target_domain)}</b>.
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                    <input id="blCompInput1" type="text" class="form-input form-input-sm" placeholder="Competitor 1 (e.g. competitor.com)" style="width:200px;">
+                    <input id="blCompInput2" type="text" class="form-input form-input-sm" placeholder="Competitor 2 (optional)" style="width:200px;">
+                    <input id="blCompInput3" type="text" class="form-input form-input-sm" placeholder="Competitor 3 (optional)" style="width:200px;">
+                    <button class="btn btn-primary btn-sm" onclick="app.runBacklinkGapAnalysis()">Analyze Backlink Gap</button>
+                </div>
+            </div>
+
+            <div id="blGapResultsArea">
+                <div class="empty-state" style="padding:32px;">
+                    <div style="font-size:28px; margin-bottom:8px;">⚔️</div>
+                    <p style="margin:0; font-size:13px; color:var(--text-muted);">Enter one or more competitor domains above to uncover missing link prospects.</p>
+                </div>
+            </div>
+        `;
+    }
+
+    async runBacklinkGapAnalysis() {
+        const target = this.blState.targetDomain;
+        const c1 = ($("blCompInput1") ? $("blCompInput1").value : "").trim();
+        const c2 = ($("blCompInput2") ? $("blCompInput2").value : "").trim();
+        const c3 = ($("blCompInput3") ? $("blCompInput3").value : "").trim();
+
+        const comps = [c1, c2, c3].filter(Boolean);
+        if (!comps.length) {
+            this.showNotification("Please enter at least one competitor domain.", "warning");
+            return;
+        }
+
+        const area = $("blGapResultsArea");
+        if (area) {
+            area.innerHTML = `
+                <div style="text-align:center; padding:32px;">
+                    <div class="spinner" style="margin:0 auto 10px auto;"></div>
+                    <div style="font-size:13px; color:var(--text-muted);">Comparing referring domain indexes across competitors...</div>
+                </div>
+            `;
+        }
+
+        try {
+            const data = await jsonFetch(`${API_BASE}/backlinks/gap`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ target_domain: target, competitor_domains: comps })
+            });
+
+            if (area) {
+                const gaps = data.gaps || [];
+                if (!gaps.length) {
+                    area.innerHTML = `
+                        <div class="empty-state" style="padding:32px;">
+                            <p style="margin:0; font-size:13px; color:var(--text-muted);">No backlink gaps found or competitor data requires active backlink provider.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                area.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div style="font-size:13px; color:var(--text-muted);">
+                            Found <b>${data.total_backlink_gaps}</b> referring domain opportunities (<b>${data.high_priority_gaps_count}</b> linking to 2+ competitors).
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Prospect Domain</th>
+                                    <th style="text-align:right;">Provider Rank</th>
+                                    <th style="text-align:right;">Competitor Coverage</th>
+                                    <th style="text-align:right;">Links to Competitors</th>
+                                    <th>Linked Competitors</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${gaps.map(g => `
+                                    <tr>
+                                        <td><b style="color:var(--text);">${esc(g.referring_domain)}</b></td>
+                                        <td style="text-align:right;"><span class="pill" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">${g.rank != null ? esc(g.rank) : "—"}</span></td>
+                                        <td style="text-align:right;">
+                                            <span class="pill" style="background:${g.competitors_count >= 2 ? '#ECFDF5' : '#F1F5F9'}; color:${g.competitors_count >= 2 ? '#047857' : '#475569'}; font-weight:700;">
+                                                ${g.competitors_count} Competitor(s)
+                                            </span>
+                                        </td>
+                                        <td style="text-align:right; font-weight:700;">${fmt(g.backlinks_to_competitors)}</td>
+                                        <td style="font-size:11px; color:var(--text-muted);">
+                                            ${Object.keys(g.competitor_links || {}).map(c => `<span class="pill" style="font-size:9px; margin-right:4px;">${esc(c)}</span>`).join("")}
+                                        </td>
+                                    </tr>
+                                `).join("")}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+        } catch (err) {
+            if (area) {
+                area.innerHTML = `<div class="empty-state" style="color:var(--danger); padding:24px;">Gap analysis failed: ${esc(err.message || err)}</div>`;
+            }
+        }
+    }
+
+    renderBacklinkToxicityTab(profile) {
+        const container = $("blTabContent");
+        if (!container) return;
+
+        const tox = profile.toxicity_radar || {};
+        const flags = tox.flags || [];
+        const riskLevel = tox.risk_level || "LOW";
+        const riskColor = riskLevel === "LOW" ? "#10B981" : (riskLevel === "MODERATE" ? "#F59E0B" : "#EF4444");
+
+        container.innerHTML = `
+            <div style="display:grid; grid-template-columns: 280px 1fr; gap:20px; margin-bottom:20px; align-items:start;">
+                <!-- Risk Meter Card -->
+                <div class="card" style="text-align:center; padding:24px; border-top:4px solid ${riskColor};">
+                    <span class="stat-label" style="text-transform:uppercase; font-size:11px; font-weight:700; color:var(--text-muted);">Overall Link Toxicity Risk</span>
+                    <div style="font-size:36px; font-weight:800; color:${riskColor}; margin:8px 0;">${riskLevel}</div>
+                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">Risk Score: <b>${tox.risk_score || 0} / 100</b></div>
+                    <div style="background:#F1F5F9; border-radius:6px; height:8px; overflow:hidden; margin:0 auto; max-width:200px;">
+                        <div style="width:${tox.risk_score || 0}%; height:100%; background:${riskColor};"></div>
+                    </div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:10px;">
+                        Backlinks per Domain Ratio: <b>${tox.backlinks_per_domain_ratio || 0}:1</b>
+                    </div>
+                </div>
+
+                <!-- Toxicity Flags -->
+                <div class="card" style="padding:20px;">
+                    <h4 style="margin:0 0 12px 0; font-size:14px;">Suspicious Link Pattern Flags (${flags.length})</h4>
+                    ${flags.length ? `
+                        <div style="display:flex; flex-direction:column; gap:10px;">
+                            ${flags.map(f => `
+                                <div style="background:${f.severity === 'HIGH' ? '#FEF2F2' : '#FFFBEB'}; border:1px solid ${f.severity === 'HIGH' ? '#FECACA' : '#FDE68A'}; border-radius:8px; padding:12px 14px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <b style="color:${f.severity === 'HIGH' ? '#B91C1C' : '#B45309'}; font-size:13px;">${esc(f.title)}</b>
+                                        <span class="pill" style="background:${f.severity === 'HIGH' ? '#DC2626' : '#D97706'}; color:#FFFFFF; font-size:9px; font-weight:700;">${f.severity}</span>
+                                    </div>
+                                    <div style="font-size:12px; color:#475569; margin-top:4px;">${esc(f.detail)}</div>
+                                </div>
+                            `).join("")}
+                        </div>
+                    ` : `
+                        <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:8px; padding:16px; color:#065F46; font-size:13px;">
+                            <b>✓ Clean Link Profile:</b> No high-risk sitewide link skew, spam scores, or unnatural commercial anchor patterns detected.
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    }
+
+    async saveCurrentBacklinkSnapshot() {
+        const profile = this.blState.currentProfile;
+        if (!profile) {
+            this.showNotification("Please load a backlink profile first before saving a snapshot.", "warning");
+            return;
+        }
+
+        const btn = $("btnSaveBacklinkSnapshot");
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Saving...";
+        }
+
+        try {
+            const res = await jsonFetch(`${API_BASE}/backlinks/snapshots`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    target_domain: profile.target_domain,
+                    client_id: this.state.selectedClientId || null,
+                    data: profile
+                })
+            });
+            this.showNotification(`Saved snapshot #${res.snapshot_id} for ${profile.target_domain}.`, "success");
+        } catch (err) {
+            this.showNotification("Failed to save snapshot: " + (err.message || err), "danger");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = "💾 Save Snapshot";
+            }
+        }
+    }
+
+    async openSavedBacklinkSnapshotsModal() {
+        const modal = $("backlinkSnapshotsModal");
+        const body = $("blSavedModalBody");
+        if (!modal || !body) return;
+
+        modal.classList.remove("hidden");
+        body.innerHTML = '<div style="text-align:center; padding:32px;"><div class="spinner" style="margin:0 auto 10px auto;"></div>Loading snapshots...</div>';
+
+        try {
+            const list = await jsonFetch(`${API_BASE}/backlinks/snapshots`);
+            if (!list.length) {
+                body.innerHTML = '<div class="empty-state" style="padding:32px;">No backlink snapshots saved yet.</div>';
+                return;
+            }
+
+            body.innerHTML = `
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Target Domain</th>
+                                <th>Saved Date</th>
+                                <th style="text-align:right;">Backlinks</th>
+                                <th style="text-align:right;">Referring Domains</th>
+                                <th style="text-align:right;">PAI Score</th>
+                                <th style="text-align:right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${list.map(s => `
+                                <tr>
+                                    <td><b style="color:var(--text);">${esc(s.target_domain)}</b></td>
+                                    <td style="font-size:12px; color:var(--text-muted);">${esc(String(s.created_at || "—").replace("T", " ").slice(0, 16))}</td>
+                                    <td style="text-align:right; font-weight:700;">${fmt(s.total_backlinks)}</td>
+                                    <td style="text-align:right;">${fmt(s.referring_domains)}</td>
+                                    <td style="text-align:right;">
+                                        <span class="pill" style="background:#EFF6FF; color:#1D4ED8; font-weight:700;">${(s.platform_authority_index || 0).toFixed(1)}</span>
+                                    </td>
+                                    <td style="text-align:right; white-space:nowrap;">
+                                        <button class="btn btn-secondary btn-sm" onclick="app.loadSavedBacklinkSnapshot(${s.id})" style="margin-right:4px;">Load</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="app.deleteSavedBacklinkSnapshot(${s.id})" style="color:var(--danger);">Delete</button>
+                                    </td>
+                                </tr>
+                            `).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        } catch (err) {
+            body.innerHTML = `<div class="empty-state" style="color:var(--danger); padding:24px;">Failed to load snapshots: ${esc(err.message || err)}</div>`;
+        }
+    }
+
+    closeSavedBacklinkSnapshotsModal() {
+        const modal = $("backlinkSnapshotsModal");
+        if (modal) modal.classList.add("hidden");
+    }
+
+    async loadSavedBacklinkSnapshot(id) {
+        try {
+            const snap = await jsonFetch(`${API_BASE}/backlinks/snapshots/${id}`);
+            if (snap && snap.data) {
+                this.blState.currentProfile = snap.data;
+                this.blState.targetDomain = snap.target_domain;
+                if ($("blTargetInput")) $("blTargetInput").value = snap.target_domain;
+                this.renderBacklinkProfile(snap.data);
+                this.closeSavedBacklinkSnapshotsModal();
+                this.showNotification(`Loaded snapshot #${id} for ${snap.target_domain}.`, "success");
+            }
+        } catch (err) {
+            this.showNotification("Failed to load snapshot: " + (err.message || err), "danger");
+        }
+    }
+
+    async deleteSavedBacklinkSnapshot(id) {
+        if (!confirm(`Are you sure you want to delete backlink snapshot #${id}?`)) return;
+        try {
+            await jsonFetch(`${API_BASE}/backlinks/snapshots/${id}`, { method: "DELETE" });
+            this.showNotification(`Snapshot #${id} deleted.`, "success");
+            this.openSavedBacklinkSnapshotsModal();
+        } catch (err) {
+            this.showNotification("Failed to delete snapshot: " + (err.message || err), "danger");
+        }
+    }
+
+    showPaiMethodologyModal() {
+        const modal = $("backlinkMethodologyModal");
+        if (modal) modal.classList.remove("hidden");
+    }
+
+    closePaiMethodologyModal() {
+        const modal = $("backlinkMethodologyModal");
+        if (modal) modal.classList.add("hidden");
+    }
+
+    async exportBacklinks(format = "pdf") {
+        const profile = this.blState.currentProfile;
+        if (!profile) {
+            this.showNotification("Please load a backlink profile first to export data.", "warning");
+            return;
+        }
+
+        try {
+            this.showNotification(`Generating ${format.toUpperCase()} backlink report...`, "info");
+            const res = await fetch(`${API_BASE}/backlinks/export/${format}`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
+                },
+                body: JSON.stringify(profile)
+            });
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `backlinks_${profile.target_domain}_${new Date().toISOString().slice(0, 10)}.${format === "excel" ? "xls" : format}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            this.showNotification(`Downloaded ${format.toUpperCase()} report successfully.`, "success");
+        } catch (err) {
+            this.showNotification(`Export failed: ${err.message || err}`, "danger");
         }
     }
 

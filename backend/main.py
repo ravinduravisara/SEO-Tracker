@@ -75,6 +75,7 @@ from .report_service import build_client_report_snapshot, build_real_data_summar
 from . import integrations
 from . import keyword_engine
 from . import competitor_engine
+from . import backlink_engine
 from .seo_engine.signals import extract_signals
 from .seo_engine import run_engine, RULESET_VERSION, WEIGHTS as ENGINE_WEIGHTS, band as engine_band, maturity as engine_maturity
 from .seo_engine.narrative import category_explanations, clean_prose
@@ -1134,99 +1135,87 @@ def invalidate_dashboard_cache():
 
 
 def _compute_dashboard_stats() -> dict[str, Any]:
-    # Execute independent count and aggregate queries in parallel to eliminate cloud round-trip delay
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        f_clients = executor.submit(lambda: SessionLocal().query(Client).all())
-        f_websites = executor.submit(lambda: SessionLocal().query(Website).count())
-        f_audits_meta = executor.submit(lambda: SessionLocal().query(Audit).order_by(Audit.created_at.desc()).all())
-        f_reports_pub = executor.submit(lambda: SessionLocal().query(PublicReport).filter(PublicReport.status == "PUBLISHED").count())
-        f_reports_tot = executor.submit(lambda: SessionLocal().query(PublicReport).count())
-        f_leads_tot = executor.submit(lambda: SessionLocal().query(SEOLead).count())
-        f_leads_new = executor.submit(lambda: SessionLocal().query(SEOLead).filter(SEOLead.status == "NEW").count())
-        f_scans_cnt = executor.submit(lambda: SessionLocal().query(PublicScan).count())
-        f_hist_scans = executor.submit(lambda: SessionLocal().query(Audit).filter(Audit.client_id == None).count())
-        f_ollama = executor.submit(_check_ollama_status_fast)
-
-        clients = f_clients.result()
+    with SessionLocal() as db:
+        clients = db.query(Client).all()
         total_clients = len(clients)
-        total_websites = f_websites.result()
-        audits = f_audits_meta.result()
-        reports_published = f_reports_pub.result()
-        reports_total = f_reports_tot.result()
-        leads_total = f_leads_tot.result()
-        leads_new = f_leads_new.result()
+        total_websites = db.query(Website).count()
+        audits = db.query(Audit).order_by(Audit.created_at.desc()).all()
+        reports_published = db.query(PublicReport).filter(PublicReport.status == "PUBLISHED").count()
+        reports_total = db.query(PublicReport).count()
+        leads_total = db.query(SEOLead).count()
+        leads_new = db.query(SEOLead).filter(SEOLead.status == "NEW").count()
         try:
-            public_scans_recorded = f_scans_cnt.result()
+            public_scans_recorded = db.query(PublicScan).count()
         except Exception:
             public_scans_recorded = 0
-        historical_public = f_hist_scans.result()
-        ollama_ready = f_ollama.result()
+        historical_public = db.query(Audit).filter(Audit.client_id == None).count()
+        ollama_ready = _check_ollama_status_fast()
 
-    total_audits = len(audits)
-    scores = [a.score for a in audits if a.score is not None]
-    avg_score = round(sum(scores) / len(scores), 1) if scores else 0
-    excellent = sum(1 for s in scores if s >= 90)
-    needs_imp = sum(1 for s in scores if s < 70)
+        total_audits = len(audits)
+        scores = [a.score for a in audits if a.score is not None]
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+        excellent = sum(1 for s in scores if s >= 90)
+        needs_imp = sum(1 for s in scores if s < 70)
 
-    # Load full audit results only for the latest 10 audits for dashboard metrics
-    recent_ids = [a.id for a in audits[:10]]
-    recent_map: dict[int, Audit] = {}
-    if recent_ids:
-        for a in SessionLocal().query(Audit).filter(Audit.id.in_(recent_ids)).all():
-            recent_map[a.id] = a
+        # Load full audit results only for the latest 10 audits for dashboard metrics
+        recent_ids = [a.id for a in audits[:10]]
+        recent_map: dict[int, Audit] = {}
+        if recent_ids:
+            for a in db.query(Audit).filter(Audit.id.in_(recent_ids)).all():
+                recent_map[a.id] = a
 
-    parsed: list[tuple[Audit, dict[str, Any]]] = []
-    for a_meta in audits[:10]:
-        a = recent_map.get(a_meta.id, a_meta)
-        try:
-            res = json.loads(a.result_json) if isinstance(a.result_json, str) else (a.result_json or {})
-        except Exception:
-            res = {}
-        parsed.append((a, res if isinstance(res, dict) else {}))
+        parsed: list[tuple[Audit, dict[str, Any]]] = []
+        for a_meta in audits[:10]:
+            a = recent_map.get(a_meta.id, a_meta)
+            try:
+                res = json.loads(a.result_json) if isinstance(a.result_json, str) else (a.result_json or {})
+            except Exception:
+                res = {}
+            parsed.append((a, res if isinstance(res, dict) else {}))
 
-    totals = {"pages_crawled": 0, "links_checked": 0, "resources_checked": 0}
-    for _, res in parsed:
-        diag = res.get("crawl_diagnostics") or {}
-        totals["pages_crawled"] += int(res.get("page_count") or 0)
-        totals["links_checked"] += int(diag.get("links_checked") or 0)
-        totals["resources_checked"] += int(diag.get("resources_checked") or 0)
+        totals = {"pages_crawled": 0, "links_checked": 0, "resources_checked": 0}
+        for _, res in parsed:
+            diag = res.get("crawl_diagnostics") or {}
+            totals["pages_crawled"] += int(res.get("page_count") or 0)
+            totals["links_checked"] += int(diag.get("links_checked") or 0)
+            totals["resources_checked"] += int(diag.get("resources_checked") or 0)
 
-    # "Current state" uses only the newest audit of each website
-    latest_by_host: dict[str, tuple[Audit, dict[str, Any]]] = {}
-    for a, res in parsed:
-        host = (urlparse(a.target_url or "").hostname or a.target_url or "").lower().removeprefix("www.")
-        latest_by_host.setdefault(host, (a, res))
-    current = list(latest_by_host.values())
-    open_critical = open_warnings = broken_links = 0
-    category_scores: dict[str, list[float]] = defaultdict(list)
-    category_names: dict[str, str] = {}
-    issue_sites: Counter[str] = Counter()
-    issue_titles: dict[str, str] = {}
-    for a, res in current:
-        payload = ensure_engine(res) if res.get("pages") else {}
-        summ = payload.get("issue_summary") or {}
-        open_critical += int(summ.get("critical") or 0)
-        open_warnings += int(summ.get("high") or 0) + int(summ.get("medium") or 0)
-        broken_links += int((res.get("stats") or {}).get("broken_links") or 0)
-        for cat in payload.get("categories") or []:
-            if cat.get("score") is not None:
-                category_scores[cat["id"]].append(float(cat["score"]))
-                category_names[cat["id"]] = cat.get("name", cat["id"])
-        for issue in payload.get("issues") or []:
-            if issue["severity"] in ("critical", "high"):
-                issue_titles.setdefault(issue["check_id"], issue["check_name"])
-                issue_sites[issue["check_id"]] += 1
+        # "Current state" uses only the newest audit of each website
+        latest_by_host: dict[str, tuple[Audit, dict[str, Any]]] = {}
+        for a, res in parsed:
+            host = (urlparse(a.target_url or "").hostname or a.target_url or "").lower().removeprefix("www.")
+            latest_by_host.setdefault(host, (a, res))
+        current = list(latest_by_host.values())
+        open_critical = open_warnings = broken_links = 0
+        category_scores: dict[str, list[float]] = defaultdict(list)
+        category_names: dict[str, str] = {}
+        issue_sites: Counter[str] = Counter()
+        issue_titles: dict[str, str] = {}
+        for a, res in current:
+            payload = ensure_engine(res) if res.get("pages") else {}
+            summ = payload.get("issue_summary") or {}
+            open_critical += int(summ.get("critical") or 0)
+            open_warnings += int(summ.get("high") or 0) + int(summ.get("medium") or 0)
+            broken_links += int((res.get("stats") or {}).get("broken_links") or 0)
+            for cat in payload.get("categories") or []:
+                if cat.get("score") is not None:
+                    category_scores[cat["id"]].append(float(cat["score"]))
+                    category_names[cat["id"]] = cat.get("name", cat["id"])
+            for issue in payload.get("issues") or []:
+                if issue["severity"] in ("critical", "high"):
+                    issue_titles.setdefault(issue["check_id"], issue["check_name"])
+                    issue_sites[issue["check_id"]] += 1
 
-    week_ago = datetime.utcnow() - timedelta(days=7)
-    month_ago = datetime.utcnow() - timedelta(days=30)
-    public_scans_total = max(public_scans_recorded, historical_public, leads_total)
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        month_ago = datetime.utcnow() - timedelta(days=30)
+        public_scans_total = max(public_scans_recorded, historical_public, leads_total)
 
-    # Batch fetch client names for recent audits in 1 query
-    client_ids = {a.client_id for a, _ in parsed[:8] if a.client_id}
-    client_name_map = {}
-    if client_ids:
-        for c in SessionLocal().query(Client).filter(Client.id.in_(client_ids)).all():
-            client_name_map[c.id] = c.name
+        # Batch fetch client names for recent audits in 1 query
+        client_ids = {a.client_id for a, _ in parsed[:8] if a.client_id}
+        client_name_map = {}
+        if client_ids:
+            for c in db.query(Client).filter(Client.id.in_(client_ids)).all():
+                client_name_map[c.id] = c.name
 
     recent_audits = []
     for a, res in parsed[:8]:
@@ -2332,6 +2321,236 @@ def competitor_export_pdf_endpoint(
     pdf_bytes = competitor_engine.generate_competitor_pdf(res)
     safe_target = re.sub(r"[^\w\-]", "_", req.target_domain.lower())
     filename = f"competitor_report_{safe_target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+# ===========================================================================
+# PHASE 6: BACKLINK ANALYTICS & LINK INTELLIGENCE
+# ===========================================================================
+
+class BacklinkGapRequest(BaseModel):
+    target_domain: str
+    competitor_domains: list[str] = Field(default_factory=list)
+
+
+class BacklinkSnapshotSaveRequest(BaseModel):
+    target_domain: str
+    client_id: Optional[int] = None
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.get("/api/backlinks/overview")
+def backlink_overview_endpoint(
+    target: str = Query(..., description="Target domain or URL to inspect"),
+    refresh: bool = Query(False, description="Force fresh data retrieval"),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    """
+    Retrieve comprehensive backlink profile with strict provenance separation:
+    - External index summary (backlinks, referring domains, IPs, dofollow ratio)
+    - Platform Authority Index (PAI) & Internal Page Equity Score (IPES)
+    - Classified anchor text distribution & over-optimization detection
+    - Toxicity Radar & suspicious pattern flags
+    """
+    clean_target = _param(target, "").strip()
+    if not clean_target:
+        raise HTTPException(status_code=400, detail="Target domain or URL is required.")
+
+    profile = backlink_engine.get_backlink_profile(clean_target, db=db, refresh=refresh)
+    if not profile.get("ok"):
+        raise HTTPException(status_code=400, detail=profile.get("error", "Failed to retrieve backlink profile."))
+    return profile
+
+
+@app.get("/api/backlinks/referring-domains")
+def backlink_referring_domains_endpoint(
+    target: str = Query(..., description="Target domain or URL"),
+    filter_type: str = Query("all", pattern="^(all|dofollow|nofollow)$"),
+    search: str = Query("", description="Filter domains by search keyword"),
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    clean_target = _param(target, "").strip()
+    profile = backlink_engine.get_backlink_profile(clean_target, db=db)
+    items = profile.get("referring_domains") or []
+
+    if search.strip():
+        s = search.strip().lower()
+        items = [it for it in items if s in (it.get("domain") or "").lower()]
+
+    if filter_type == "dofollow":
+        items = [it for it in items if (it.get("dofollow") or 0) > 0]
+    elif filter_type == "nofollow":
+        items = [it for it in items if (it.get("nofollow") or 0) > 0]
+
+    total = len(items)
+    paginated = items[offset: offset + limit]
+
+    return {
+        "ok": True,
+        "target_domain": backlink_engine.bare_domain(clean_target),
+        "total_count": total,
+        "filter_type": filter_type,
+        "items": paginated,
+        "has_external_provider": profile.get("has_external_provider", False)
+    }
+
+
+@app.get("/api/backlinks/anchors")
+def backlink_anchors_endpoint(
+    target: str = Query(..., description="Target domain or URL"),
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    clean_target = _param(target, "").strip()
+    profile = backlink_engine.get_backlink_profile(clean_target, db=db)
+    anchors = profile.get("anchor_profile") or []
+    return {
+        "ok": True,
+        "target_domain": backlink_engine.bare_domain(clean_target),
+        "total_count": len(anchors),
+        "items": anchors[:limit],
+        "toxicity_radar": profile.get("toxicity_radar")
+    }
+
+
+@app.get("/api/backlinks/internal-equity")
+def backlink_internal_equity_endpoint(
+    target: str = Query(..., description="Target domain or URL"),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    clean_target = _param(target, "").strip()
+    profile = backlink_engine.get_backlink_profile(clean_target, db=db)
+    equity = profile.get("internal_equity") or {}
+    return {
+        "ok": True,
+        "target_domain": backlink_engine.bare_domain(clean_target),
+        "platform_authority_index": profile.get("platform_authority_index"),
+        "internal_equity": equity
+    }
+
+
+@app.post("/api/backlinks/gap")
+def backlink_gap_endpoint(
+    req: BacklinkGapRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    res = backlink_engine.analyze_backlink_gap(
+        target_domain=req.target_domain,
+        competitor_domains=req.competitor_domains or [],
+        db=db
+    )
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Gap analysis failed"))
+    return res
+
+
+@app.get("/api/backlinks/snapshots")
+def backlink_snapshots_list_endpoint(
+    target: Optional[str] = Query(None),
+    client_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    return backlink_engine.list_backlink_snapshots(
+        db=db,
+        target_domain=_param(target, None),
+        client_id=_param(client_id, None)
+    )
+
+
+@app.post("/api/backlinks/snapshots")
+def backlink_snapshot_save_endpoint(
+    req: BacklinkSnapshotSaveRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.run"))
+):
+    snap = backlink_engine.save_backlink_snapshot(
+        db=db,
+        target_domain=req.target_domain,
+        profile_data=req.data,
+        client_id=req.client_id
+    )
+    return {
+        "status": "success",
+        "snapshot_id": snap.id,
+        "target_domain": snap.target_domain,
+        "created_at": snap.created_at.isoformat() if snap.created_at else None
+    }
+
+
+@app.get("/api/backlinks/snapshots/{snapshot_id}")
+def backlink_snapshot_detail_endpoint(
+    snapshot_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    rec = backlink_engine.get_backlink_snapshot(db, snapshot_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Saved backlink snapshot not found.")
+    return rec
+
+
+@app.delete("/api/backlinks/snapshots/{snapshot_id}")
+def backlink_snapshot_delete_endpoint(
+    snapshot_id: int,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.delete"))
+):
+    success = backlink_engine.delete_backlink_snapshot(db, snapshot_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Saved backlink snapshot not found.")
+    return {"status": "success", "deleted_id": snapshot_id}
+
+
+@app.post("/api/backlinks/export/csv")
+def backlink_export_csv_endpoint(
+    payload: dict[str, Any] = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    csv_text = backlink_engine.generate_backlink_csv(payload)
+    target = backlink_engine.bare_domain(payload.get("target_domain") or "domain")
+    filename = f"backlinks_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    return Response(
+        content=csv_text.encode("utf-8"),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/backlinks/export/excel")
+def backlink_export_excel_endpoint(
+    payload: dict[str, Any] = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    xml_text = backlink_engine.generate_backlink_excel_xml(payload)
+    target = backlink_engine.bare_domain(payload.get("target_domain") or "domain")
+    filename = f"backlinks_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.xls"
+    return Response(
+        content=xml_text.encode("utf-8"),
+        media_type="application/vnd.ms-excel",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.post("/api/backlinks/export/pdf")
+def backlink_export_pdf_endpoint(
+    payload: dict[str, Any] = Body(...),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    pdf_bytes = backlink_engine.generate_backlink_pdf(payload)
+    target = backlink_engine.bare_domain(payload.get("target_domain") or "domain")
+    filename = f"backlinks_report_{target}_{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -5928,14 +6147,33 @@ def source_audit(path: Path) -> dict[str, Any]:
 
 
 
+_HEALTH_CACHE = {
+    "timestamp": 0.0,
+    "payload": None
+}
+_HEALTH_LOCK = threading.Lock()
+
+def _check_playwright_installed() -> tuple[bool, bool]:
+    try:
+        import playwright  # type: ignore
+        return True, True
+    except Exception:
+        return False, False
+
+
 @app.get("/api/health")
 def health():
+    now = time.time()
+    with _HEALTH_LOCK:
+        if _HEALTH_CACHE["payload"] and (now - _HEALTH_CACHE["timestamp"] < 120.0):
+            return _HEALTH_CACHE["payload"]
+
     ollama = False
     ollama_model_available = False
     models = []
     try:
         base = OLLAMA_URL.rsplit("/api/", 1)[0].rstrip("/")
-        timeout_tags = 6.0 if (OLLAMA_URL.startswith("https://") or OLLAMA_API_KEY) else 2.0
+        timeout_tags = 2.0 if (OLLAMA_URL.startswith("https://") or OLLAMA_API_KEY) else 1.0
         r = requests.get(f"{base}/api/tags", headers=_ollama_headers(), timeout=timeout_tags)
         if r.ok:
             ollama = True
@@ -5955,31 +6193,19 @@ def health():
             models = [OLLAMA_MODEL]
     except (requests.RequestException, ValueError):
         pass
-    playwright_package = False
-    playwright_browser = False
-    try:
-        import playwright  # type: ignore
-        playwright_package = True
-        from playwright.sync_api import sync_playwright  # type: ignore
-        with sync_playwright() as pw:
-            launched = False
-            for channel in ("chrome", None):
-                try:
-                    browser = pw.chromium.launch(channel=channel, headless=True) if channel else pw.chromium.launch(headless=True)
-                    launched = True
-                    browser.close()
-                    break
-                except Exception:
-                    continue
-            playwright_browser = launched
-    except Exception:
-        pass
-    return {
+
+    playwright_package, playwright_browser = _check_playwright_installed()
+
+    res = {
         "ok": True, "version": app.version, "ollama_available": ollama,
         "ollama_model_available": ollama_model_available, "ollama_model": OLLAMA_MODEL,
         "ollama_models": models[:30], "playwright_package": playwright_package,
         "playwright_browser": playwright_browser, "history": False
     }
+    with _HEALTH_LOCK:
+        _HEALTH_CACHE["timestamp"] = now
+        _HEALTH_CACHE["payload"] = res
+    return res
 
 
 def _set_job(job_id: str, **updates):

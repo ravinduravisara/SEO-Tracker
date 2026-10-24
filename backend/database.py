@@ -675,10 +675,24 @@ else:
         def __init__(self, length=255, **kwargs):
             super().__init__(length=length, **kwargs)
 
-    engine = create_engine(
-        DB_PATH,
-        connect_args={"check_same_thread": False} if "sqlite" in DB_PATH else {}
-    )
+    if "sqlite" in DB_PATH:
+        from sqlalchemy import event
+
+        engine = create_engine(
+            DB_PATH,
+            connect_args={"check_same_thread": False, "timeout": 30.0},
+        )
+
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.close()
+    else:
+        engine = create_engine(DB_PATH)
+
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base = declarative_base()
 
@@ -934,6 +948,29 @@ class CompetitorComparison(Base):
     client = relationship("Client")
 
 
+class BacklinkSnapshot(Base):
+    __tablename__ = "backlink_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    target_domain = Column(String, nullable=False, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), index=True, nullable=True)
+    data_provider = Column(String, default="DataForSEO / OpenPageRank")
+    total_backlinks = Column(Integer, default=0)
+    referring_domains = Column(Integer, default=0)
+    referring_main_domains = Column(Integer, default=0)
+    referring_ips = Column(Integer, default=0)
+    dofollow_backlinks = Column(Integer, default=0)
+    nofollow_backlinks = Column(Integer, default=0)
+    domain_authority = Column(Float, nullable=True)
+    internal_equity_score = Column(Float, nullable=True)
+    spam_score = Column(Float, nullable=True)
+    data_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+
+
 def init_db():
     if IS_MONGO:
         try:
@@ -970,6 +1007,8 @@ def init_db():
                 db["saved_keywords"].create_index("keyword")
                 db["competitor_comparisons"].create_index("id", unique=True)
                 db["competitor_comparisons"].create_index("target_domain")
+                db["backlink_snapshots"].create_index("id", unique=True)
+                db["backlink_snapshots"].create_index("target_domain")
             except Exception as e:
                 logger.warning(f"Error ensuring MongoDB indexes: {e}")
 
@@ -978,7 +1017,7 @@ def init_db():
                 "admin_users", "clients", "websites", "audits", "public_reports",
                 "team_invitations", "admin_sessions", "activity_logs", "lead_notes",
                 "seo_leads", "public_scans", "scheduled_audits", "keyword_projects",
-                "saved_keywords", "competitor_comparisons"
+                "saved_keywords", "competitor_comparisons", "backlink_snapshots"
             ]
             for t in tables:
                 try:
