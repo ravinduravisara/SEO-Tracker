@@ -30,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from .database import (
     Base, engine, SessionLocal, get_db,
@@ -1205,7 +1205,7 @@ def _compute_dashboard_stats() -> dict[str, Any]:
         totals = {"pages_crawled": 0, "links_checked": 0, "resources_checked": 0}
         for _, res in parsed:
             diag = res.get("crawl_diagnostics") or {}
-            totals["pages_crawled"] += int(res.get("page_count") or 0)
+            totals["pages_crawled"] += int(res.get("page_count") or (res.get("summary") or {}).get("total_pages_crawled") or 0)
             totals["links_checked"] += int(diag.get("links_checked") or 0)
             totals["resources_checked"] += int(diag.get("resources_checked") or 0)
 
@@ -1221,7 +1221,30 @@ def _compute_dashboard_stats() -> dict[str, Any]:
         issue_sites: Counter[str] = Counter()
         issue_titles: dict[str, str] = {}
         for a, res in current:
-            payload = ensure_engine(res) if res.get("pages") else {}
+            if res.get("seo_engine"):
+                payload = res["seo_engine"]
+            elif res.get("pages"):
+                payload = ensure_engine(res)
+            elif res.get("categories"):
+                payload = {
+                    "issue_summary": {
+                        "critical": (res.get("summary") or {}).get("critical_issues", 0),
+                        "high": (res.get("summary") or {}).get("warnings", 0),
+                        "medium": 0,
+                    },
+                    "categories": res.get("categories") or [],
+                    "issues": [
+                        {
+                            "severity": (iss.get("severity") or "").lower(),
+                            "check_id": iss.get("code") or iss.get("check_id") or "ISSUE",
+                            "check_name": iss.get("title") or iss.get("code") or "Issue",
+                        }
+                        for iss in (res.get("top_issues") or [])
+                    ]
+                }
+            else:
+                payload = {}
+
             summ = payload.get("issue_summary") or {}
             open_critical += int(summ.get("critical") or 0)
             open_warnings += int(summ.get("high") or 0) + int(summ.get("medium") or 0)
@@ -1252,6 +1275,9 @@ def _compute_dashboard_stats() -> dict[str, Any]:
         if (res.get("seo_engine") or {}).get("issue_summary"):
             summ = res["seo_engine"]["issue_summary"]
             sc = {"critical": summ["critical"], "warnings": summ["high"] + summ["medium"]}
+        elif res.get("summary"):
+            summ = res["summary"]
+            sc = {"critical": summ.get("critical_issues", 0), "warnings": summ.get("warnings", 0)}
         recent_audits.append({
             "id": a.id,
             "target_url": a.target_url,
@@ -1259,7 +1285,7 @@ def _compute_dashboard_stats() -> dict[str, Any]:
             "status": a.status,
             "created_at": a.created_at.isoformat() if a.created_at else None,
             "client_name": client_name_map.get(a.client_id, "Direct Audit"),
-            "pages_crawled": int(res.get("page_count") or 0),
+            "pages_crawled": int(res.get("page_count") or (res.get("summary") or {}).get("total_pages_crawled") or 0),
             "critical": int(sc.get("critical") or 0),
             "warnings": int(sc.get("warnings") or 0),
             "elapsed_seconds": (res.get("crawl_diagnostics") or {}).get("elapsed_seconds"),
@@ -1350,7 +1376,7 @@ def list_clients(db: Session = Depends(get_db), current_admin: AdminUser = Depen
         websites_by_client[w.client_id].append(w)
 
     audits_by_client: dict[int, list[Audit]] = defaultdict(list)
-    for a in db.query(Audit).defer("result_json").filter(Audit.client_id.in_(client_ids)).all():
+    for a in db.query(Audit).options(defer(Audit.result_json)).filter(Audit.client_id.in_(client_ids)).all():
         audits_by_client[a.client_id].append(a)
 
     reports_by_client: dict[int, list[PublicReport]] = defaultdict(list)
@@ -1432,7 +1458,7 @@ def get_client(client_id: int, db: Session = Depends(get_db), current_admin: Adm
 
     # Fast batch queries: fetch websites, audits (defer heavy result_json), and public reports
     websites = db.query(Website).filter(Website.client_id == client.id).all()
-    audits = db.query(Audit).defer("result_json").filter(Audit.client_id == client.id).order_by(Audit.created_at.desc()).all()
+    audits = db.query(Audit).options(defer(Audit.result_json)).filter(Audit.client_id == client.id).order_by(Audit.created_at.desc()).all()
     reports = db.query(PublicReport).filter(PublicReport.client_id == client.id).order_by(PublicReport.created_at.desc()).all()
 
     # Index reports by audit_id for zero-query mapping
@@ -3109,7 +3135,7 @@ def list_reports(db: Session = Depends(get_db), current_admin: AdminUser = Depen
 
     audits_map = {}
     if audit_ids:
-        for a in db.query(Audit).defer("result_json").filter(Audit.id.in_(audit_ids)).all():
+        for a in db.query(Audit).options(defer(Audit.result_json)).filter(Audit.id.in_(audit_ids)).all():
             audits_map[a.id] = a
 
     clients_map = {}
