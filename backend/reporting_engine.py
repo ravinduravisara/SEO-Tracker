@@ -270,7 +270,7 @@ def build_technical_audit_report(
         else:
             status_codes["5xx"] += 1
 
-        canon = p.get("canonical_url")
+        canon = p.get("canonical") or p.get("canonical_url")
         if not canon:
             canonical_counts["missing"] += 1
         elif canon.rstrip("/") == p.get("url", "").rstrip("/"):
@@ -1015,6 +1015,104 @@ def generate_report_pdf(report_data: Dict[str, Any], report_type: str = "EXECUTI
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ]))
             story.append(act_tbl)
+
+    elif clean_type in ("TECHNICAL", "TECHNICAL_AUDIT"):
+        infra = report_data.get("infrastructure", {})
+        status_dist = infra.get("status_distribution", {})
+        canon_dist = infra.get("canonical_distribution", {})
+
+        tech_kpi = [
+            [
+                Paragraph(f"<b>Pages Analyzed</b><br/><font size='18'><b>{infra.get('pages_analyzed', 0)}</b></font><br/>Crawl Depth Scanned", body_style),
+                Paragraph(f"<b>HTTP 200 OK</b><br/><font size='18' color='#10B981'><b>{status_dist.get('200', 0)}</b></font><br/>Healthy Responses", body_style),
+                Paragraph(f"<b>Redirects (3xx)</b><br/><font size='18' color='#F59E0B'><b>{status_dist.get('3xx', 0)}</b></font><br/>Hops / Destinations", body_style),
+                Paragraph(f"<b>Errors (4xx/5xx)</b><br/><font size='18' color='#DC2626'><b>{status_dist.get('4xx', 0) + status_dist.get('5xx', 0)}</b></font><br/>Client / Server Errors", body_style),
+            ]
+        ]
+        tech_tbl = Table(tech_kpi, colWidths=[45.5 * mm] * 4)
+        tech_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFFFFF")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        story.append(tech_tbl)
+        story.append(Spacer(1, 4 * mm))
+
+        # Canonical & Protocol Integrity
+        story.append(Paragraph("Canonical & Indexability Infrastructure", section_title))
+        canon_rows = [
+            [Paragraph("<b>Signal / Control</b>", subtitle_style), Paragraph("<b>Status & Distribution</b>", subtitle_style)],
+            [Paragraph("<b>Self-Referencing Canonicals</b>", body_style), Paragraph(f"{canon_dist.get('matching', 0)} page(s) declare self-referencing canonical tag", body_style)],
+            [Paragraph("<b>Canonicalized / Alternate</b>", body_style), Paragraph(f"{canon_dist.get('canonicalized', 0)} page(s) canonicalize to alternate targets", body_style)],
+            [Paragraph("<b>Missing Canonical Tags</b>", body_style), Paragraph(f"{canon_dist.get('missing', 0)} page(s) lack canonical declarations", body_style)],
+            [Paragraph("<b>HTTPS Transport Enforced</b>", body_style), Paragraph("Active (All crawled endpoints require TLS)" if infra.get("https_enforced") else "HTTP (Insecure)", body_style)],
+            [Paragraph("<b>robots.txt & XML Sitemap</b>", body_style), Paragraph(f"robots.txt: {'Present' if infra.get('robots_txt_present') else 'Missing'} | Sitemap: {'Detected' if infra.get('sitemap_detected') else 'Missing'}", body_style)],
+        ]
+        canon_tbl = Table(canon_rows, colWidths=[65 * mm, 117 * mm])
+        canon_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F1F5F9")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.append(canon_tbl)
+        story.append(Spacer(1, 4 * mm))
+
+        # Technical Issues Table
+        issues = report_data.get("issues", [])
+        if issues:
+            story.append(Paragraph("Technical Findings & Diagnostics", section_title))
+            t_rows = [[Paragraph("<b>Severity</b>", subtitle_style), Paragraph("<b>Issue</b>", subtitle_style), Paragraph("<b>Affected URL / Evidence</b>", subtitle_style)]]
+            for iss in issues[:25]:
+                sev_c = "#DC2626" if str(iss.get("severity")).upper() == "CRITICAL" else "#EA580C" if str(iss.get("severity")).upper() == "HIGH" else "#475569"
+                t_rows.append([
+                    Paragraph(f"<font color='{sev_c}'><b>{html.escape(str(iss.get('severity', 'MEDIUM')).upper())}</b></font>", body_style),
+                    Paragraph(f"<b>{html.escape(str(iss.get('title') or iss.get('code')))}</b><br/>{html.escape(str(iss.get('recommendation', '')))}", body_style),
+                    Paragraph(f"<font size='7'><u>{html.escape(str(iss.get('affected_url', '')))}</u><br/>{html.escape(str(iss.get('evidence', '')))}</font>", body_style),
+                ])
+            t_tbl = Table(t_rows, colWidths=[25 * mm, 75 * mm, 82 * mm])
+            t_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F1F5F9")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            story.append(t_tbl)
+
+    elif clean_type in ("RECOMMENDATIONS", "DEVELOPER_FIX", "DEVELOPER"):
+        recs = report_data.get("prioritized_recommendations", [])
+        dev_inst = report_data.get("developer_instructions", [])
+        tech_fixes = report_data.get("technical_fixes", [])
+
+        story.append(Paragraph("Developer Remediation Action Plan", section_title))
+        dev_rows = [[Paragraph("<b>Priority</b>", subtitle_style), Paragraph("<b>Remediation Task</b>", subtitle_style), Paragraph("<b>Implementation Guidance & Verification</b>", subtitle_style)]]
+        all_actions = (dev_inst or tech_fixes or recs)[:25]
+        for act in all_actions:
+            p_val = str(act.get("priority") or act.get("severity") or "P2").upper()
+            p_col = "#DC2626" if p_val in ("CRITICAL", "P1", "HIGH") else "#475569"
+            task_title = act.get("title") or act.get("action") or act.get("issue") or "Technical Remediation"
+            guidance = act.get("instructions") or act.get("fix") or act.get("recommendation") or ""
+            target_u = act.get("target_url") or act.get("url") or ""
+            dev_rows.append([
+                Paragraph(f"<font color='{p_col}'><b>{html.escape(p_val)}</b></font>", body_style),
+                Paragraph(f"<b>{html.escape(str(task_title))}</b>" + (f"<br/><font size='7'>Target: {html.escape(str(target_u))}</font>" if target_u else ""), body_style),
+                Paragraph(html.escape(str(guidance)), body_style),
+            ])
+        if len(dev_rows) > 1:
+            dev_tbl = Table(dev_rows, colWidths=[24 * mm, 68 * mm, 90 * mm])
+            dev_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F1F5F9")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            story.append(dev_tbl)
 
     elif clean_type == "PROGRESS_COMPARISON":
         delta = report_data.get("score_delta", {})
