@@ -37,7 +37,8 @@ from .database import (
     Client, Website, Audit, PublicReport, SEOLead,
     TeamInvitation, ActivityLog, LeadNote, init_db, PublicScan,
     ScheduledAudit, KeywordProject, SavedKeyword,
-    TrackedKeyword, RankingObservation, RankingAlert
+    TrackedKeyword, RankingObservation, RankingAlert,
+    AgencyBranding
 )
 from .security import (
     bootstrap_admin_account,
@@ -80,6 +81,7 @@ from . import backlink_engine
 from . import google_service
 from . import rank_tracker
 from . import ai_advisor
+from . import reporting_engine
 from .seo_engine.signals import extract_signals
 from .seo_engine import run_engine, RULESET_VERSION, WEIGHTS as ENGINE_WEIGHTS, band as engine_band, maturity as engine_maturity
 from .seo_engine.narrative import category_explanations, clean_prose
@@ -310,6 +312,29 @@ class ReportGenerateRequest(BaseModel):
     audit_id: int
     client_id: int | None = None
     status: str = "PUBLISHED"
+    report_type: str = "EXECUTIVE"
+    baseline_audit_id: int | None = None
+    branding_overrides: Optional[dict[str, Any]] = None
+
+class ReportBuildRequest(BaseModel):
+    report_type: str = "EXECUTIVE"
+    audit_id: Optional[int] = None
+    audit: Optional[dict[str, Any]] = None
+    baseline_audit_id: Optional[int] = None
+    baseline_audit: Optional[dict[str, Any]] = None
+    branding: Optional[dict[str, Any]] = None
+    client_info: Optional[dict[str, Any]] = None
+
+class AgencyBrandingUpdateRequest(BaseModel):
+    agency_name: Optional[str] = None
+    tagline: Optional[str] = None
+    logo_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    website: Optional[str] = None
+    support_email: Optional[str] = None
+    phone: Optional[str] = None
+    footer_text: Optional[str] = None
 
 class ReportStatusRequest(BaseModel):
     status: str
@@ -3049,6 +3074,13 @@ def list_reports(db: Session = Depends(get_db), current_admin: AdminUser = Depen
         c = clients_map.get(r.client_id)
         target_url = a.target_url if a else (w.url if w else "")
         score = a.score if a else 0
+        report_type = "EXECUTIVE"
+        if r.snapshot_json:
+            try:
+                snap = json.loads(r.snapshot_json) if isinstance(r.snapshot_json, str) else r.snapshot_json
+                report_type = snap.get("report_type") or "EXECUTIVE"
+            except Exception:
+                pass
         result.append({
             "id": r.id,
             "client_id": r.client_id,
@@ -3057,6 +3089,7 @@ def list_reports(db: Session = Depends(get_db), current_admin: AdminUser = Depen
             "audit_id": r.audit_id,
             "target_url": target_url,
             "score": score,
+            "report_type": report_type,
             "token": r.token,
             "status": r.status,
             "public_url": f"/report/{r.token}",
@@ -3101,7 +3134,35 @@ def generate_public_report(req: ReportGenerateRequest = Body(...), db: Session =
                     }
                 )
 
+    agency_brand = _get_agency_branding_db(db)
+    if req.branding_overrides:
+        agency_brand.update(req.branding_overrides)
+
+    base_audit_dict = None
+    if req.baseline_audit_id:
+        b_row = db.query(Audit).filter(Audit.id == req.baseline_audit_id).first()
+        if b_row and b_row.result_json:
+            try:
+                base_audit_dict = json.loads(b_row.result_json) if isinstance(b_row.result_json, str) else b_row.result_json
+            except Exception:
+                pass
+
+    rep_type = (req.report_type or "EXECUTIVE").upper()
+    client_info = {"name": client_name, "company": company}
+    specialized_data = reporting_engine.generate_report_data(
+        report_type=rep_type,
+        audit_data=raw_result,
+        baseline_audit=base_audit_dict,
+        branding=agency_brand,
+        client_info=client_info,
+        db=db
+    )
+
     snapshot = build_client_report_snapshot(raw_result, client_name, company, token)
+    snapshot["report_type"] = rep_type
+    snapshot["specialized_report"] = specialized_data
+    snapshot["branding"] = agency_brand
+
     new_report = PublicReport(
         audit_id=audit.id,
         client_id=audit.client_id,
@@ -3235,6 +3296,254 @@ def preview_report(token: str, db: Session = Depends(get_db), current_admin: Adm
         "is_preview": True,
         "data": snapshot
     }
+
+
+# -----------------------------------------------------------------------------
+# PHASE 10: PROFESSIONAL REPORT GENERATION APIs
+# -----------------------------------------------------------------------------
+
+def _get_agency_branding_db(db: Session) -> dict[str, Any]:
+    row = db.query(AgencyBranding).first()
+    defaults = reporting_engine.get_default_branding()
+    if not row:
+        row = AgencyBranding(
+            agency_name=defaults["agency_name"],
+            tagline=defaults["tagline"],
+            logo_url=defaults["logo_url"],
+            primary_color=defaults["primary_color"],
+            secondary_color=defaults["secondary_color"],
+            website=defaults["website"],
+            support_email=defaults["support_email"],
+            phone=defaults["phone"],
+            footer_text=defaults["footer_text"]
+        )
+        db.add(row)
+        try:
+            db.commit()
+            db.refresh(row)
+        except Exception:
+            db.rollback()
+            return defaults
+
+    return {
+        "agency_name": row.agency_name or defaults["agency_name"],
+        "tagline": row.tagline or defaults["tagline"],
+        "logo_url": row.logo_url or "",
+        "primary_color": row.primary_color or defaults["primary_color"],
+        "secondary_color": row.secondary_color or defaults["secondary_color"],
+        "website": row.website or defaults["website"],
+        "support_email": row.support_email or defaults["support_email"],
+        "phone": row.phone or defaults["phone"],
+        "footer_text": row.footer_text or defaults["footer_text"]
+    }
+
+
+@app.get("/api/reports/types")
+def get_report_types_endpoint(current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)):
+    """Returns registry of 10 supported client-ready report types."""
+    return list(reporting_engine.REPORT_TYPES.values())
+
+
+@app.get("/api/reports/branding")
+def get_agency_branding_endpoint(
+    db: Session = Depends(get_db),
+    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
+):
+    """Returns current agency branding and styling configuration."""
+    return _get_agency_branding_db(db)
+
+
+@app.post("/api/reports/branding")
+def update_agency_branding_endpoint(
+    req: AgencyBrandingUpdateRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("settings.edit"))
+):
+    """Updates agency white-label branding, colors, and contact info."""
+    row = db.query(AgencyBranding).first()
+    if not row:
+        _get_agency_branding_db(db)
+        row = db.query(AgencyBranding).first()
+
+    if req.agency_name is not None: row.agency_name = req.agency_name.strip()
+    if req.tagline is not None: row.tagline = req.tagline.strip()
+    if req.logo_url is not None: row.logo_url = req.logo_url.strip()
+    if req.primary_color is not None: row.primary_color = req.primary_color.strip()
+    if req.secondary_color is not None: row.secondary_color = req.secondary_color.strip()
+    if req.website is not None: row.website = req.website.strip()
+    if req.support_email is not None: row.support_email = req.support_email.strip()
+    if req.phone is not None: row.phone = req.phone.strip()
+    if req.footer_text is not None: row.footer_text = req.footer_text.strip()
+
+    db.commit()
+    db.refresh(row)
+    record_activity(db, "BRANDING_UPDATED", "Agency Branding Settings", f"Updated by {current_admin.email}", user=current_admin)
+    return _get_agency_branding_db(db)
+
+
+@app.post("/api/reports/build")
+def build_report_data_endpoint(
+    req: ReportBuildRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
+):
+    """
+    Builds structured report data across any of the 10 client report disciplines.
+    """
+    audit_data = _resolve_audit_payload(req.audit, req.audit_id, db)
+    if not audit_data:
+        raise HTTPException(status_code=400, detail="Valid audit payload or audit_id is required.")
+
+    baseline_data = None
+    if req.baseline_audit or req.baseline_audit_id:
+        baseline_data = _resolve_audit_payload(req.baseline_audit, req.baseline_audit_id, db)
+
+    branding = _get_agency_branding_db(db)
+    if req.branding:
+        branding.update(req.branding)
+
+    return reporting_engine.generate_report_data(
+        report_type=req.report_type,
+        audit_data=audit_data,
+        baseline_audit=baseline_data,
+        branding=branding,
+        client_info=req.client_info or {},
+        db=db
+    )
+
+
+@app.post("/api/reports/export/{format}")
+def export_report_endpoint(
+    format: str,
+    payload: dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
+):
+    """
+    Exports a professional report in PDF, Excel XML, CSV, or JSON format.
+    Accepts pre-built report data or builds on demand from audit_id / audit dict.
+    """
+    clean_fmt = format.lower().strip()
+    if clean_fmt not in ("pdf", "excel", "xls", "csv", "json"):
+        raise HTTPException(status_code=400, detail=f"Unsupported format '{format}'. Use pdf, excel, csv, or json.")
+
+    report_type = str(payload.get("report_type") or "EXECUTIVE").upper()
+    report_data = payload.get("report_data")
+
+    if not report_data:
+        # Build on demand
+        audit_data = _resolve_audit_payload(payload.get("audit"), payload.get("audit_id"), db)
+        if not audit_data:
+            raise HTTPException(status_code=400, detail="Report data or audit payload is required for export.")
+        baseline_data = _resolve_audit_payload(payload.get("baseline_audit"), payload.get("baseline_audit_id"), db) if (payload.get("baseline_audit") or payload.get("baseline_audit_id")) else None
+        branding = _get_agency_branding_db(db)
+        if payload.get("branding"):
+            branding.update(payload["branding"])
+        report_data = reporting_engine.generate_report_data(
+            report_type=report_type,
+            audit_data=audit_data,
+            baseline_audit=baseline_data,
+            branding=branding,
+            client_info=payload.get("client_info") or {},
+            db=db
+        )
+
+    target_host = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", urlparse(report_data.get("target") or "website").hostname or "website").strip("_")
+    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    base_filename = f"{report_type.lower()}_report_{target_host}_{date_str}"
+
+    if clean_fmt == "pdf":
+        pdf_bytes = reporting_engine.generate_report_pdf(report_data, report_type)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{base_filename}.pdf"'}
+        )
+    elif clean_fmt in ("excel", "xls"):
+        excel_xml = reporting_engine.generate_report_excel_xml(report_data, report_type)
+        return Response(
+            content=excel_xml,
+            media_type="application/vnd.ms-excel; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{base_filename}.xls"'}
+        )
+    elif clean_fmt == "csv":
+        csv_text = reporting_engine.generate_report_csv(report_data, report_type)
+        return Response(
+            content=csv_text,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{base_filename}.csv"'}
+        )
+    else:
+        json_text = reporting_engine.generate_report_json(report_data, report_type)
+        return Response(
+            content=json_text,
+            media_type="application/json; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{base_filename}.json"'}
+        )
+
+
+@app.get("/api/reports/public/{token}/export/{format}")
+def export_public_report_endpoint(
+    token: str,
+    format: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Public download endpoint for published reports in PDF, Excel, CSV, or JSON.
+    """
+    clean_fmt = format.lower().strip()
+    if clean_fmt not in ("pdf", "excel", "xls", "csv", "json"):
+        raise HTTPException(status_code=400, detail="Supported formats: pdf, excel, csv, json")
+
+    report = db.query(PublicReport).filter(PublicReport.token == token).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    if report.status == "DISABLED":
+        raise HTTPException(status_code=410, detail="This report has been disabled.")
+
+    snapshot = {}
+    if report.snapshot_json:
+        try:
+            snapshot = json.loads(report.snapshot_json) if isinstance(report.snapshot_json, str) else report.snapshot_json
+        except Exception:
+            pass
+
+    report_type = snapshot.get("report_type") or "EXECUTIVE"
+    specialized_data = snapshot.get("specialized_report")
+
+    if not specialized_data:
+        # Fallback to rebuilding from audit
+        audit_data = {}
+        if report.audit and report.audit.result_json:
+            try:
+                audit_data = json.loads(report.audit.result_json) if isinstance(report.audit.result_json, str) else report.audit.result_json
+            except Exception:
+                pass
+        branding = _get_agency_branding_db(db)
+        specialized_data = reporting_engine.generate_report_data(
+            report_type=report_type,
+            audit_data=audit_data or snapshot,
+            branding=branding,
+            client_info={"name": snapshot.get("client_name", ""), "company": snapshot.get("company", "")},
+            db=db
+        )
+
+    target_host = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", urlparse(specialized_data.get("target") or "website").hostname or "website").strip("_")
+    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    base_filename = f"{report_type.lower()}_report_{target_host}_{date_str}"
+
+    if clean_fmt == "pdf":
+        pdf_bytes = reporting_engine.generate_report_pdf(specialized_data, report_type)
+        return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{base_filename}.pdf"'})
+    elif clean_fmt in ("excel", "xls"):
+        excel_xml = reporting_engine.generate_report_excel_xml(specialized_data, report_type)
+        return Response(content=excel_xml, media_type="application/vnd.ms-excel; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{base_filename}.xls"'})
+    elif clean_fmt == "csv":
+        csv_text = reporting_engine.generate_report_csv(specialized_data, report_type)
+        return Response(content=csv_text, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{base_filename}.csv"'})
+    else:
+        json_text = reporting_engine.generate_report_json(specialized_data, report_type)
+        return Response(content=json_text, media_type="application/json; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{base_filename}.json"'})
 
 
 # ==========================================

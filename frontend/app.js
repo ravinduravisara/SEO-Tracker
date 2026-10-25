@@ -149,6 +149,12 @@ class SEOAdminApp {
             chatMessages: [],
             loading: false
         };
+        this.reportState = {
+            filterType: "ALL",
+            search: "",
+            branding: null,
+            types: []
+        };
         this.init();
     }
 
@@ -1179,7 +1185,7 @@ class SEOAdminApp {
     }
 
     /* -------------------------------------------------------------
-       PUBLIC REPORT MANAGEMENT
+       PUBLIC REPORT MANAGEMENT & CLIENT REPORT HUB
     -------------------------------------------------------------- */
     async loadReports() {
         if (this.state.reports && this.state.reports.length) {
@@ -1193,38 +1199,101 @@ class SEOAdminApp {
         }
     }
 
+    filterReportsByType(type) {
+        this.reportState.filterType = type;
+        document.querySelectorAll("[data-repfilter]").forEach(btn => {
+            btn.classList.toggle("active", btn.dataset.repfilter === type);
+            btn.classList.toggle("btn-primary", btn.dataset.repfilter === type);
+            btn.classList.toggle("btn-secondary", btn.dataset.repfilter !== type);
+        });
+        this.renderReportsTable(this.state.reports);
+    }
+
+    filterReportsSearch() {
+        const inp = $("reportSearchInput");
+        this.reportState.search = inp ? inp.value.trim().toLowerCase() : "";
+        this.renderReportsTable(this.state.reports);
+    }
+
     renderReportsTable(reports) {
         const tbody = $("reportsTableBody");
         if (!tbody) return;
 
         if (!reports || !reports.length) {
-            tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No public reports generated yet.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No client reports generated yet. Click '+ Generate New Report' to produce one.</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = reports.map(r => {
+        const REP_LABELS = {
+            EXECUTIVE: "📊 Executive Report",
+            TECHNICAL: "🛠️ Technical Audit",
+            ONPAGE: "📝 On-Page SEO",
+            KEYWORDS: "🎯 Keywords & Intent",
+            COMPETITORS: "⚔️ Competitor Benchmarks",
+            BACKLINKS: "🔗 Backlink Profile",
+            GSC_PERFORMANCE: "📈 Search Console",
+            PAGESPEED: "⚡ PageSpeed & Vitals",
+            RECOMMENDATIONS: "🧠 AI Action Plan",
+            PROGRESS_COMPARISON: "🔄 Progress Delta"
+        };
+
+        const filterType = this.reportState.filterType || "ALL";
+        const search = this.reportState.search || "";
+
+        const filtered = reports.filter(r => {
+            const rType = (r.report_type || "EXECUTIVE").toUpperCase();
+            if (filterType !== "ALL" && rType !== filterType) return false;
+            if (search) {
+                const cName = (r.client_name || "").toLowerCase();
+                const target = (r.target_url || "").toLowerCase();
+                if (!cName.includes(search) && !target.includes(search)) return false;
+            }
+            return true;
+        });
+
+        if (!filtered.length) {
+            tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No reports match the current filter criteria.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(r => {
             const isPub = r.status === "PUBLISHED";
             const d = r.created_at ? new Date(r.created_at).toLocaleDateString() : "-";
+            const rType = (r.report_type || "EXECUTIVE").toUpperCase();
+            const typeLabel = REP_LABELS[rType] || rType;
             return `
                 <tr>
                     <td>
-                        <b>${esc(r.client_name)}</b>
-                        <div style="font-size:12px; color:var(--text-muted);">${esc(r.target_url)}</div>
+                        <b style="color:#0f172a;">${esc(r.client_name)}</b>
+                        <div style="font-size:12px; color:var(--text-muted); font-family:monospace; margin-top:2px;">${esc(r.target_url)}</div>
                     </td>
-                    <td><b>${safe(r.score).toFixed(0)}%</b></td>
+                    <td>
+                        <span class="badge" style="background:#e0e7ff; color:#3730a3; font-weight:700; font-size:11px;">
+                            ${esc(typeLabel)}
+                        </span>
+                    </td>
+                    <td><b style="font-size:14px; color:${getScoreColor(r.score)}">${safe(r.score).toFixed(0)}/100</b></td>
                     <td>
                         <span class="pill ${isPub ? 'pill-success' : 'pill-disabled'}">${esc(r.status)}</span>
                     </td>
                     <td><span style="font-size:12px; color:var(--text-muted);">${d}</span></td>
-                    <td><code style="font-size:11px; background:#F1F5F9; padding:2px 6px; border-radius:4px;">${esc(r.token.substring(0, 12))}...</code></td>
+                    <td><code style="font-size:11px; background:#F1F5F9; padding:2px 6px; border-radius:4px;">${esc(r.token.substring(0, 10))}...</code></td>
                     <td>
-                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                            <button class="btn btn-secondary btn-sm" onclick="app.openPreview('${r.token}')">Preview</button>
-                            <button class="btn btn-secondary btn-sm" onclick="app.copyReportLink('${r.token}')">Copy Link</button>
-                            <button class="btn btn-secondary btn-sm" onclick="window.open('/report/${r.token}', '_blank')">Client View</button>
-                            <button class="btn btn-secondary btn-sm" style="background:#0F172A; color:#fff; border-color:#0F172A;" onclick="window.open('/api/reports/public/${r.token}/comprehensive', '_blank')" title="View 30-Section Full Consultancy Report">30-Sec View</button>
-                            <button class="btn btn-secondary btn-sm" onclick="window.open('/api/reports/public/${r.token}/comprehensive/pdf', '_blank')" title="Download 30-Section Consultancy PDF">PDF</button>
-                            <button class="btn btn-sm ${isPub ? 'btn-danger' : 'btn-success'}" onclick="app.toggleReportStatus(${r.id}, '${r.status}')">
+                        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                            <button class="btn btn-secondary btn-sm" onclick="window.open('/report/${r.token}', '_blank')" title="Open Interactive Web View">👁️ View</button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.copyReportLink('${r.token}')" title="Copy Client Link">🔗 Link</button>
+                            <div class="dropdown" style="display:inline-block; position:relative;">
+                                <button class="btn btn-secondary btn-sm" style="display:flex; align-items:center; gap:4px;" onclick="app.toggleRowExportMenu(event, '${r.token}')">
+                                    <span>📥</span> Export ▾
+                                </button>
+                                <div id="exportMenu_${r.token}" class="dropdown-menu" style="display:none; position:absolute; right:0; left:auto; z-index:100; background:#fff; border:1px solid #cbd5e1; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.1); min-width:140px; padding:4px 0;">
+                                    <a href="/api/reports/public/${r.token}/export/pdf" target="_blank" style="display:block; padding:6px 12px; font-size:12px; color:#1e293b; text-decoration:none;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">📄 PDF Report</a>
+                                    <a href="/api/reports/public/${r.token}/export/excel" target="_blank" style="display:block; padding:6px 12px; font-size:12px; color:#1e293b; text-decoration:none;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">📊 Excel (.xls)</a>
+                                    <a href="/api/reports/public/${r.token}/export/csv" target="_blank" style="display:block; padding:6px 12px; font-size:12px; color:#1e293b; text-decoration:none;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">📑 CSV Data</a>
+                                    <a href="/api/reports/public/${r.token}/export/json" target="_blank" style="display:block; padding:6px 12px; font-size:12px; color:#1e293b; text-decoration:none;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">🌐 JSON API</a>
+                                </div>
+                            </div>
+                            <button class="btn btn-sm ${isPub ? 'btn-danger' : 'btn-success'}" onclick="app.toggleReportStatus(${r.id}, '${r.status}')" style="font-size:11px; padding:3px 8px;">
                                 ${isPub ? 'Disable' : 'Publish'}
                             </button>
                         </div>
@@ -1232,6 +1301,165 @@ class SEOAdminApp {
                 </tr>
             `;
         }).join("");
+    }
+
+    toggleRowExportMenu(e, token) {
+        if (e) e.stopPropagation();
+        const menu = $("exportMenu_" + token);
+        if (!menu) return;
+        const wasOpen = menu.style.display === "block";
+        document.querySelectorAll("[id^='exportMenu_']").forEach(m => m.style.display = "none");
+        menu.style.display = wasOpen ? "none" : "block";
+    }
+
+    async openGenerateReportModal() {
+        const modal = $("generateReportModal");
+        if (!modal) return;
+        modal.classList.remove("hidden");
+
+        // Populate audits dropdown
+        const sel = $("genRepAuditSelect");
+        const bSel = $("genRepBaselineSelect");
+        if (sel) {
+            try {
+                const audits = await jsonFetch(`${API_BASE}/audits`);
+                let html = '<option value="">-- Choose Completed Audit --</option>';
+                let bHtml = '<option value="">-- Choose Earlier Baseline Audit --</option>';
+                if (Array.isArray(audits)) {
+                    audits.forEach(a => {
+                        const domain = a.target_url ? a.target_url.replace(/^https?:\/\//, "").replace(/\/.*$/, "") : `Audit #${a.id}`;
+                        const score = a.score !== null ? `${Math.round(a.score)}/100` : "Unscored";
+                        const dt = a.created_at ? new Date(a.created_at).toLocaleDateString() : "";
+                        html += `<option value="${a.id}">${domain} (${score} • ${dt})</option>`;
+                        bHtml += `<option value="${a.id}">${domain} (${score} • ${dt})</option>`;
+                    });
+                }
+                sel.innerHTML = html;
+                if (bSel) bSel.innerHTML = bHtml;
+            } catch (err) {
+                console.warn("Failed to load audits for modal:", err);
+            }
+        }
+    }
+
+    closeGenerateReportModal() {
+        const modal = $("generateReportModal");
+        if (modal) modal.classList.add("hidden");
+    }
+
+    onGenRepTypeChanged() {
+        const tSel = $("genRepTypeSelect");
+        const bCont = $("genRepBaselineContainer");
+        if (tSel && bCont) {
+            bCont.style.display = (tSel.value === "PROGRESS_COMPARISON") ? "block" : "none";
+        }
+    }
+
+    onGenRepAuditChanged() {
+        // Option selected
+    }
+
+    async submitGenerateReport() {
+        const aSel = $("genRepAuditSelect");
+        const tSel = $("genRepTypeSelect");
+        const bSel = $("genRepBaselineSelect");
+        const sSel = $("genRepStatusSelect");
+        const cInp = $("genRepClientOverride");
+        const btn = $("btnSubmitGenReport");
+
+        const auditId = aSel ? parseInt(aSel.value) : null;
+        if (!auditId) {
+            this.showNotification("Please select a target audit first.", "warning");
+            return;
+        }
+
+        const reportType = tSel ? tSel.value : "EXECUTIVE";
+        const baselineAuditId = (reportType === "PROGRESS_COMPARISON" && bSel && bSel.value) ? parseInt(bSel.value) : null;
+        const status = sSel ? sSel.value : "PUBLISHED";
+
+        if (btn) btn.disabled = true;
+        try {
+            this.showNotification(`Synthesizing client-ready ${reportType} report...`, "info");
+            const payload = {
+                audit_id: auditId,
+                report_type: reportType,
+                baseline_audit_id: baselineAuditId,
+                status: status
+            };
+            if (cInp && cInp.value.trim()) {
+                payload.client_override = cInp.value.trim();
+            }
+
+            const res = await jsonFetch(`${API_BASE}/reports/generate`, {
+                method: "POST",
+                body: JSON.stringify(payload)
+            });
+
+            this.closeGenerateReportModal();
+            this.showNotification(`Report #${res.id} (${reportType}) created successfully!`, "success");
+            await this.loadReports();
+        } catch (err) {
+            this.showNotification(`Failed to generate report: ${err.message || err}`, "danger");
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    async openAgencyBrandingModal() {
+        const modal = $("agencyBrandingModal");
+        if (!modal) return;
+        modal.classList.remove("hidden");
+
+        try {
+            const b = await jsonFetch(`${API_BASE}/reports/branding`);
+            this.reportState.branding = b;
+            if ($("brandAgencyName")) $("brandAgencyName").value = b.agency_name || "";
+            if ($("brandTagline")) $("brandTagline").value = b.tagline || "";
+            if ($("brandLogoUrl")) $("brandLogoUrl").value = b.logo_url || "";
+            if ($("brandPrimaryColor")) $("brandPrimaryColor").value = b.primary_color || "#4F46E5";
+            if ($("brandPrimaryColorPicker")) $("brandPrimaryColorPicker").value = b.primary_color || "#4F46E5";
+            if ($("brandWebsite")) $("brandWebsite").value = b.website || "";
+            if ($("brandEmail")) $("brandEmail").value = b.support_email || "";
+            if ($("brandPhone")) $("brandPhone").value = b.phone || "";
+            if ($("brandFooter")) $("brandFooter").value = b.footer_text || "";
+        } catch (err) {
+            console.warn("Failed to load agency branding:", err);
+        }
+    }
+
+    closeAgencyBrandingModal() {
+        const modal = $("agencyBrandingModal");
+        if (modal) modal.classList.add("hidden");
+    }
+
+    async saveAgencyBranding() {
+        const btn = $("btnSaveBranding");
+        if (btn) btn.disabled = true;
+
+        const payload = {
+            agency_name: $("brandAgencyName") ? $("brandAgencyName").value.trim() : "",
+            tagline: $("brandTagline") ? $("brandTagline").value.trim() : "",
+            logo_url: $("brandLogoUrl") ? $("brandLogoUrl").value.trim() : "",
+            primary_color: $("brandPrimaryColor") ? $("brandPrimaryColor").value.trim() : "#4F46E5",
+            website: $("brandWebsite") ? $("brandWebsite").value.trim() : "",
+            support_email: $("brandEmail") ? $("brandEmail").value.trim() : "",
+            phone: $("brandPhone") ? $("brandPhone").value.trim() : "",
+            footer_text: $("brandFooter") ? $("brandFooter").value.trim() : ""
+        };
+
+        try {
+            const updated = await jsonFetch(`${API_BASE}/reports/branding`, {
+                method: "POST",
+                body: JSON.stringify(payload)
+            });
+            this.reportState.branding = updated;
+            this.showNotification("Agency branding settings saved successfully!", "success");
+            this.closeAgencyBrandingModal();
+        } catch (err) {
+            this.showNotification(`Failed to save branding: ${err.message || err}`, "danger");
+        } finally {
+            if (btn) btn.disabled = false;
+        }
     }
 
     async generateReport(auditId, clientId = null) {

@@ -1045,6 +1045,22 @@ class RankingAlert(Base):
     tracked_keyword = relationship("TrackedKeyword", back_populates="alerts")
 
 
+class AgencyBranding(Base):
+    __tablename__ = "agency_branding"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agency_name = Column(String, default="Aviance SEO Agency")
+    tagline = Column(String, default="Enterprise Search Engine Optimization & Telemetry")
+    logo_url = Column(String, default="")
+    primary_color = Column(String, default="#4F46E5")
+    secondary_color = Column(String, default="#0F172A")
+    website = Column(String, default="https://aviance.ai")
+    support_email = Column(String, default="reports@aviance.ai")
+    phone = Column(String, default="+1 (800) 555-0199")
+    footer_text = Column(String, default="Confidential & Proprietary Client Intelligence Report")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 def init_db():
     if IS_MONGO:
         try:
@@ -1097,7 +1113,8 @@ def init_db():
                 "team_invitations", "admin_sessions", "activity_logs", "lead_notes",
                 "seo_leads", "public_scans", "scheduled_audits", "keyword_projects",
                 "saved_keywords", "competitor_comparisons", "backlink_snapshots",
-                "tracked_keywords", "ranking_observations", "ranking_alerts"
+                "tracked_keywords", "ranking_observations", "ranking_alerts",
+                "agency_branding"
             ]
             for t in tables:
                 try:

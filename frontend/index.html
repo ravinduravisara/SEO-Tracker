@@ -1716,30 +1716,76 @@
             </div>
         </div>
 
-        <!-- VIEW 5: PUBLIC REPORTS MANAGER -->
+        <!-- VIEW 5: CLIENT REPORT HUB & WHITE-LABEL REPORTING SYSTEM -->
         <div id="viewReports" class="admin-view">
-            <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <!-- REPORT HUB HEADER & CONTROLS -->
+            <div class="card" style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
                     <div>
-                        <h2 style="margin:0; font-size:20px;">Public Report Manager</h2>
-                        <div style="font-size:13px; color:var(--text-muted);">Secure client report links. Only reports set to PUBLISHED can be opened by clients.</div>
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <h2 style="margin:0; font-size:22px; display:flex; align-items:center; gap:8px;">
+                                <span>📑</span> Client Report Hub &amp; Reporting Engine
+                            </h2>
+                            <span class="badge" style="background:#e0e7ff; color:#4338ca; font-weight:700; font-size:11px; padding:3px 8px; border-radius:6px;">
+                                10 Specialized Disciplines
+                            </span>
+                            <span class="badge" style="background:#dcfce7; color:#15803d; font-size:11px; padding:3px 8px; border-radius:6px; font-weight:600;">
+                                🛡️ Verified Telemetry Only
+                            </span>
+                        </div>
+                        <p style="margin:6px 0 0 0; color:var(--text-muted); font-size:13px;">
+                            Produce client-ready reports across Executive, Technical, On-Page, Keywords, Competitors, Backlinks, GSC, PageSpeed, Recommendations, and Progress Comparison.
+                        </p>
+                    </div>
+
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <button class="btn btn-primary btn-sm" onclick="app.openGenerateReportModal()" style="display:flex; align-items:center; gap:6px;">
+                            <span>➕</span> Generate New Report
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="app.openAgencyBrandingModal()" style="display:flex; align-items:center; gap:6px;">
+                            <span>🎨</span> Agency Branding
+                        </button>
                     </div>
                 </div>
 
+                <!-- FILTER BAR -->
+                <div style="display:flex; gap:10px; align-items:center; margin-top:16px; flex-wrap:wrap; border-top:1px solid var(--border, #e2e8f0); padding-top:14px;">
+                    <div style="display:flex; gap:6px; overflow-x:auto; flex:1; padding-bottom:2px;" id="reportTypeFilterBar">
+                        <button class="btn btn-sm btn-secondary active" data-repfilter="ALL" onclick="app.filterReportsByType('ALL')">All Reports</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="EXECUTIVE" onclick="app.filterReportsByType('EXECUTIVE')">📊 Executive</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="TECHNICAL" onclick="app.filterReportsByType('TECHNICAL')">🛠️ Technical</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="ONPAGE" onclick="app.filterReportsByType('ONPAGE')">📝 On-Page</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="KEYWORDS" onclick="app.filterReportsByType('KEYWORDS')">🎯 Keywords</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="COMPETITORS" onclick="app.filterReportsByType('COMPETITORS')">⚔️ Competitors</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="BACKLINKS" onclick="app.filterReportsByType('BACKLINKS')">🔗 Backlinks</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="GSC_PERFORMANCE" onclick="app.filterReportsByType('GSC_PERFORMANCE')">📈 Search Console</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="PAGESPEED" onclick="app.filterReportsByType('PAGESPEED')">⚡ PageSpeed</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="RECOMMENDATIONS" onclick="app.filterReportsByType('RECOMMENDATIONS')">🧠 AI Roadmap</button>
+                        <button class="btn btn-sm btn-secondary" data-repfilter="PROGRESS_COMPARISON" onclick="app.filterReportsByType('PROGRESS_COMPARISON')">🔄 Progress Delta</button>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <input id="reportSearchInput" type="text" class="form-control" placeholder="Search client or domain..." style="width:200px; font-size:12px; height:32px;" oninput="app.filterReportsSearch()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- REPORTS TABLE CARD -->
+            <div class="card">
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
-                                <th>Client / Site</th>
-                                <th>Score</th>
-                                <th>Status</th>
-                                <th>Created</th>
+                                <th>Client &amp; Target Website</th>
+                                <th>Report Discipline</th>
+                                <th>Health Score</th>
+                                <th>Access Status</th>
+                                <th>Generated</th>
                                 <th>Token</th>
-                                <th>Actions</th>
+                                <th>Exports &amp; Actions</th>
                             </tr>
                         </thead>
                         <tbody id="reportsTableBody">
-                            <tr><td colspan="6" class="empty-state">No public reports generated.</td></tr>
+                            <tr><td colspan="7" class="empty-state">Loading client reports...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -2697,6 +2743,137 @@
             <h4 style="margin:12px 0 6px 0; color:#0F172A;">3. Search Engine Ranking Disclaimer</h4>
             <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:10px 12px; color:#1E40AF; font-size:12px;">
                 Neither the Platform Authority Index (PAI) nor third-party Domain Rank scores are endorsed by or affiliated with Google LLC. They represent algorithmic link architecture models and must never be represented as guaranteed Google ranking indicators.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- GENERATE CLIENT REPORT MODAL -->
+<div id="generateReportModal" class="login-modal-overlay hidden" style="align-items:flex-start; padding:40px 16px; overflow-y:auto; z-index:9999;">
+    <div class="card" style="max-width:680px; width:100%; margin:0 auto; padding:24px; border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+            <h3 style="margin:0; font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                <span>➕ Generate Client-Ready SEO Report</span>
+            </h3>
+            <button class="btn btn-secondary btn-sm" onclick="app.closeGenerateReportModal()">✕ Close</button>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:14px;">
+            <div>
+                <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Select Target Audit *</label>
+                <select id="genRepAuditSelect" class="form-control" style="font-size:13px;" onchange="app.onGenRepAuditChanged()">
+                    <option value="">-- Choose Completed Audit --</option>
+                </select>
+            </div>
+
+            <div>
+                <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Select Report Discipline *</label>
+                <select id="genRepTypeSelect" class="form-control" style="font-size:13px;" onchange="app.onGenRepTypeChanged()">
+                    <option value="EXECUTIVE">📊 Executive SEO Report (C-Suite Health Overview)</option>
+                    <option value="TECHNICAL">🛠️ Technical SEO Audit Report (Crawl, Index & Code)</option>
+                    <option value="ONPAGE">📝 On-Page SEO Report (Titles, Meta & Headings)</option>
+                    <option value="KEYWORDS">🎯 Keyword Research Report (Search Intent & KD)</option>
+                    <option value="COMPETITORS">⚔️ Competitor Analysis Report (Domain Benchmarking)</option>
+                    <option value="BACKLINKS">🔗 Backlink Analysis Report (Indexed Links & Equity)</option>
+                    <option value="GSC_PERFORMANCE">📈 Google Search Console Report (Clicks & Queries)</option>
+                    <option value="PAGESPEED">⚡ PageSpeed & Core Web Vitals (CrUX & Lab Telemetry)</option>
+                    <option value="RECOMMENDATIONS">🧠 SEO Recommendations Report (Actionable Roadmap)</option>
+                    <option value="PROGRESS_COMPARISON">🔄 SEO Progress Comparison Report (Historical Delta)</option>
+                </select>
+            </div>
+
+            <!-- COMPARISON BASELINE SELECTOR (Shown only when PROGRESS_COMPARISON is selected) -->
+            <div id="genRepBaselineContainer" style="display:none; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:12px;">
+                <label style="font-size:12px; font-weight:700; color:#0369a1; margin-bottom:4px; display:block;">Select Baseline Audit (For Comparison) *</label>
+                <select id="genRepBaselineSelect" class="form-control" style="font-size:13px;">
+                    <option value="">-- Choose Earlier Baseline Audit --</option>
+                </select>
+                <div style="font-size:11px; color:#0284c7; margin-top:4px;">
+                    Calculates score difference, newly resolved issues, and regressed issues against the baseline.
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Initial Access Status</label>
+                    <select id="genRepStatusSelect" class="form-control" style="font-size:13px;">
+                        <option value="PUBLISHED">Published (Client Access Active)</option>
+                        <option value="DRAFT">Draft (Admin Only)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Client Name (Override)</label>
+                    <input id="genRepClientOverride" type="text" class="form-control" placeholder="Defaults to Client profile name" style="font-size:13px;">
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px; border-top:1px solid var(--border); padding-top:14px;">
+                <button class="btn btn-secondary" onclick="app.closeGenerateReportModal()">Cancel</button>
+                <button id="btnSubmitGenReport" class="btn btn-primary" onclick="app.submitGenerateReport()">Generate Report</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AGENCY BRANDING SETTINGS MODAL -->
+<div id="agencyBrandingModal" class="login-modal-overlay hidden" style="align-items:flex-start; padding:40px 16px; overflow-y:auto; z-index:9999;">
+    <div class="card" style="max-width:680px; width:100%; margin:0 auto; padding:24px; border-radius:14px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+            <h3 style="margin:0; font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                <span>🎨 Agency White-Label Branding Settings</span>
+            </h3>
+            <button class="btn btn-secondary btn-sm" onclick="app.closeAgencyBrandingModal()">✕ Close</button>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Agency Name *</label>
+                    <input id="brandAgencyName" type="text" class="form-control" placeholder="e.g. Acme SEO Agency" style="font-size:13px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Agency Tagline</label>
+                    <input id="brandTagline" type="text" class="form-control" placeholder="e.g. Search Intelligence & Growth" style="font-size:13px;">
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Primary Accent Color</label>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input id="brandPrimaryColorPicker" type="color" value="#4F46E5" style="width:40px; height:36px; padding:0; border:1px solid #cbd5e1; border-radius:4px; cursor:pointer;" onchange="$('brandPrimaryColor').value = this.value">
+                        <input id="brandPrimaryColor" type="text" class="form-control" value="#4F46E5" style="font-size:13px; font-family:monospace;" onchange="$('brandPrimaryColorPicker').value = this.value">
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Logo URL / Path</label>
+                    <input id="brandLogoUrl" type="text" class="form-control" placeholder="e.g. https://agency.com/logo.png" style="font-size:13px;">
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Agency Website</label>
+                    <input id="brandWebsite" type="text" class="form-control" placeholder="https://agency.com" style="font-size:13px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Support Email</label>
+                    <input id="brandEmail" type="email" class="form-control" placeholder="reports@agency.com" style="font-size:13px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Phone Number</label>
+                    <input id="brandPhone" type="text" class="form-control" placeholder="+1 (800) 555-0199" style="font-size:13px;">
+                </div>
+            </div>
+
+            <div>
+                <label style="font-size:12px; font-weight:700; color:#334155; margin-bottom:4px; display:block;">Report Footer Confidentiality Notice</label>
+                <input id="brandFooter" type="text" class="form-control" placeholder="Confidential & Proprietary • Prepared for Client" style="font-size:13px;">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px; border-top:1px solid var(--border); padding-top:14px;">
+                <button class="btn btn-secondary" onclick="app.closeAgencyBrandingModal()">Cancel</button>
+                <button id="btnSaveBranding" class="btn btn-primary" onclick="app.saveAgencyBranding()">Save Branding Settings</button>
             </div>
         </div>
     </div>
