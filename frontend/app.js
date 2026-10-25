@@ -206,6 +206,16 @@ class SEOAdminApp {
 
     async init() {
         this.setupPopState();
+        this.initTheme();
+
+        // Close dropdowns on outside click
+        document.addEventListener("click", (e) => {
+            const qMenu = $("quickExportDropdown");
+            const qBtn = $("btnQuickExport");
+            if (qMenu && qMenu.style.display !== "none" && !qMenu.contains(e.target) && !qBtn?.contains(e.target)) {
+                qMenu.style.display = "none";
+            }
+        });
 
         // 1. Check if single-use invitation token is present in URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -571,8 +581,13 @@ class SEOAdminApp {
         // Populate recent audits table in dashboard
         const recentAuditsBody = $("dashRecentAuditsBody");
         if (recentAuditsBody) {
-            if (stats.recent_audits && stats.recent_audits.length) {
-                recentAuditsBody.innerHTML = stats.recent_audits.map(a => {
+            let list = stats.recent_audits || [];
+            if (this.state.currentProjectId && this.state.currentProject) {
+                const targetUrl = this.state.currentProject.target_url;
+                list = list.filter(a => a.client_name === this.state.currentProject.name || (targetUrl && a.target_url && a.target_url.includes(targetUrl)));
+            }
+            if (list.length) {
+                recentAuditsBody.innerHTML = list.map(a => {
                     const score = safe(a.score);
                     const color = getScoreColor(score);
                     const when = a.created_at ? new Date(a.created_at + (a.created_at.endsWith("Z") ? "" : "Z")).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
@@ -592,7 +607,7 @@ class SEOAdminApp {
                     `;
                 }).join("");
             } else {
-                recentAuditsBody.innerHTML = `<tr><td colspan="8" class="empty-state">No audits completed yet.</td></tr>`;
+                recentAuditsBody.innerHTML = `<tr><td colspan="8" class="empty-state">No audits completed ${this.state.currentProject ? 'for ' + esc(this.state.currentProject.name) : 'yet'}.</td></tr>`;
             }
         }
     }
@@ -739,11 +754,230 @@ class SEOAdminApp {
 
     populateClientSelects() {
         const sel = $("auditClientSelect");
-        if (!sel) return;
-        const current = sel.value;
-        sel.innerHTML = `<option value="">-- Assign to Client (Optional) --</option>` +
-            this.state.clients.map(c => `<option value="${c.id}">${esc(c.name)} (${esc(c.company || c.target_url || "Client")})</option>`).join("");
-        sel.value = current;
+        if (sel) {
+            const current = sel.value;
+            sel.innerHTML = `<option value="">-- Assign to Client (Optional) --</option>` +
+                this.state.clients.map(c => `<option value="${c.id}">${esc(c.name)} (${esc(c.company || c.target_url || "Client")})</option>`).join("");
+            sel.value = current;
+        }
+
+        // Global SEMrush/Ahrefs Project & Website Selector
+        const projSel = $("globalProjectSelector");
+        if (projSel) {
+            const currentVal = this.state.currentProjectId ? String(this.state.currentProjectId) : (projSel.value || "ALL");
+            let opts = `<option value="ALL">📁 All Projects &amp; Websites</option>`;
+            if (this.state.clients && this.state.clients.length) {
+                opts += this.state.clients.map(c => {
+                    const domain = (c.target_url || "").replace(/^https?:\/\//, '').replace(/\/$/, '');
+                    const label = domain ? `${esc(c.name)} (${domain})` : esc(c.name);
+                    return `<option value="${c.id}">${label}</option>`;
+                }).join("");
+            }
+            projSel.innerHTML = opts;
+            projSel.value = currentVal;
+            this.updateProjectScopeUI();
+        }
+    }
+
+    onGlobalProjectChange(val) {
+        if (val === "ALL" || !val) {
+            this.state.currentProjectId = null;
+            this.state.currentProject = null;
+            localStorage.removeItem("seo_project_scope");
+        } else {
+            const pId = parseInt(val, 10);
+            this.state.currentProjectId = pId;
+            this.state.currentProject = (this.state.clients || []).find(c => c.id === pId) || null;
+            localStorage.setItem("seo_project_scope", String(pId));
+        }
+        this.updateProjectScopeUI();
+
+        // Refresh views to match new scope
+        const view = this.state.currentView || "dashboard";
+        if (view === "dashboard") {
+            this.loadDashboardStats();
+        } else if (view === "audits") {
+            this.filterAudits();
+        } else if (view === "domain_overview" && this.state.currentProject?.target_url) {
+            if ($("doDomainInput")) {
+                $("doDomainInput").value = this.state.currentProject.target_url;
+                this.analyzeDomainOverview();
+            }
+        }
+    }
+
+    updateProjectScopeUI() {
+        const badge = $("globalProjectActiveBadge");
+        const banner = $("dashProjectScopeBanner");
+        const proj = this.state.currentProject;
+
+        if (proj) {
+            if (badge) {
+                badge.style.display = "inline-block";
+                badge.textContent = proj.name || "Active";
+            }
+            if (banner) {
+                banner.style.display = "flex";
+                if ($("dashScopeDomain")) $("dashScopeDomain").textContent = proj.target_url || proj.company || "Project Active";
+                if ($("dashScopeClientName")) $("dashScopeClientName").textContent = proj.name || "Client";
+                const score = proj.latest_score !== null && proj.latest_score !== undefined ? Math.round(proj.latest_score) : null;
+                const scoreBadge = $("dashScopeScoreBadge");
+                if (scoreBadge) {
+                    if (score !== null) {
+                        scoreBadge.textContent = `${score}% Health`;
+                        const col = getScoreColor(score);
+                        scoreBadge.style.color = col;
+                        scoreBadge.style.background = `${col}20`;
+                        scoreBadge.style.borderColor = `${col}40`;
+                    } else {
+                        scoreBadge.textContent = "No Audit Yet";
+                        scoreBadge.className = "pill pill-disabled";
+                    }
+                }
+            }
+            if ($("auditUrlInput") && !$("auditUrlInput").value && proj.target_url) {
+                $("auditUrlInput").value = proj.target_url;
+            }
+            if ($("auditClientSelect")) {
+                $("auditClientSelect").value = String(proj.id);
+            }
+        } else {
+            if (badge) badge.style.display = "none";
+            if (banner) banner.style.display = "none";
+        }
+    }
+
+    clearProjectScope() {
+        const projSel = $("globalProjectSelector");
+        if (projSel) projSel.value = "ALL";
+        this.onGlobalProjectChange("ALL");
+    }
+
+    auditCurrentScope() {
+        if (this.state.currentProject?.target_url) {
+            $("auditUrlInput").value = this.state.currentProject.target_url;
+            if ($("auditClientSelect")) $("auditClientSelect").value = String(this.state.currentProject.id);
+            this.startAudit();
+        }
+    }
+
+    /* -------------------------------------------------------------
+       THEME ENGINE & MODERN UTILITIES (PHASE 11)
+    -------------------------------------------------------------- */
+    initTheme() {
+        const saved = localStorage.getItem("theme") || 
+            (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", saved);
+        this.updateThemeButton(saved);
+    }
+
+    toggleTheme() {
+        const cur = document.documentElement.getAttribute("data-theme") || "light";
+        const next = cur === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        localStorage.setItem("theme", next);
+        this.updateThemeButton(next);
+    }
+
+    updateThemeButton(theme) {
+        const icon = $("themeToggleIcon");
+        const txt = $("themeToggleText");
+        if (icon) icon.textContent = theme === "dark" ? "☀️" : "🌙";
+        if (txt) txt.textContent = theme === "dark" ? "Light" : "Dark";
+    }
+
+    toggleQuickExportMenu() {
+        const menu = $("quickExportDropdown");
+        if (!menu) return;
+        menu.style.display = menu.style.display === "none" ? "block" : "none";
+    }
+
+    async triggerQuickExport(format) {
+        const menu = $("quickExportDropdown");
+        if (menu) menu.style.display = "none";
+
+        const auditId = this.state.currentAudit?.db_audit_id || (this.state.audits && this.state.audits.length ? this.state.audits[0].id : null);
+        if (!auditId) {
+            alert("No audit found to export. Please run or select an audit first.");
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/reports/export/${format}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    audit_id: auditId,
+                    report_type: "executive_seo_report"
+                })
+            });
+
+            if (!res.ok) throw new Error(`Export failed (${res.status})`);
+            const blob = await res.blob();
+            const filename = `seo_executive_report_${auditId}.${format === 'xls' ? 'xls' : format}`;
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (e) {
+            alert("Quick export error: " + e.message);
+        }
+    }
+
+    sortTable(tableId, colIdx, type = "string") {
+        const table = document.getElementById(tableId);
+        if (!table) return;
+        const tbody = table.querySelector("tbody");
+        if (!tbody) return;
+
+        const thList = table.querySelectorAll("thead th.sortable");
+        const clickedTh = table.querySelectorAll("thead th")[colIdx];
+        if (!clickedTh) return;
+
+        const currentOrder = clickedTh.dataset.order === "asc" ? "desc" : "asc";
+        clickedTh.dataset.order = currentOrder;
+
+        thList.forEach(th => {
+            th.classList.remove("sort-asc", "sort-desc");
+            const icon = th.querySelector(".sort-icon");
+            if (icon) icon.textContent = "↕";
+        });
+        clickedTh.classList.add(`sort-${currentOrder}`);
+        const clickedIcon = clickedTh.querySelector(".sort-icon");
+        if (clickedIcon) clickedIcon.textContent = currentOrder === "asc" ? "▲" : "▼";
+
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        if (!rows.length || rows[0].querySelector(".empty-state")) return;
+
+        rows.sort((a, b) => {
+            const cellA = a.children[colIdx]?.innerText.trim() || "";
+            const cellB = b.children[colIdx]?.innerText.trim() || "";
+
+            let valA, valB;
+            if (type === "score") {
+                valA = parseFloat(cellA.replace(/[^0-9.-]/g, "")) || 0;
+                valB = parseFloat(cellB.replace(/[^0-9.-]/g, "")) || 0;
+            } else if (type === "number") {
+                valA = parseFloat(cellA.replace(/[^0-9.-]/g, "")) || 0;
+                valB = parseFloat(cellB.replace(/[^0-9.-]/g, "")) || 0;
+            } else if (type === "date") {
+                valA = new Date(cellA).getTime() || 0;
+                valB = new Date(cellB).getTime() || 0;
+            } else {
+                valA = cellA.toLowerCase();
+                valB = cellB.toLowerCase();
+            }
+
+            if (valA < valB) return currentOrder === "asc" ? -1 : 1;
+            if (valA > valB) return currentOrder === "asc" ? 1 : -1;
+            return 0;
+        });
+
+        rows.forEach(r => tbody.appendChild(r));
     }
 
     filterClients() {
@@ -979,6 +1213,18 @@ class SEOAdminApp {
         $("auditProgressBar").style.width = "5%";
         $("auditStatusLine").textContent = "Initializing crawler and DNS probes...";
 
+        this.state.auditRunningUrl = url;
+        const dock = $("globalScanProgressDock");
+        if (dock) {
+            dock.style.display = "block";
+            if ($("globalScanTargetUrl")) $("globalScanTargetUrl").textContent = url;
+            if ($("globalScanProgressBarFill")) $("globalScanProgressBarFill").style.width = "5%";
+            if ($("globalScanStatusText")) $("globalScanStatusText").textContent = "Initializing crawler and DNS probes...";
+            if ($("globalScanPhaseBadge")) $("globalScanPhaseBadge").textContent = "Phase: Init";
+            if ($("globalScanPctBadge")) $("globalScanPctBadge").textContent = "5%";
+            if ($("globalScanTelemetry")) $("globalScanTelemetry").textContent = "Pages: 0 | Links: 0 | Issues: 0";
+        }
+
         const payload = {
             url,
             max_pages: 5000,
@@ -1039,6 +1285,17 @@ class SEOAdminApp {
             $("auditStatusLine").textContent = p.message || `Phase: ${p.phase || "working"}...`;
             $("auditTelemetry").textContent = `Pages: ${fmt(p.pages || 0)} | Links: ${fmt(p.links_checked || 0)} | Issues: ${fmt(p.issues || 0)}`;
 
+            const dock = $("globalScanProgressDock");
+            if (dock) {
+                dock.style.display = "block";
+                if ($("globalScanTargetUrl")) $("globalScanTargetUrl").textContent = this.state.auditRunningUrl || $("auditUrlInput")?.value || "Target Site";
+                if ($("globalScanProgressBarFill")) $("globalScanProgressBarFill").style.width = `${pct}%`;
+                if ($("globalScanPhaseBadge")) $("globalScanPhaseBadge").textContent = `Phase: ${p.phase || "Working"}`;
+                if ($("globalScanPctBadge")) $("globalScanPctBadge").textContent = `${Math.round(pct)}%`;
+                if ($("globalScanStatusText")) $("globalScanStatusText").textContent = p.message || `Running inspection (${Math.round(pct)}%)...`;
+                if ($("globalScanTelemetry")) $("globalScanTelemetry").textContent = `Pages: ${fmt(p.pages || 0)} | Links: ${fmt(p.links_checked || 0)} | Issues: ${fmt(p.issues || 0)}`;
+            }
+
             if (data.state === "completed") {
                 this.stopPolling();
                 this.resetAuditUI();
@@ -1069,6 +1326,8 @@ class SEOAdminApp {
         try {
             await jsonFetch(`${API_BASE}/audit/cancel/${this.state.currentJobId}`, { method: "POST" });
             $("auditStatusLine").textContent = "Cancelling audit...";
+            const dock = $("globalScanProgressDock");
+            if (dock) dock.style.display = "none";
         } catch (e) {
             alert("Cancel failed: " + e.message);
         }
@@ -1085,6 +1344,12 @@ class SEOAdminApp {
         $("runAuditBtn").disabled = false;
         $("runAuditBtn").textContent = "Run Full Audit";
         $("cancelAuditBtn").classList.add("hidden");
+        const dock = $("globalScanProgressDock");
+        if (dock) {
+            setTimeout(() => {
+                if (dock && !this.state.currentJobId) dock.style.display = "none";
+            }, 2500);
+        }
     }
 
     async handleAuditSuccess(auditResult) {
@@ -1125,11 +1390,11 @@ class SEOAdminApp {
     -------------------------------------------------------------- */
     async loadAudits() {
         if (this.state.audits && this.state.audits.length) {
-            this.renderAuditsTable(this.state.audits);
+            this.filterAudits();
         }
         try {
             this.state.audits = await jsonFetch(`${API_BASE}/audits`);
-            this.renderAuditsTable(this.state.audits);
+            this.filterAudits();
         } catch (e) {
             console.error("Load audits error:", e);
         }
@@ -1140,7 +1405,7 @@ class SEOAdminApp {
         if (!tbody) return;
 
         if (!audits || !audits.length) {
-            tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No audits in history.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No audits match your filter or search criteria.</td></tr>`;
             return;
         }
 
@@ -1154,6 +1419,9 @@ class SEOAdminApp {
 
             return `
                 <tr>
+                    <td style="text-align:center;">
+                        <input type="checkbox" class="audit-select-check" value="${a.id}" onchange="app.onAuditSelectionChange()">
+                    </td>
                     <td>${d}</td>
                     <td><b>${esc(a.target_url)}</b></td>
                     <td>${esc(a.client_name)}</td>
@@ -1168,6 +1436,33 @@ class SEOAdminApp {
                 </tr>
             `;
         }).join("");
+    }
+
+    filterAudits() {
+        const q = ($("auditSearchInput")?.value || "").toLowerCase().trim();
+        let list = this.state.audits || [];
+
+        // Scoped to project if active
+        if (this.state.currentProjectId) {
+            list = list.filter(a => a.client_id === this.state.currentProjectId || (this.state.currentProject?.target_url && (a.target_url || "").includes(this.state.currentProject.target_url)));
+        }
+
+        if (q) {
+            list = list.filter(a => 
+                (a.target_url || "").toLowerCase().includes(q) ||
+                (a.client_name || "").toLowerCase().includes(q) ||
+                (a.created_at || "").toLowerCase().includes(q) ||
+                String(a.score || "").includes(q)
+            );
+        }
+
+        this.renderAuditsTable(list);
+
+        const badge = $("auditCountBadge");
+        if (badge) {
+            const total = (this.state.audits || []).length;
+            badge.textContent = `Showing ${list.length} of ${total} audits`;
+        }
     }
 
     async loadSavedAudit(auditId) {
@@ -3350,13 +3645,26 @@ class SEOAdminApp {
         if (!container) return;
 
         if (!trends || trends.length < 2) {
-            const currentScore = trends && trends.length === 1 && trends[0].score !== null && trends[0].score !== undefined ? Math.round(trends[0].score) : 63;
-            container.innerHTML = `
-                <div style="padding:40px 16px; text-align:center; color:var(--text-muted); font-size:13px;">
-                    <div style="font-size:24px; color:#2563EB; font-weight:800; margin-bottom:4px;">${currentScore}/100</div>
-                    <div>Baseline audit recorded. Sequential audits will automatically plot continuous trend lines here.</div>
-                </div>
-            `;
+            const hasSingle = trends && trends.length === 1 && trends[0].score !== null && trends[0].score !== undefined;
+            if (hasSingle) {
+                const currentScore = Math.round(trends[0].score);
+                const col = getScoreColor(currentScore);
+                container.innerHTML = `
+                    <div class="empty-state-card" style="padding:32px 16px; margin:0;">
+                        <div style="font-size:32px; color:${col}; font-weight:800; margin-bottom:4px;">${currentScore}/100</div>
+                        <div class="empty-state-title">Baseline Audit Recorded</div>
+                        <div class="empty-state-desc">Single verified audit on file (${esc(trends[0].date_display || 'Latest')}). Continuous trend progression requires at least 2 consecutive audits.</div>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="empty-state-card" style="padding:32px 16px; margin:0;">
+                        <div class="empty-state-icon">📊</div>
+                        <div class="empty-state-title">No Audit History Recorded</div>
+                        <div class="empty-state-desc">Historical trend analysis requires at least 2 verified audits. Run audits over time to monitor performance trajectory.</div>
+                    </div>
+                `;
+            }
             return;
         }
 
@@ -3386,25 +3694,25 @@ class SEOAdminApp {
                     </linearGradient>
                 </defs>
                 <!-- Grid Lines -->
-                <line x1="${padX}" y1="${padY}" x2="${W - padX}" y2="${padY}" stroke="#E2E8F0" stroke-dasharray="3,3"/>
-                <line x1="${padX}" y1="${padY + plotH * 0.5}" x2="${W - padX}" y2="${padY + plotH * 0.5}" stroke="#E2E8F0" stroke-dasharray="3,3"/>
-                <line x1="${padX}" y1="${padY + plotH}" x2="${W - padX}" y2="${padY + plotH}" stroke="#CBD5E1"/>
-                <text x="${padX - 8}" y="${padY + 4}" font-size="10" fill="#64748B" text-anchor="end">100</text>
-                <text x="${padX - 8}" y="${padY + plotH * 0.5 + 4}" font-size="10" fill="#64748B" text-anchor="end">50</text>
-                <text x="${padX - 8}" y="${padY + plotH + 4}" font-size="10" fill="#64748B" text-anchor="end">0</text>
+                <line x1="${padX}" y1="${padY}" x2="${W - padX}" y2="${padY}" stroke="var(--border)" stroke-dasharray="3,3"/>
+                <line x1="${padX}" y1="${padY + plotH * 0.5}" x2="${W - padX}" y2="${padY + plotH * 0.5}" stroke="var(--border)" stroke-dasharray="3,3"/>
+                <line x1="${padX}" y1="${padY + plotH}" x2="${W - padX}" y2="${padY + plotH}" stroke="var(--border)"/>
+                <text x="${padX - 8}" y="${padY + 4}" font-size="10" fill="var(--text-muted)" text-anchor="end">100</text>
+                <text x="${padX - 8}" y="${padY + plotH * 0.5 + 4}" font-size="10" fill="var(--text-muted)" text-anchor="end">50</text>
+                <text x="${padX - 8}" y="${padY + plotH + 4}" font-size="10" fill="var(--text-muted)" text-anchor="end">0</text>
                 
                 <!-- Area Fill -->
                 <path d="${areaD}" fill="url(#scoreAreaGrad)"/>
                 <!-- Line -->
-                <path d="${lineD}" fill="none" stroke="#2563EB" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="${lineD}" fill="none" stroke="var(--primary)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                 
                 <!-- Data Points -->
                 ${points.map(p => `
-                    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" fill="#FFFFFF" stroke="#2563EB" stroke-width="3">
-                        <title>${p.date}: Score ${Math.round(p.score)}/100</title>
+                    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="3">
+                        <title>${esc(p.date)}: Score ${Math.round(p.score)}/100</title>
                     </circle>
-                    <text x="${p.x.toFixed(1)}" y="${(p.y - 10).toFixed(1)}" font-size="11" font-weight="700" fill="#2563EB" text-anchor="middle">${Math.round(p.score)}</text>
-                    <text x="${p.x.toFixed(1)}" y="${(padY + plotH + 16).toFixed(1)}" font-size="10" fill="#64748B" text-anchor="middle">${p.date}</text>
+                    <text x="${p.x.toFixed(1)}" y="${(p.y - 10).toFixed(1)}" font-size="11" font-weight="700" fill="var(--primary)" text-anchor="middle">${Math.round(p.score)}</text>
+                    <text x="${p.x.toFixed(1)}" y="${(padY + plotH + 16).toFixed(1)}" font-size="10" fill="var(--text-muted)" text-anchor="middle">${esc(p.date)}</text>
                 `).join('')}
             </svg>
         `;

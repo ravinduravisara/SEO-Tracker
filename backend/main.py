@@ -1527,8 +1527,18 @@ def delete_client(client_id: int, db: Session = Depends(get_db), current_admin: 
 
 
 @app.get("/api/audits")
-def list_audits(db: Session = Depends(get_db), current_admin: AdminUser = Depends(require_permission("audits.view"))):
-    audits = db.query(Audit).defer("result_json").order_by(Audit.created_at.desc()).limit(100).all()
+def list_audits(
+    client_id: Optional[int] = None,
+    domain: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    query = db.query(Audit)
+    if client_id is not None:
+        query = query.filter(Audit.client_id == client_id)
+    if domain:
+        query = query.filter(Audit.target_url.like(f"%{domain}%"))
+    audits = query.order_by(Audit.created_at.desc()).limit(100).all()
     if not audits:
         return []
 

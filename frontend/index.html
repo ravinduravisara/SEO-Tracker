@@ -11,6 +11,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script>
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
         if (window.location.port && window.location.port !== "8000" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
             window.location.replace("http://" + window.location.hostname + ":8000/admin");
         }
@@ -140,14 +144,69 @@
     <main class="main-content">
         <!-- TOP HEADER -->
         <header class="top-header">
-            <div style="display:flex; align-items:center; gap:16px;">
+            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                 <button class="mobile-nav-toggle" onclick="app.toggleSidebar()">☰</button>
                 <div class="page-title-wrap">
                     <h1 id="pageTitle">Dashboard</h1>
                     <div class="page-breadcrumbs" id="pageBreadcrumb">Overview &bull; SEO Performance Management</div>
                 </div>
+
+                <!-- SEMRUSH / AHREFS STYLE GLOBAL PROJECT & WEBSITE SELECTOR -->
+                <div class="project-selector-wrapper" id="globalProjectSelectorWrap">
+                    <span class="project-selector-label">Scope:</span>
+                    <select id="globalProjectSelector" class="project-selector-dropdown" onchange="app.onGlobalProjectChange(this.value)" title="Scope analytics and audits to a specific client or website">
+                        <option value="ALL">📁 All Projects &amp; Websites</option>
+                    </select>
+                    <span id="globalProjectActiveBadge" class="project-active-badge" style="display:none;">Scoped</span>
+                </div>
             </div>
+
             <div class="header-actions">
+                <!-- THEME TOGGLE BUTTON -->
+                <button id="themeToggleBtn" class="btn btn-secondary btn-sm theme-toggle-btn" onclick="app.toggleTheme()" title="Toggle Dark/Light Mode" aria-label="Toggle theme">
+                    <span id="themeToggleIcon">🌙</span>
+                    <span id="themeToggleText">Theme</span>
+                </button>
+
+                <!-- QUICK EXPORT HUB -->
+                <div class="quick-export-wrap">
+                    <button class="btn btn-secondary btn-sm" onclick="app.toggleQuickExportMenu()" id="btnQuickExport" title="Export Current Scope">
+                        <span>📥 Export</span>
+                        <span style="font-size:10px;">▼</span>
+                    </button>
+                    <div id="quickExportDropdown" class="quick-export-dropdown" style="display:none;">
+                        <div class="quick-export-header">Quick Export Reports</div>
+                        <button class="quick-export-item" onclick="app.triggerQuickExport('pdf')">
+                            <span class="export-icon">📄</span>
+                            <div>
+                                <div class="export-title">Executive SEO Report</div>
+                                <div class="export-sub">Client-ready branded PDF</div>
+                            </div>
+                        </button>
+                        <button class="quick-export-item" onclick="app.triggerQuickExport('xls')">
+                            <span class="export-icon">📊</span>
+                            <div>
+                                <div class="export-title">Audit Workbook (.xls)</div>
+                                <div class="export-sub">Excel compatible spreadsheet</div>
+                            </div>
+                        </button>
+                        <button class="quick-export-item" onclick="app.triggerQuickExport('csv')">
+                            <span class="export-icon">📑</span>
+                            <div>
+                                <div class="export-title">Issues &amp; Findings (.csv)</div>
+                                <div class="export-sub">Raw structured findings data</div>
+                            </div>
+                        </button>
+                        <button class="quick-export-item" onclick="app.triggerQuickExport('json')">
+                            <span class="export-icon">📦</span>
+                            <div>
+                                <div class="export-title">Audit Payload (.json)</div>
+                                <div class="export-sub">Full programmatic audit payload</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
                 <div id="healthBadge" class="api-health-badge">
                     <span style="color:var(--warning)">●</span> Checking API...
                 </div>
@@ -156,8 +215,61 @@
             </div>
         </header>
 
+        <!-- GLOBAL LIVE SCAN PROGRESS DOCK -->
+        <div id="globalScanProgressDock" class="global-scan-dock" style="display:none;">
+            <div class="global-scan-dock-inner">
+                <div class="global-scan-dock-left">
+                    <div class="scan-spinner-ring"></div>
+                    <div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <b id="globalScanTitle" style="font-size:14px; color:var(--text-main);">Running Technical SEO Audit...</b>
+                            <span id="globalScanTargetUrl" class="scan-target-pill">https://...</span>
+                        </div>
+                        <div id="globalScanStatusText" style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+                            Initializing crawler and DNS probes...
+                        </div>
+                    </div>
+                </div>
+                <div class="global-scan-dock-center">
+                    <div class="progress-bar-wrap" style="height:10px; min-width:240px; margin:0;">
+                        <div id="globalScanProgressBarFill" class="progress-bar-fill animated-stripe" style="width:10%;"></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-top:4px;">
+                        <span id="globalScanPhaseBadge">Phase: Crawler</span>
+                        <span id="globalScanPctBadge" style="font-weight:700;">10%</span>
+                    </div>
+                </div>
+                <div class="global-scan-dock-right">
+                    <div id="globalScanTelemetry" style="font-size:11px; font-weight:600; color:var(--text-muted); text-align:right;">
+                        Pages: 0 | Links: 0 | Issues: 0
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="app.cancelAudit()" style="padding:4px 10px; font-size:12px; margin-top:4px;">Cancel Audit</button>
+                </div>
+            </div>
+        </div>
+
         <!-- VIEW 1: DASHBOARD -->
         <div id="viewDashboard" class="admin-view active">
+            <!-- PROJECT SCOPE BANNER (VISIBLE WHEN A PROJECT IS SCOPED) -->
+            <div id="dashProjectScopeBanner" class="project-scope-banner" style="display:none;">
+                <div class="project-scope-banner-left">
+                    <div style="font-size:24px;">🌐</div>
+                    <div>
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <b id="dashScopeDomain" style="font-size:15px; color:var(--text-main);">domain.com</b>
+                            <span id="dashScopeClientName" class="badge" style="background:#EEF2FF; color:#4F46E5; font-size:11px; padding:2px 8px; border-radius:4px;">Client Name</span>
+                            <span id="dashScopeScoreBadge" class="pill pill-success">88%</span>
+                        </div>
+                        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;" id="dashScopeSub">
+                            Project Scope Active &bull; Showing analytics and audits for this target
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button class="btn btn-primary btn-sm" onclick="app.auditCurrentScope()">Run Audit for Site</button>
+                    <button class="btn btn-secondary btn-sm" onclick="app.clearProjectScope()">Clear Scope (Show All)</button>
+                </div>
+            </div>
             <!-- EXECUTIVE SUMMARY (6 BALANCED OVERVIEW CARDS) -->
             <div class="dash-summary-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:20px; margin-bottom:28px;">
                 <!-- 1. Public Page SEO Checks -->
@@ -1607,13 +1719,13 @@
                     <table id="clientsTable">
                         <thead>
                             <tr>
-                                <th>Client Name</th>
-                                <th>Company</th>
-                                <th>Target Website</th>
+                                <th class="sortable" onclick="app.sortTable('clientsTable', 0, 'string')">Client Name <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('clientsTable', 1, 'string')">Company <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('clientsTable', 2, 'string')">Target Website <span class="sort-icon">↕</span></th>
                                 <th>Contact</th>
-                                <th>SEO Score</th>
-                                <th>Last Audit</th>
-                                <th>Public Report</th>
+                                <th class="sortable" onclick="app.sortTable('clientsTable', 4, 'score')">SEO Score <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('clientsTable', 5, 'date')">Last Audit <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('clientsTable', 6, 'string')">Public Report <span class="sort-icon">↕</span></th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -1695,21 +1807,29 @@
                     </button>
                 </div>
 
+                <div class="table-toolbar">
+                    <div class="table-search-wrap">
+                        <span class="table-search-icon">🔍</span>
+                        <input type="text" id="auditSearchInput" class="table-search-input" placeholder="Search audits by URL, client, or date..." oninput="app.filterAudits()">
+                    </div>
+                    <div id="auditCountBadge" style="font-size:12px; color:var(--text-muted); font-weight:600;">Showing all audits</div>
+                </div>
+
                 <div class="table-container">
-                    <table>
+                    <table id="auditsTable">
                         <thead>
                             <tr>
                                 <th style="width:36px; text-align:center;"></th>
-                                <th>Audit Date</th>
-                                <th>Target Website</th>
-                                <th>Client</th>
-                                <th>Score</th>
-                                <th>Public Report</th>
+                                <th class="sortable" onclick="app.sortTable('auditsTable', 1, 'date')">Audit Date <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('auditsTable', 2, 'string')">Target Website <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('auditsTable', 3, 'string')">Client <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('auditsTable', 4, 'score')">Score <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('auditsTable', 5, 'string')">Public Report <span class="sort-icon">↕</span></th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="auditsTableBody">
-                            <tr><td colspan="6" class="empty-state">Loading audits...</td></tr>
+                            <tr><td colspan="7" class="empty-state">Loading audits...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1772,14 +1892,14 @@
             <!-- REPORTS TABLE CARD -->
             <div class="card">
                 <div class="table-container">
-                    <table>
+                    <table id="reportsTable">
                         <thead>
                             <tr>
-                                <th>Client &amp; Target Website</th>
-                                <th>Report Discipline</th>
-                                <th>Health Score</th>
-                                <th>Access Status</th>
-                                <th>Generated</th>
+                                <th class="sortable" onclick="app.sortTable('reportsTable', 0, 'string')">Client &amp; Target Website <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('reportsTable', 1, 'string')">Report Discipline <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('reportsTable', 2, 'score')">Health Score <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('reportsTable', 3, 'string')">Access Status <span class="sort-icon">↕</span></th>
+                                <th class="sortable" onclick="app.sortTable('reportsTable', 4, 'date')">Generated <span class="sort-icon">↕</span></th>
                                 <th>Token</th>
                                 <th>Exports &amp; Actions</th>
                             </tr>
