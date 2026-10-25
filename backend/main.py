@@ -38,7 +38,7 @@ from .database import (
     TeamInvitation, ActivityLog, LeadNote, init_db, PublicScan,
     ScheduledAudit, KeywordProject, SavedKeyword,
     TrackedKeyword, RankingObservation, RankingAlert,
-    AgencyBranding, Project, PageFinding, ReportExport, BackgroundJob
+    AgencyBranding
 )
 from .security import (
     bootstrap_admin_account,
@@ -138,11 +138,6 @@ logger = logging.getLogger("aviance")
 init_db()
 with SessionLocal() as _db_init:
     bootstrap_admin_account(_db_init)
-    try:
-        from .job_service import PersistentJobManager
-        PersistentJobManager.recover_orphaned_jobs(_db_init)
-    except Exception as _rec_err:
-        logger.warning(f"Orphaned job recovery warning: {_rec_err}")
 
 app = FastAPI(title="eSupport SEO Platform", version="10.4.0")
 
@@ -3513,48 +3508,33 @@ def export_report_endpoint(
     base_filename = f"{report_type.lower()}_report_{target_host}_{date_str}"
 
     if clean_fmt == "pdf":
-        content = reporting_engine.generate_report_pdf(report_data, report_type)
-        media_type = "application/pdf"
-        file_ext = "pdf"
-    elif clean_fmt in ("excel", "xls"):
-        content = reporting_engine.generate_report_excel_xml(report_data, report_type)
-        media_type = "application/vnd.ms-excel; charset=utf-8"
-        file_ext = "xls"
-    elif clean_fmt == "csv":
-        content = reporting_engine.generate_report_csv(report_data, report_type)
-        media_type = "text/csv; charset=utf-8"
-        file_ext = "csv"
-    else:
-        content = reporting_engine.generate_report_json(report_data, report_type)
-        media_type = "application/json; charset=utf-8"
-        file_ext = "json"
-
-    # Record persistent export provenance (Phase 12)
-    try:
-        from .job_service import generate_provenance
-        prov = generate_provenance("REPORT_EXPORT", target_host, raw_payload={"report_type": report_type, "format": clean_fmt})
-        content_size = len(content if isinstance(content, bytes) else content.encode("utf-8"))
-        rep_exp = ReportExport(
-            audit_id=payload.get("audit_id"),
-            client_id=payload.get("client_id"),
-            website_id=payload.get("website_id"),
-            report_type=report_type,
-            format=clean_fmt.upper(),
-            filename=f"{base_filename}.{file_ext}",
-            file_size_bytes=content_size,
-            provenance_json=json.dumps(prov),
-            created_at=datetime.utcnow()
+        pdf_bytes = reporting_engine.generate_report_pdf(report_data, report_type)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{base_filename}.pdf"'}
         )
-        db.add(rep_exp)
-        db.commit()
-    except Exception as exp_err:
-        logger.warning(f"Failed to persist ReportExport record: {exp_err}")
-
-    return Response(
-        content=content,
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{base_filename}.{file_ext}"'}
-    )
+    elif clean_fmt in ("excel", "xls"):
+        excel_xml = reporting_engine.generate_report_excel_xml(report_data, report_type)
+        return Response(
+            content=excel_xml,
+            media_type="application/vnd.ms-excel; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{base_filename}.xls"'}
+        )
+    elif clean_fmt == "csv":
+        csv_text = reporting_engine.generate_report_csv(report_data, report_type)
+        return Response(
+            content=csv_text,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{base_filename}.csv"'}
+        )
+    else:
+        json_text = reporting_engine.generate_report_json(report_data, report_type)
+        return Response(
+            content=json_text,
+            media_type="application/json; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{base_filename}.json"'}
+        )
 
 
 @app.get("/api/reports/public/{token}/export/{format}")
@@ -7020,27 +7000,14 @@ def _set_job(job_id: str, **updates):
             AUDIT_JOBS[job_id].update(updates)
 
 def _run_job(job_id: str, req: AuditRequest, cancel_event: threading.Event):
-    from .job_service import PersistentJobManager
-    PersistentJobManager.start_job(job_id)
     _set_job(job_id, state="running", started_at=time.time(), progress={"phase":"starting","pages":0,"queued":1,"current_url":req.url,"status":0,"issues":0})
     try:
         def cb(progress):
             _set_job(job_id, progress=progress)
-            pages = progress.get("pages", 0)
-            queued = progress.get("queued", 1)
-            pct = round((pages / max(pages + queued, 1)) * 100, 1)
-            PersistentJobManager.update_progress(job_id, progress_pct=pct, phase=progress.get("phase", "crawling"), progress_data=progress)
-
         result = crawl(req, progress_cb=cb, cancel_event=cancel_event)
-        if cancel_event.is_set():
-            _set_job(job_id, state="cancelled", result=result, finished_at=time.time())
-            PersistentJobManager.cancel_job(job_id)
-        else:
-            _set_job(job_id, state="completed", result=result, finished_at=time.time(), progress={"phase":"completed", "pages":result.get("page_count",0), "queued":0, "current_url":"", "status":0, "issues":len(result.get("issues",[]))})
-            PersistentJobManager.complete_job(job_id, result_summary={"page_count": result.get("page_count", 0), "score": result.get("score")})
+        _set_job(job_id, state="cancelled" if cancel_event.is_set() else "completed", result=result, finished_at=time.time(), progress={"phase":"completed" if not cancel_event.is_set() else "cancelled", "pages":result.get("page_count",0), "queued":0, "current_url":"", "status":0, "issues":len(result.get("issues",[]))})
     except Exception as exc:
         _set_job(job_id, state="failed", error=str(exc), finished_at=time.time())
-        PersistentJobManager.fail_job(job_id, str(exc))
 
 @app.post("/api/preflight")
 def preflight(req: AuditRequest):
@@ -7083,9 +7050,7 @@ def preflight(req: AuditRequest):
 
 @app.post("/api/audit/start")
 def start_audit_job(req: AuditRequest, current_admin: AdminUser = Depends(require_permission("audits.run"))):
-    from .job_service import PersistentJobManager
-    job = PersistentJobManager.enqueue_job("AUDIT", target_url=req.url, client_id=req.client_id)
-    job_id = job.id
+    job_id = uuid.uuid4().hex
     cancel_event = threading.Event()
     with AUDIT_JOBS_LOCK:
         AUDIT_JOBS[job_id] = {"state":"queued", "created_at":time.time(), "progress":{"phase":"queued","pages":0,"queued":1,"current_url":req.url,"status":0,"issues":0}, "cancel_event":cancel_event}
@@ -7096,29 +7061,18 @@ def start_audit_job(req: AuditRequest, current_admin: AdminUser = Depends(requir
 def audit_job_status(job_id: str):
     with AUDIT_JOBS_LOCK:
         job = AUDIT_JOBS.get(job_id)
-        if job:
-            return {k:v for k,v in job.items() if k != "cancel_event"}
-    from .job_service import PersistentJobManager
-    jobs = PersistentJobManager.list_jobs()
-    match = next((j for j in jobs if j["id"] == job_id), None)
-    if not match:
-        raise HTTPException(status_code=404, detail="Audit job not found")
-    return {
-        "state": match["status"].lower(),
-        "progress": match["progress"],
-        "error": match["error_message"] or None
-    }
+        if not job:
+            raise HTTPException(status_code=404, detail="Audit job not found")
+        return {k:v for k,v in job.items() if k != "cancel_event"}
 
 @app.post("/api/audit/cancel/{job_id}")
 def cancel_audit_job(job_id: str, current_admin: AdminUser = Depends(require_permission("audits.cancel"))):
     with AUDIT_JOBS_LOCK:
         job = AUDIT_JOBS.get(job_id)
-        if job:
-            job["cancel_event"].set()
-            job["state"] = "cancelling"
-    from .job_service import PersistentJobManager
-    PersistentJobManager.cancel_job(job_id)
-    return {"status": "success", "job_id": job_id, "state": "cancelling"}
+        if not job:
+            raise HTTPException(status_code=404, detail="Audit job not found")
+        job["cancel_event"].set()
+        job["state"] = "cancelling"
     return {"ok":True,"state":"cancelling"}
 
 @app.post("/api/audit")
@@ -8388,287 +8342,6 @@ async def run_source_audit(file: UploadFile = File(...), current_admin: AdminUse
         return source_audit(target)
     finally:
         target.unlink(missing_ok=True)
-
-
-# =============================================================================
-# PHASE 12: PERSISTENCE, PROJECTS, JOBS & PROVENANCE
-# =============================================================================
-
-class ProjectCreateRequest(BaseModel):
-    name: str
-    description: Optional[str] = ""
-    client_id: Optional[int] = None
-    target_domains: Optional[List[str]] = None
-    settings: Optional[Dict[str, Any]] = None
-
-
-class ProjectUpdateRequest(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[str] = None
-    target_domains: Optional[List[str]] = None
-    settings: Optional[Dict[str, Any]] = None
-
-
-@app.get("/api/projects")
-def list_projects_endpoint(
-    client_id: Optional[int] = None,
-    status: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
-):
-    q = db.query(Project)
-    if client_id:
-        q = q.filter(Project.client_id == client_id)
-    if status:
-        q = q.filter(Project.status == status.upper())
-    projects = q.order_by(Project.created_at.desc()).all()
-    out = []
-    for p in projects:
-        w_count = db.query(Website).filter(Website.project_id == p.id).count()
-        a_count = db.query(Audit).filter(Audit.project_id == p.id).count()
-        out.append({
-            "id": p.id,
-            "name": p.name,
-            "description": p.description,
-            "client_id": p.client_id,
-            "status": p.status,
-            "target_domains": json.loads(p.target_domains_json) if isinstance(p.target_domains_json, str) else (p.target_domains_json or []),
-            "website_count": w_count,
-            "audit_count": a_count,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-        })
-    return out
-
-
-@app.post("/api/projects")
-def create_project_endpoint(
-    req: ProjectCreateRequest = Body(...),
-    db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(require_permission("clients.manage"))
-):
-    name = req.name.strip() if req.name else ""
-    if not name:
-        raise HTTPException(status_code=400, detail="Project name is required.")
-    proj = Project(
-        name=name,
-        description=req.description or "",
-        client_id=req.client_id,
-        status="ACTIVE",
-        target_domains_json=json.dumps(req.target_domains or []),
-        settings_json=json.dumps(req.settings or {}),
-        created_at=datetime.utcnow()
-    )
-    db.add(proj)
-    db.commit()
-    db.refresh(proj)
-    record_activity(db, "PROJECT_CREATED", f"Project #{proj.id}", f"Name: {proj.name}", user=current_admin)
-    return {"status": "success", "project_id": proj.id, "name": proj.name}
-
-
-@app.get("/api/projects/{project_id}")
-def get_project_endpoint(
-    project_id: int,
-    db: Session = Depends(get_db),
-    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
-):
-    proj = db.query(Project).filter(Project.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    websites = db.query(Website).filter(Website.project_id == proj.id).all()
-    audits = db.query(Audit).filter(Audit.project_id == proj.id).order_by(Audit.created_at.desc()).limit(10).all()
-    return {
-        "id": proj.id,
-        "name": proj.name,
-        "description": proj.description,
-        "client_id": proj.client_id,
-        "status": proj.status,
-        "target_domains": json.loads(proj.target_domains_json) if isinstance(proj.target_domains_json, str) else (proj.target_domains_json or []),
-        "websites": [{"id": w.id, "url": w.url, "name": w.name, "status": w.status} for w in websites],
-        "recent_audits": [{"id": a.id, "target_url": a.target_url, "score": a.score, "created_at": a.created_at.isoformat() if a.created_at else None} for a in audits],
-        "created_at": proj.created_at.isoformat() if proj.created_at else None,
-        "updated_at": proj.updated_at.isoformat() if proj.updated_at else None,
-    }
-
-
-@app.put("/api/projects/{project_id}")
-def update_project_endpoint(
-    project_id: int,
-    req: ProjectUpdateRequest = Body(...),
-    db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(require_permission("clients.manage"))
-):
-    proj = db.query(Project).filter(Project.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    if req.name is not None and req.name.strip():
-        proj.name = req.name.strip()
-    if req.description is not None:
-        proj.description = req.description
-    if req.status is not None:
-        proj.status = req.status.upper()
-    if req.target_domains is not None:
-        proj.target_domains_json = json.dumps(req.target_domains)
-    if req.settings is not None:
-        proj.settings_json = json.dumps(req.settings)
-    proj.updated_at = datetime.utcnow()
-    db.commit()
-    record_activity(db, "PROJECT_UPDATED", f"Project #{project_id}", f"Name: {proj.name}", user=current_admin)
-    return {"status": "success", "project_id": project_id, "name": proj.name}
-
-
-@app.delete("/api/projects/{project_id}")
-def delete_project_endpoint(
-    project_id: int,
-    db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(require_permission("clients.manage"))
-):
-    proj = db.query(Project).filter(Project.id == project_id).first()
-    if not proj:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    db.delete(proj)
-    db.commit()
-    record_activity(db, "PROJECT_DELETED", f"Project #{project_id}", f"Name: {proj.name}", user=current_admin)
-    return {"status": "success", "message": f"Project #{project_id} deleted."}
-
-
-@app.get("/api/jobs")
-def list_background_jobs_endpoint(
-    status: Optional[str] = None,
-    job_type: Optional[str] = None,
-    limit: int = 50,
-    offset: int = 0,
-    db: Session = Depends(get_db),
-    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
-):
-    from .job_service import PersistentJobManager
-    return PersistentJobManager.list_jobs(status=status, job_type=job_type, limit=limit, offset=offset, db=db)
-
-
-@app.get("/api/jobs/{job_id}")
-def get_background_job_endpoint(
-    job_id: str,
-    db: Session = Depends(get_db),
-    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
-):
-    job = db.query(BackgroundJob).filter(BackgroundJob.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Background job not found.")
-    return {
-        "id": job.id,
-        "job_type": job.job_type,
-        "target_url": job.target_url,
-        "status": job.status,
-        "progress_pct": job.progress_pct,
-        "progress_phase": job.progress_phase,
-        "progress": json.loads(job.progress_json) if isinstance(job.progress_json, str) else (job.progress_json or {}),
-        "retry_count": job.retry_count,
-        "max_retries": job.max_retries,
-        "error_message": job.error_message,
-        "started_at": job.started_at.isoformat() if job.started_at else None,
-        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
-        "created_at": job.created_at.isoformat() if job.created_at else None,
-    }
-
-
-@app.post("/api/jobs/{job_id}/cancel")
-def cancel_background_job_endpoint(
-    job_id: str,
-    db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(require_permission("audits.cancel"))
-):
-    from .job_service import PersistentJobManager
-    ok = PersistentJobManager.cancel_job(job_id, db=db)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Job not found or could not be cancelled.")
-    return {"status": "success", "job_id": job_id, "message": "Cancellation signal sent."}
-
-
-@app.post("/api/jobs/{job_id}/retry")
-def retry_background_job_endpoint(
-    job_id: str,
-    db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(require_permission("audits.run"))
-):
-    job = db.query(BackgroundJob).filter(BackgroundJob.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found.")
-    job.status = "QUEUED"
-    job.retry_count += 1
-    job.progress_phase = f"manual_retry (attempt {job.retry_count})"
-    job.error_message = ""
-    db.commit()
-    return {"status": "success", "job_id": job_id, "state": "QUEUED"}
-
-
-@app.get("/api/audits/{audit_id}/findings")
-def list_audit_findings_endpoint(
-    audit_id: int,
-    severity: Optional[str] = None,
-    category: Optional[str] = None,
-    url: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
-    db: Session = Depends(get_db),
-    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
-):
-    q = db.query(PageFinding).filter(PageFinding.audit_id == audit_id)
-    if severity:
-        q = q.filter(PageFinding.severity == severity.lower())
-    if category:
-        q = q.filter(PageFinding.category == category.lower())
-    if url:
-        q = q.filter(PageFinding.url.contains(url))
-    findings = q.offset(offset).limit(limit).all()
-    return [
-        {
-            "id": f.id,
-            "url": f.url,
-            "check_id": f.check_id,
-            "category": f.category,
-            "severity": f.severity,
-            "problem_description": f.problem_description,
-            "suggested_correction": f.suggested_correction,
-            "evidence": json.loads(f.evidence_json) if isinstance(f.evidence_json, str) else (f.evidence_json or {}),
-            "created_at": f.created_at.isoformat() if f.created_at else None,
-        }
-        for f in findings
-    ]
-
-
-@app.get("/api/reports/exports")
-def list_report_exports_endpoint(
-    client_id: Optional[int] = None,
-    format: Optional[str] = None,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    current_admin: Optional[AdminUser] = Depends(get_current_admin_optional)
-):
-    q = db.query(ReportExport)
-    if client_id:
-        q = q.filter(ReportExport.client_id == client_id)
-    if format:
-        q = q.filter(ReportExport.format == format.upper())
-    exports = q.order_by(ReportExport.created_at.desc()).limit(limit).all()
-    return [
-        {
-            "id": e.id,
-            "audit_id": e.audit_id,
-            "client_id": e.client_id,
-            "website_id": e.website_id,
-            "report_type": e.report_type,
-            "format": e.format,
-            "filename": e.filename,
-            "file_size_bytes": e.file_size_bytes,
-            "download_count": e.download_count,
-            "provenance": json.loads(e.provenance_json) if isinstance(e.provenance_json, str) else (e.provenance_json or {}),
-            "created_at": e.created_at.isoformat() if e.created_at else None,
-        }
-        for e in exports
-    ]
-
-
 from .tech_detector.router import router as tech_detector_router
 app.include_router(tech_detector_router)
 
