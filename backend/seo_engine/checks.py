@@ -203,7 +203,9 @@ def T04(r: R):
         for row in r.ctx.probes.get("paths", []):
             if row.get("url"):
                 status_of[norm_url(row["url"])] = int(row.get("status") or 0)
+    has_broken = False
     def v(p):
+        nonlocal has_broken
         c = p.get("canonical")
         if not c:
             # Under Google Search Central guidelines, missing self-referencing canonical tag is
@@ -214,10 +216,16 @@ def T04(r: R):
         if target_norm == page_norm:
             return "PASS"
         st = status_of.get(target_norm, 200)
-        return "PASS" if st < 400 else "FAIL"
+        if st >= 400:
+            has_broken = True
+            return "FAIL"
+        return "PASS"
     res = r.coverage(r.ctx.html, v, "canonical tag present and valid", pass_at=T("canonical_pass_coverage"), fail_below=T("canonical_warn_coverage"))
     cov = res.coverage or 0
-    res.status = "PASS" if cov >= T("canonical_pass_coverage") else "WARN" if cov >= T("canonical_warn_coverage") else "FAIL"
+    if has_broken:
+        res.status = "FAIL"
+    else:
+        res.status = "PASS" if cov >= T("canonical_pass_coverage") else "WARN"
     return res
 
 

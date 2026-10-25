@@ -1,8 +1,12 @@
+import os
 import sqlite3
 import pymongo
 from datetime import datetime
 
-MONGO_URI = "mongodb+srv://seoesupport_db_user:mFYxVnBKYtFspiij@cluster0.wvoxrnq.mongodb.net/seo_platform?retryWrites=true&w=majority"
+MONGO_URI = os.getenv("DATABASE_URL") or os.getenv("MONGO_URI")
+if not MONGO_URI or not (MONGO_URI.startswith("mongodb://") or MONGO_URI.startswith("mongodb+srv://")):
+    raise ValueError("Set DATABASE_URL or MONGO_URI environment variable with a valid MongoDB URI before running migration.")
+
 client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000, socketTimeoutMS=30000)
 db = client["seo_platform"]
 

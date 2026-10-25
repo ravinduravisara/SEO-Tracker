@@ -684,7 +684,7 @@ def build_recommendations_report(
 ) -> Dict[str, Any]:
     """Builds 8-Discipline SEO Recommendations Report data."""
     target = audit.get("target") or audit.get("url") or "https://example.com"
-    recs_data = ai_advisor.generate_deterministic_fallback_recommendations(audit)
+    recs_data = ai_advisor.generate_ai_recommendations(audit)
 
     return {
         "report_type": "RECOMMENDATIONS",
@@ -696,13 +696,23 @@ def build_recommendations_report(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "collection_date": audit.get("created_at") or datetime.now(timezone.utc).isoformat(),
         "disclaimer": recs_data.get("disclaimer", "Grounding policy enforced. No unverified figures."),
+        "source_model": recs_data.get("source_model", "Gemma 4 + RAG Engine"),
         "prioritized_recommendations": recs_data.get("prioritized_recommendations", []),
         "issue_explanations": recs_data.get("issue_explanations", []),
         "technical_fixes": recs_data.get("technical_fixes", []),
         "content_improvements": recs_data.get("content_improvements", []),
         "developer_instructions": recs_data.get("developer_instructions", []),
+        "validation_metrics": recs_data.get("validation_metrics", {}),
+        "data_classification": {
+            "seo_score": "MEASURED VALUE (DETERMINISTIC)",
+            "crawl_findings": "MEASURED VALUE (DETERMINISTIC)",
+            "recommendations": "AI-GENERATED RECOMMENDATION (GROUNDED IN VERIFIED AUDIT EVIDENCE & GOOGLE SEARCH CENTRAL)",
+            "citations": "PRIMARY SEARCH DOCUMENTATION (GOOGLE SEARCH CENTRAL / WEB.DEV / SCHEMA.ORG)"
+        },
+        "measurement_limitations": "Recommendations are prioritized based on verified crawl telemetry. Measured SEO values are deterministic and strictly immutable. RAG retrieval grounds advice in official documentation.",
         "provenance": [
-            {"source": "AI SEO Recommendation Engine", "status": "VERIFIED", "details": "Strict evidence-bound guidance"}
+            {"source": "AI SEO Recommendation Engine (Gemma 4 + RAG)", "status": "VERIFIED", "details": "Strict evidence-bound guidance grounded in Google Search Central and Web.dev specifications"},
+            {"source": "Deterministic Technical Crawler", "status": "MEASURED", "details": "HTTP status codes, response times, headers, and DOM telemetry"}
         ]
     }
 

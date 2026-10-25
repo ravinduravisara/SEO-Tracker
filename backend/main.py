@@ -38,8 +38,12 @@ from .database import (
     TeamInvitation, ActivityLog, LeadNote, init_db, PublicScan,
     ScheduledAudit, KeywordProject, SavedKeyword,
     TrackedKeyword, RankingObservation, RankingAlert,
-    AgencyBranding
+    AgencyBranding, KnowledgeDocument, AIRecommendationRecord, AITrainingExample
 )
+from .ai.model_client import model_client, MODEL_AVAILABLE
+from .ai.rag_engine import rag_knowledge_base
+from .ai.knowledge_updater import knowledge_update_service
+from .ai.training_collector import training_collector, TrainingExampleInput
 from .security import (
     bootstrap_admin_account,
     get_current_admin,
@@ -7283,6 +7287,200 @@ def ai_export_pdf_endpoint(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+# =============================================================================
+# ADMIN AI INTELLIGENCE & KNOWLEDGE SYSTEM APIs (Phase 12)
+# =============================================================================
+
+class TrainingCreateRequest(BaseModel):
+    website_type: str = "General"
+    page_type: str = "Landing"
+    verified_issue: str
+    observed_evidence: str
+    relevant_documentation: str = ""
+    correct_explanation: str
+    correct_recommendation: str
+    incorrect_recommendation_examples: list[str] = []
+    reviewer_notes: str = ""
+
+
+class TrainingStatusUpdateRequest(BaseModel):
+    status: str
+    notes: Optional[str] = None
+
+
+class KnowledgeRollbackRequest(BaseModel):
+    version: str
+
+
+@app.get("/api/admin/ai/status")
+def admin_ai_status_endpoint(current_admin: AdminUser = Depends(require_permission("audits.view"))):
+    """Returns AI model client health, provider, model ID, latency, and knowledge metrics."""
+    health = model_client.check_health()
+    metrics = model_client.get_metrics()
+    return {
+        "status": health.get("status", "MODEL_UNAVAILABLE"),
+        "available": health.get("available", False),
+        "provider": health.get("provider", "gemma4"),
+        "model": model_client.model_id,
+        "endpoint": model_client.endpoint,
+        "latency_ms": health.get("latency_ms", 0.0),
+        "knowledge_version": rag_knowledge_base.knowledge_version,
+        "document_count": rag_knowledge_base.document_count(),
+        "rag_enabled": model_client.rag_enabled,
+        "validation_enabled": model_client.validation_enabled,
+        "fallback_enabled": model_client.fallback_enabled,
+        "daily_metrics": metrics,
+        "error": health.get("error")
+    }
+
+
+@app.get("/api/admin/ai/knowledge")
+def admin_ai_knowledge_endpoint(current_admin: AdminUser = Depends(require_permission("audits.view"))):
+    """Returns active knowledge base version and authoritative SEO documentation index."""
+    status = knowledge_update_service.get_status()
+    docs = rag_knowledge_base.get_all_documents()
+    return {
+        "active_version": status["active_version"],
+        "versions": status["versions"],
+        "document_count": len(docs),
+        "documents": [
+            {
+                "document_id": d.document_id,
+                "title": d.title,
+                "source_url": d.source_url,
+                "publisher": d.publisher,
+                "topic": d.topic,
+                "category": d.category,
+                "knowledge_version": d.knowledge_version,
+                "retrieved_at": d.retrieved_at
+            }
+            for d in docs
+        ]
+    }
+
+
+@app.post("/api/admin/ai/knowledge/refresh")
+def admin_ai_knowledge_refresh_endpoint(current_admin: AdminUser = Depends(require_permission("settings.edit"))):
+    """Triggers knowledge update check against approved Google Search Central documentation."""
+    res = knowledge_update_service.refresh_knowledge(force_fetch=True)
+    return res.dict()
+
+
+@app.post("/api/admin/ai/knowledge/rollback")
+def admin_ai_knowledge_rollback_endpoint(
+    req: KnowledgeRollbackRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("settings.edit"))
+):
+    """Rolls back the active SEO documentation knowledge base to a prior recorded version."""
+    ok = knowledge_update_service.rollback_version(req.version)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Knowledge version '{req.version}' not found.")
+    return {"ok": True, "active_version": knowledge_update_service.active_version}
+
+
+@app.get("/api/admin/ai/quality")
+def admin_ai_quality_endpoint(
+    db: Session = Depends(get_db),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    """Returns validation statistics, verification rates, and prevented hallucinations."""
+    records = db.query(AIRecommendationRecord).order_by(AIRecommendationRecord.created_at.desc()).limit(100).all()
+    total = len(records)
+    verified = sum(1 for r in records if r.validation_status == "VERIFIED")
+    rejected = sum(1 for r in records if r.validation_status == "REJECTED")
+    insufficient = sum(1 for r in records if r.validation_status == "INSUFFICIENT_EVIDENCE")
+    return {
+        "total_evaluated": total,
+        "verified_count": verified,
+        "rejected_count": rejected,
+        "insufficient_evidence_count": insufficient,
+        "verification_rate_pct": round((verified / total * 100), 1) if total else 100.0,
+        "recent_records": [
+            {
+                "id": r.id,
+                "recommendation_id": r.recommendation_id,
+                "issue_id": r.issue_id,
+                "affected_url": r.affected_url,
+                "category": r.category,
+                "issue_title": r.issue_title,
+                "severity": r.severity,
+                "validation_status": r.validation_status,
+                "validation_reason": r.validation_reason,
+                "created_at": r.created_at.isoformat() if r.created_at else None
+            }
+            for r in records[:20]
+        ]
+    }
+
+
+@app.get("/api/admin/ai/training")
+def admin_ai_training_list_endpoint(
+    status: Optional[str] = Query(None),
+    current_admin: AdminUser = Depends(require_permission("audits.view"))
+):
+    """Lists verified instruction training examples curated for future Gemma fine-tuning."""
+    examples = training_collector.list_examples(status=status)
+    all_exs = training_collector.list_examples(status=None)
+    counts = {"PENDING_REVIEW": 0, "APPROVED": 0, "REJECTED": 0, "NEEDS_CORRECTION": 0}
+    for e in all_exs:
+        st = e.review_status.upper()
+        counts[st] = counts.get(st, 0) + 1
+    return {
+        "counts": counts,
+        "total": len(all_exs),
+        "examples": [e.dict() for e in examples]
+    }
+
+
+@app.post("/api/admin/ai/training")
+def admin_ai_training_create_endpoint(
+    req: TrainingCreateRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("settings.edit"))
+):
+    """Creates a new candidate training example."""
+    inp = TrainingExampleInput(
+        website_type=req.website_type,
+        page_type=req.page_type,
+        verified_issue=req.verified_issue,
+        observed_evidence=req.observed_evidence,
+        relevant_documentation=req.relevant_documentation,
+        correct_explanation=req.correct_explanation,
+        correct_recommendation=req.correct_recommendation,
+        incorrect_recommendation_examples=req.incorrect_recommendation_examples,
+        reviewer_notes=req.reviewer_notes
+    )
+    ex_id = training_collector.add_example(inp)
+    return {"ok": True, "example_id": ex_id}
+
+
+@app.post("/api/admin/ai/training/{example_id}/status")
+def admin_ai_training_status_endpoint(
+    example_id: str,
+    req: TrainingStatusUpdateRequest = Body(...),
+    current_admin: AdminUser = Depends(require_permission("settings.edit"))
+):
+    """Updates review status of a training example."""
+    ok = training_collector.update_status(example_id, req.status, notes=req.notes)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invalid example_id or status")
+    return {"ok": True, "example_id": example_id, "status": req.status}
+
+
+@app.get("/api/admin/ai/training/export")
+def admin_ai_training_export_endpoint(
+    status: str = Query("APPROVED"),
+    current_admin: AdminUser = Depends(require_permission("settings.edit"))
+):
+    """Exports approved instruction fine-tuning dataset in JSONL format."""
+    jsonl = training_collector.export_dataset_jsonl(status=status)
+    filename = f"gemma4_finetuning_dataset_{datetime.utcnow().strftime('%Y%m%d')}.jsonl"
+    return Response(
+        content=jsonl,
+        media_type="application/x-jsonlines",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 

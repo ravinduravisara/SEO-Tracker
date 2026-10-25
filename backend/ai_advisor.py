@@ -39,11 +39,15 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas
 
 from . import seo_knowledge
+from .ai.model_client import model_client, MODEL_AVAILABLE
+from .ai.rag_engine import rag_knowledge_base
+from .ai.context_builder import build_gemma_context
+from .ai.recommendation_validator import validate_all_recommendations
 
 logger = logging.getLogger("aviance.ai_advisor")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/api/generate").strip()
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3").strip()
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:31b").strip()
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "20"))
 OLLAMA_INSIGHT_TIMEOUT = float(os.getenv("OLLAMA_INSIGHT_TIMEOUT", "90"))
@@ -57,58 +61,22 @@ def _ollama_headers() -> Dict[str, str]:
 
 
 def check_ollama_status() -> Dict[str, Any]:
-    """Tests live connectivity to the configured Ollama instance."""
-    base = OLLAMA_URL.rsplit("/api/", 1)[0].rstrip("/")
-    timeout_sec = 5.0 if (OLLAMA_URL.startswith("https://") or OLLAMA_API_KEY) else 2.0
-    try:
-        r = requests.get(f"{base}/api/tags", headers=_ollama_headers(), timeout=timeout_sec)
-        if r.status_code == 200:
-            models = [str(x.get("name", "")).lower() for x in (r.json().get("models") or [])]
-            target_name = OLLAMA_MODEL.lower()
-            target_base = target_name.split(":")[0]
-            model_found = any(m == target_name or m.startswith(target_name + ":") or m.split(":")[0] == target_base for m in models)
-            return {
-                "available": True,
-                "configured": True,
-                "endpoint": OLLAMA_URL,
-                "model": OLLAMA_MODEL,
-                "model_available": model_found or bool(OLLAMA_API_KEY),
-                "installed_models": models[:20],
-                "fallback_ready": True,
-                "mode": "cloud" if OLLAMA_API_KEY or OLLAMA_URL.startswith("https://") else "local"
-            }
-        elif r.status_code == 404 and OLLAMA_API_KEY:
-            # Cloud Ollama endpoints might not support /api/tags
-            return {
-                "available": True,
-                "configured": True,
-                "endpoint": OLLAMA_URL,
-                "model": OLLAMA_MODEL,
-                "model_available": True,
-                "installed_models": [OLLAMA_MODEL],
-                "fallback_ready": True,
-                "mode": "cloud"
-            }
-        else:
-            return {
-                "available": False,
-                "configured": bool(OLLAMA_URL),
-                "endpoint": OLLAMA_URL,
-                "model": OLLAMA_MODEL,
-                "model_available": False,
-                "fallback_ready": True,
-                "error": f"HTTP {r.status_code}: {r.text[:200]}"
-            }
-    except Exception as exc:
-        return {
-            "available": False,
-            "configured": bool(OLLAMA_URL),
-            "endpoint": OLLAMA_URL,
-            "model": OLLAMA_MODEL,
-            "model_available": False,
-            "fallback_ready": True,
-            "error": str(exc)
-        }
+    """Tests live connectivity to the configured Gemma 4 / AI model provider."""
+    health = model_client.check_health()
+    return {
+        "available": health.get("available", False),
+        "configured": bool(model_client.endpoint or model_client.api_key),
+        "endpoint": model_client.endpoint,
+        "model": model_client.model_id,
+        "provider": health.get("provider", "gemma4"),
+        "status": health.get("status", "MODEL_UNAVAILABLE"),
+        "model_available": health.get("available", False),
+        "installed_models": health.get("installed_models", [model_client.model_id]),
+        "fallback_ready": True,
+        "mode": "cloud" if (model_client.api_key or model_client.endpoint.startswith("https://")) else "local",
+        "latency_ms": health.get("latency_ms", 0.0),
+        "error": health.get("error")
+    }
 
 
 # -----------------------------------------------------------------------------
@@ -503,43 +471,100 @@ Generate comprehensive, evidence-grounded recommendations strictly structured as
 }}
 """
 
-    headers = _ollama_headers()
-    payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": f"{system_prompt}\n\n{user_prompt}",
-        "stream": False,
-        "format": "json",
-        "options": {
-            "temperature": 0.2,
-            "num_predict": 2048,
-        }
-    }
+    # Build RAG-grounded, injection-resistant context
+    gemma_ctx = build_gemma_context(audit_data)
+    rag_prompt = f"{gemma_ctx['system_prompt']}\n\n{gemma_ctx['user_prompt']}"
+
+    # Dispatch to production model client (Gemma 4 / Gemini API)
+    ai_resp = model_client.generate(
+        prompt=gemma_ctx["user_prompt"],
+        system_instruction=gemma_ctx["system_prompt"],
+        temperature=0.2,
+        json_mode=True
+    )
+
+    if not ai_resp.ok:
+        logger.warning("AI model generation unavailable (%s); serving deterministic recommendations.", ai_resp.error)
+        return generate_deterministic_fallback_recommendations(audit_data)
 
     try:
-        r = requests.post(OLLAMA_URL, json=payload, headers=headers, timeout=OLLAMA_INSIGHT_TIMEOUT)
-        r.raise_for_status()
-        raw_resp = (r.json().get("response") or "").strip()
-        raw_clean = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_resp, flags=re.I | re.S).strip()
+        raw_clean = re.sub(r"^```(?:json)?\s*|\s*```$", "", ai_resp.text, flags=re.I | re.S).strip()
         data = json.loads(raw_clean)
 
-        # Validate structure
-        if not isinstance(data, dict) or not data.get("issue_explanations") or not data.get("prioritized_recommendations"):
-            logger.warning("AI model returned malformed JSON schema. Falling back to deterministic engine.")
+        raw_recs = []
+        if isinstance(data, dict):
+            if "recommendations" in data and isinstance(data["recommendations"], list):
+                raw_recs = data["recommendations"]
+            elif "prioritized_recommendations" in data and isinstance(data["prioritized_recommendations"], list):
+                raw_recs = data["prioritized_recommendations"]
+            elif "issue_explanations" in data and isinstance(data["issue_explanations"], list):
+                raw_recs = data["issue_explanations"]
+        elif isinstance(data, list):
+            raw_recs = data
+
+        # Run strict recommendation verification
+        val_report = validate_all_recommendations(raw_recs, audit_data, audit_id=audit_data.get("id"))
+
+        if not val_report.verified_recommendations:
+            logger.warning("No AI recommendations passed strict evidence validation. Serving deterministic recommendations.")
             return generate_deterministic_fallback_recommendations(audit_data)
 
-        data["ok"] = True
-        data["ai_generated"] = True
-        data["source_model"] = f"Ollama ({OLLAMA_MODEL})"
-        data["target"] = target
-        data["generated_at"] = datetime.now(timezone.utc).isoformat()
-        data["disclaimer"] = (
-            "Evidence Grounding Policy: All recommendations are strictly tied to verified crawl evidence and primary "
-            "search documentation. Aviance never alters measured SEO scores or invents unverified metrics."
-        )
-        return data
+        # Build output structure matching existing reporting contracts
+        out_explanations = []
+        out_prioritized = []
+        for idx, v in enumerate(val_report.verified_recommendations):
+            out_explanations.append({
+                "code": v.issue_id,
+                "severity": v.severity,
+                "title": v.issue_title,
+                "affected_url": v.affected_url,
+                "evidence": v.evidence_reference,
+                "explanation": v.explanation,
+                "action": v.recommended_action
+            })
+            out_prioritized.append({
+                "id": idx + 1,
+                "priority": v.severity,
+                "category": v.category,
+                "title": v.issue_title,
+                "impact": "High" if v.severity in ("CRITICAL", "HIGH") else "Medium",
+                "effort": "Low" if v.severity == "CRITICAL" else "Medium",
+                "affected_urls": [v.affected_url],
+                "action": v.recommended_action,
+                "validation": v.verification_method,
+                "citations": v.documentation_references,
+                "validation_status": v.validation_status
+            })
+
+        fallback_data = generate_deterministic_fallback_recommendations(audit_data)
+
+        return {
+            "ok": True,
+            "ai_generated": True,
+            "source_model": f"{ai_resp.provider.upper()} ({ai_resp.model}) + RAG v{rag_knowledge_base.knowledge_version}",
+            "target": target,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "issue_explanations": out_explanations,
+            "prioritized_recommendations": out_prioritized,
+            "technical_fixes": fallback_data.get("technical_fixes", []),
+            "content_improvements": fallback_data.get("content_improvements", []),
+            "keyword_opportunities": fallback_data.get("keyword_opportunities", []),
+            "internal_linking": fallback_data.get("internal_linking", []),
+            "structured_data_schemas": fallback_data.get("structured_data_schemas", []),
+            "developer_instructions": fallback_data.get("developer_instructions", []),
+            "validation_metrics": {
+                "total_evaluated": val_report.total_evaluated,
+                "verified": val_report.verified_count,
+                "rejected": val_report.rejected_count,
+            },
+            "disclaimer": (
+                "Evidence Grounding Policy: All recommendations are strictly tied to verified crawl evidence and primary "
+                "search documentation. Aviance never alters measured SEO scores or invents unverified metrics."
+            )
+        }
 
     except Exception as exc:
-        logger.warning("Ollama generation failed (%s); serving deterministic recommendations.", exc)
+        logger.warning("AI processing error (%s); serving deterministic recommendations.", exc)
         return generate_deterministic_fallback_recommendations(audit_data)
 
 
@@ -575,73 +600,69 @@ def ask_ai_seo_assistant(
             f"Discovered Keywords: {', '.join([k['term'] for k in evidence['discovered_keywords'][:5]])}\n"
         )
 
+    # Retrieve relevant SEO documentation via RAG
+    rag_results = rag_knowledge_base.search(clean_q, top_k=2)
+    doc_context = ""
+    citations = []
+    if rag_results:
+        doc_context = "PRIMARY SEO DOCUMENTATION (GOOGLE SEARCH CENTRAL / WEB.DEV):\n"
+        for doc, _ in rag_results:
+            doc_context += f"- {doc.title}: {doc.content} ({doc.source_url})\n"
+            citations.append({"title": doc.title, "url": doc.source_url})
+
     system_instruction = (
         "You are Aviance AI SEO Consultant, an expert technical search engine optimization advisor. "
         "Answer the user's question directly, accurately, and actionably. "
         "STRICT CONSTRAINTS:\n"
         "1. Never invent rankings, keyword search volume, or backlink statistics.\n"
         "2. Ground your advice in Google Search Central and web.dev specifications.\n"
-        "3. Provide code snippets (HTML, CSS, JSON-LD, HTTP headers) whenever technical fixes are requested.\n"
-        "4. Keep your answer concise, well-formatted, and professional.\n\n"
+        "3. Clearly distinguish General SEO Best Practice from Actual Observed Website Findings.\n"
+        "4. Provide code snippets (HTML, CSS, JSON-LD, HTTP headers) whenever technical fixes are requested.\n"
+        "5. Keep your answer concise, well-formatted, and professional.\n\n"
+        f"{doc_context}\n"
         f"VERIFIED AUDIT CONTEXT:\n{context_text}"
     )
 
-    status = check_ollama_status()
-    if not status.get("available") or not status.get("model_available"):
-        # Fallback response grounded in knowledge base
-        reply = (
-            f"**Aviance AI SEO Guidance for {target or 'your website'}**\n\n"
-            f"Based on your question: *\"{clean_q}\"*\n\n"
-            f"To optimize search performance according to Google Search Central best practices:\n"
-            f"1. **Technical Foundation**: Ensure canonical tags match preferred URLs, HTTP redirects use status 301, and sitemaps are referenced in `robots.txt`.\n"
-            f"2. **On-Page Optimization**: Craft unique `<title>` tags (50–60 characters) and `<meta name=\"description\">` tags (120–155 characters) for every indexed page.\n"
-            f"3. **Structured Data**: Implement valid JSON-LD schemas (`Organization`, `WebSite`, or `Article`) to enrich search snippets without changing measured values.\n\n"
-            f"*(Note: Ollama AI service is currently in offline mode. Running with deterministic SEO Knowledge Base guidance.)*"
-        )
+    prompt = f"User Question: {clean_q}\n\nExpert Answer:"
+    ai_resp = model_client.generate(
+        prompt=prompt,
+        system_instruction=system_instruction,
+        temperature=0.25
+    )
+
+    if ai_resp.ok and ai_resp.text:
         return {
             "ok": True,
-            "answer": reply,
-            "ai_generated": False,
-            "source_model": "Deterministic SEO Knowledge Engine",
-            "target": target,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-
-    # Dispatch to Ollama
-    headers = _ollama_headers()
-    prompt = f"{system_instruction}\n\nUser Question: {clean_q}\n\nExpert Answer:"
-    payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": 0.25,
-            "num_predict": 1024,
-        }
-    }
-
-    try:
-        r = requests.post(OLLAMA_URL, json=payload, headers=headers, timeout=OLLAMA_INSIGHT_TIMEOUT)
-        r.raise_for_status()
-        resp_text = (r.json().get("response") or "").strip()
-        return {
-            "ok": True,
-            "answer": resp_text,
+            "answer": ai_resp.text,
             "ai_generated": True,
-            "source_model": f"Ollama ({OLLAMA_MODEL})",
+            "source_model": f"{ai_resp.provider.upper()} ({ai_resp.model})",
             "target": target,
+            "citations": citations,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
-    except Exception as exc:
-        logger.warning("Ollama chat assistant query failed: %s", exc)
-        return {
-            "ok": True,
-            "answer": f"Unable to reach Ollama AI service ({exc}). Providing knowledge-base guidance: verify your canonical tags, ensure unique titles, and inspect Google Search Central documentation for detailed implementation steps.",
-            "ai_generated": False,
-            "source_model": "Fallback",
-            "target": target,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
+
+    # Deterministic knowledge fallback
+    fallback_cites = [f"- [{c['title']}]({c['url']})" for c in citations]
+    cites_str = "\n".join(fallback_cites) if fallback_cites else "- [Google Search Central](https://developers.google.com/search/docs)"
+    reply = (
+        f"**Aviance AI SEO Guidance for {target or 'your website'}**\n\n"
+        f"Based on your question: *\"{clean_q}\"*\n\n"
+        f"To optimize search performance according to Google Search Central best practices:\n"
+        f"1. **Technical Foundation**: Ensure canonical tags match preferred URLs, HTTP redirects use status 301, and XML sitemaps are referenced in `robots.txt`.\n"
+        f"2. **On-Page Optimization**: Craft unique `<title>` tags (30–60 characters) and descriptive meta descriptions (70–155 characters) for every indexed page.\n"
+        f"3. **Structured Data**: Implement valid JSON-LD schemas (`Organization`, `WebSite`, or `Article`) to enrich search snippets.\n\n"
+        f"**Authoritative References:**\n{cites_str}\n\n"
+        f"*(Note: AI service is in deterministic SEO Knowledge Base mode. No external API call was made.)*"
+    )
+    return {
+        "ok": True,
+        "answer": reply,
+        "ai_generated": False,
+        "source_model": "Deterministic SEO Knowledge Engine",
+        "target": target,
+        "citations": citations,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
 
 
 # -----------------------------------------------------------------------------

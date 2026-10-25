@@ -9,6 +9,18 @@ services:
       - key: APP_ENV
         value: production
       - key: DATABASE_URL
-        value: mongodb+srv://seoesupport_db_user:mFYxVnBKYtFspiij@cluster0.wvoxrnq.mongodb.net/seo_platform?retryWrites=true&w=majority
+        sync: false
       - key: CORS_ORIGINS
-        value: "*"
+        sync: false
+      - key: AI_PROVIDER
+        value: auto
+      - key: AI_MODEL_ID
+        value: gemma4:31b
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_RAG_ENABLED
+        value: "true"
+      - key: AI_VALIDATION_ENABLED
+        value: "true"
+      - key: AI_FALLBACK_ENABLED
+        value: "true"

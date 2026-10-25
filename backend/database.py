@@ -12,6 +12,12 @@ logger = logging.getLogger("esupport_db")
 DEFAULT_SQLITE_URI = "sqlite:///./seo_platform.db"
 DB_PATH = os.getenv("DATABASE_URL", DEFAULT_SQLITE_URI).strip()
 
+def mask_connection_string(uri: str) -> str:
+    """Masks credentials in database URIs for safe logging and error reporting."""
+    if not uri:
+        return ""
+    return re.sub(r":([^/@:]+)@", ":****@", uri)
+
 IS_MONGO = DB_PATH.startswith("mongodb://") or DB_PATH.startswith("mongodb+srv://")
 
 # -----------------------------------------------------------------------------
@@ -1059,6 +1065,64 @@ class AgencyBranding(Base):
     phone = Column(String, default="+1 (800) 555-0199")
     footer_text = Column(String, default="Confidential & Proprietary Client Intelligence Report")
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class KnowledgeDocument(Base):
+    __tablename__ = "knowledge_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(String, unique=True, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    source_url = Column(String, nullable=False)
+    publisher = Column(String, default="Google Search Central")
+    topic = Column(String, default="technical")
+    category = Column(String, default="technical", index=True)
+    content = Column(Text, nullable=False)
+    content_hash = Column(String, nullable=False)
+    retrieved_at = Column(DateTime, default=datetime.utcnow)
+    last_modified_at = Column(DateTime, nullable=True)
+    knowledge_version = Column(String, default="1.0.0")
+    review_status = Column(String, default="APPROVED")
+
+
+class AIRecommendationRecord(Base):
+    __tablename__ = "ai_recommendation_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    audit_id = Column(Integer, ForeignKey("audits.id", ondelete="CASCADE"), index=True, nullable=True)
+    recommendation_id = Column(String, index=True, nullable=False)
+    issue_id = Column(String, nullable=False)
+    affected_url = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    issue_title = Column(String, nullable=False)
+    severity = Column(String, default="MEDIUM")
+    explanation = Column(Text, default="")
+    recommended_action = Column(Text, default="")
+    developer_instructions = Column(Text, default="")
+    verification_method = Column(Text, default="")
+    citations_json = Column(Text, default="[]")
+    evidence_status = Column(String, default="VERIFIED")
+    validation_status = Column(String, default="VERIFIED")
+    validation_reason = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AITrainingExample(Base):
+    __tablename__ = "ai_training_examples"
+
+    id = Column(Integer, primary_key=True, index=True)
+    example_id = Column(String, unique=True, index=True, nullable=False)
+    website_type = Column(String, default="General")
+    page_type = Column(String, default="Landing")
+    verified_issue = Column(String, nullable=False)
+    observed_evidence = Column(Text, nullable=False)
+    relevant_documentation = Column(Text, default="")
+    correct_explanation = Column(Text, nullable=False)
+    correct_recommendation = Column(Text, nullable=False)
+    incorrect_recommendation_examples = Column(Text, default="[]")
+    review_status = Column(String, default="PENDING_REVIEW")
+    reviewer_notes = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db():
