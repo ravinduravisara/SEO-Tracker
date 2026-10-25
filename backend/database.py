@@ -723,6 +723,7 @@ class Website(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), index=True, nullable=True)
     url = Column(String, nullable=False)
     name = Column(String, default="")
     status = Column(String, default="ACTIVE", nullable=False)
@@ -733,6 +734,7 @@ class Website(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     client = relationship("Client", back_populates="websites")
+    project = relationship("Project", back_populates="websites")
     audits = relationship("Audit", back_populates="website")
     public_reports = relationship("PublicReport", back_populates="website")
 
@@ -743,18 +745,22 @@ class Audit(Base):
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"))
     website_id = Column(Integer, ForeignKey("websites.id"), index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), index=True, nullable=True)
     job_id = Column(String, unique=True, index=True)
     status = Column(String, default="COMPLETED", nullable=False)
     target_url = Column(String, nullable=False)
     result_json = Column(Text().with_variant(LONGTEXT, "mysql") if not IS_MONGO else Text, nullable=False)
     score = Column(Float)
     progress_json = Column(Text, default="{}", nullable=False)
+    provenance_json = Column(Text, default="{}", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime)
 
     client = relationship("Client", back_populates="audits")
     website = relationship("Website", back_populates="audits")
+    project = relationship("Project")
     public_reports = relationship("PublicReport", back_populates="audit", cascade="all, delete-orphan")
+    page_findings = relationship("PageFinding", back_populates="audit", cascade="all, delete-orphan")
 
 
 class PublicReport(Base):
@@ -1061,6 +1067,87 @@ class AgencyBranding(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(String, default="")
+    client_id = Column(Integer, ForeignKey("clients.id"), index=True, nullable=True)
+    status = Column(String, default="ACTIVE", index=True)  # ACTIVE, ARCHIVED
+    target_domains_json = Column(Text, default="[]")
+    settings_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+    websites = relationship("Website", back_populates="project")
+
+
+class PageFinding(Base):
+    __tablename__ = "page_findings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    audit_id = Column(Integer, ForeignKey("audits.id", ondelete="CASCADE"), index=True, nullable=False)
+    url = Column(String, nullable=False, index=True)
+    check_id = Column(String, nullable=False, index=True)
+    category = Column(String, nullable=False, index=True)
+    severity = Column(String, nullable=False, index=True)  # critical, high, medium, low
+    problem_description = Column(String, nullable=False)
+    suggested_correction = Column(String, default="")
+    evidence_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    audit = relationship("Audit", back_populates="page_findings")
+
+
+class ReportExport(Base):
+    __tablename__ = "report_exports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    audit_id = Column(Integer, ForeignKey("audits.id"), index=True, nullable=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), index=True, nullable=True)
+    website_id = Column(Integer, ForeignKey("websites.id"), index=True, nullable=True)
+    report_type = Column(String, nullable=False, index=True)  # EXECUTIVE, TECHNICAL, etc.
+    format = Column(String, nullable=False, index=True)       # PDF, CSV, EXCEL, JSON
+    filename = Column(String, nullable=False)
+    file_path = Column(String, default="")
+    file_size_bytes = Column(Integer, default=0)
+    download_count = Column(Integer, default=0)
+    provenance_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    audit = relationship("Audit")
+    client = relationship("Client")
+    website = relationship("Website")
+
+
+class BackgroundJob(Base):
+    __tablename__ = "background_jobs"
+
+    id = Column(String, primary_key=True, index=True)  # UUID token string
+    job_type = Column(String, nullable=False, index=True)  # AUDIT, RANK_TRACK, BACKLINK_SYNC, REPORT_EXPORT
+    target_url = Column(String, default="", index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), index=True, nullable=True)
+    website_id = Column(Integer, ForeignKey("websites.id"), index=True, nullable=True)
+    audit_id = Column(Integer, ForeignKey("audits.id"), index=True, nullable=True)
+    status = Column(String, nullable=False, default="QUEUED", index=True)  # QUEUED, RUNNING, COMPLETED, FAILED, CANCELLED
+    progress_pct = Column(Float, default=0.0)
+    progress_phase = Column(String, default="queued")
+    progress_json = Column(Text, default="{}")
+    retry_count = Column(Integer, default=0)
+    max_retries = Column(Integer, default=3)
+    error_message = Column(String, default="")
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = relationship("Client")
+    website = relationship("Website")
+    audit = relationship("Audit")
+
+
 def init_db():
     if IS_MONGO:
         try:
@@ -1076,11 +1163,15 @@ def init_db():
                 db["clients"].create_index("id", unique=True)
                 db["websites"].create_index("id", unique=True)
                 db["websites"].create_index("client_id")
+                db["websites"].create_index("project_id")
+                db["projects"].create_index("id", unique=True)
+                db["projects"].create_index("client_id")
                 db["audits"].create_index("id", unique=True)
                 db["audits"].create_index([("created_at", -1)])
                 db["audits"].create_index("job_id")
                 db["audits"].create_index("client_id")
                 db["audits"].create_index("website_id")
+                db["audits"].create_index("project_id")
                 db["public_reports"].create_index("id", unique=True)
                 db["public_reports"].create_index("token", unique=True)
                 db["seo_leads"].create_index("id", unique=True)
@@ -1104,6 +1195,12 @@ def init_db():
                 db["tracked_keywords"].create_index("keyword")
                 db["ranking_observations"].create_index("tracked_keyword_id")
                 db["ranking_alerts"].create_index("tracked_keyword_id")
+                db["page_findings"].create_index("audit_id")
+                db["page_findings"].create_index("url")
+                db["report_exports"].create_index("id", unique=True)
+                db["report_exports"].create_index("audit_id")
+                db["background_jobs"].create_index("id", unique=True)
+                db["background_jobs"].create_index("status")
             except Exception as e:
                 logger.warning(f"Error ensuring MongoDB indexes: {e}")
 
@@ -1114,7 +1211,8 @@ def init_db():
                 "seo_leads", "public_scans", "scheduled_audits", "keyword_projects",
                 "saved_keywords", "competitor_comparisons", "backlink_snapshots",
                 "tracked_keywords", "ranking_observations", "ranking_alerts",
-                "agency_branding"
+                "agency_branding", "projects", "page_findings", "report_exports",
+                "background_jobs"
             ]
             for t in tables:
                 try:
@@ -1138,9 +1236,11 @@ def init_db():
         "clients": {"status": "VARCHAR NOT NULL DEFAULT 'ACTIVE'"},
         "audits": {
             "website_id": "INTEGER",
+            "project_id": "INTEGER",
             "job_id": "VARCHAR",
             "status": "VARCHAR NOT NULL DEFAULT 'COMPLETED'",
             "progress_json": "TEXT NOT NULL DEFAULT '{}'",
+            "provenance_json": "TEXT NOT NULL DEFAULT '{}'",
             "completed_at": "DATETIME",
         },
         "public_reports": {
@@ -1158,6 +1258,7 @@ def init_db():
             "updated_at": "DATETIME",
         },
         "websites": {
+            "project_id": "INTEGER",
             "gsc_property": "VARCHAR DEFAULT ''",
             "ga4_property_id": "VARCHAR DEFAULT ''",
             "connection_status_json": "TEXT NOT NULL DEFAULT '{}'",
