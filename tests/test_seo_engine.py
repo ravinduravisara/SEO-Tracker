@@ -211,7 +211,11 @@ class Checks(unittest.TestCase):
 
     def test_multiple_h1_and_skipped_levels_are_independent(self):
         p = run(audit([page("/", doc(h1=("Water Pumps", "Welcome")))]))
-        self.assertEqual(chk(p, "O09")["status"], "FAIL")
+        # Under modern HTML5 sectioning and Google guidelines, multiple H1s are graded as WARN rather than hard FAIL
+        self.assertEqual(chk(p, "O09")["status"], "WARN")
+        # Missing H1 (0 H1s) properly fails
+        p_no_h1 = run(audit([page("/", doc(h1=()))]))
+        self.assertEqual(chk(p_no_h1, "O09")["status"], "FAIL")
         html = doc(h1=("Industrial Water Pumps",), h2=()).replace("</main>", "<h4>Deep heading</h4><h4>Another</h4><h4>Third</h4></main>")
         p = run(audit([page("/", html)]))
         self.assertEqual(chk(p, "O11")["status"], "FAIL")

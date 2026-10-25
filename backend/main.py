@@ -1657,6 +1657,48 @@ def compare_audits_endpoint(
     cov1 = eng1.get("measurement_coverage", {})
     cov2 = eng2.get("measurement_coverage", {})
 
+    # Comparability Assessment (Phase 6.2)
+    reasons = []
+    host1 = urlparse(a1.target_url or "").hostname or ""
+    host2 = urlparse(a2.target_url or "").hostname or ""
+    ruleset1 = eng1.get("ruleset_version") or "v1.0"
+    ruleset2 = eng2.get("ruleset_version") or "v1.0"
+    prof1 = (eng1.get("audit") or {}).get("vertical_profile") or "general"
+    prof2 = (eng2.get("audit") or {}).get("vertical_profile") or "general"
+    pages1 = res1.get("page_count", 0) or 1
+    pages2 = res2.get("page_count", 0) or 1
+
+    if host1 != host2:
+        comparability = "NOT COMPARABLE"
+        reasons.append(f"Target hosts differ ('{host1}' vs '{host2}')")
+    elif ruleset1 != ruleset2:
+        comparability = "NOT COMPARABLE"
+        reasons.append(f"Engine ruleset versions differ ('{ruleset1}' vs '{ruleset2}')")
+    elif prof1 != prof2:
+        comparability = "NOT COMPARABLE"
+        reasons.append(f"Business profiles differ ('{prof1}' vs '{prof2}')")
+    else:
+        page_ratio = abs(pages2 - pages1) / max(pages1, 1)
+        cov_delta = abs((cov2.get("coverage_percentage") or 100) - (cov1.get("coverage_percentage") or 100))
+        if page_ratio > 0.4 or cov_delta > 15:
+            comparability = "PARTIALLY COMPARABLE"
+            if page_ratio > 0.4:
+                reasons.append(f"Crawl scope varies significantly ({pages1} vs {pages2} pages crawled)")
+            if cov_delta > 15:
+                reasons.append(f"Measurement coverage varies by {round(cov_delta, 1)}%")
+        else:
+            comparability = "COMPARABLE"
+            reasons.append("Identical target, ruleset, and comparable crawl depth")
+
+    # Like-for-like score on shared checks
+    checks1 = {c["id"]: c for c in eng1.get("checks", []) if c.get("id")}
+    checks2 = {c["id"]: c for c in eng2.get("checks", []) if c.get("id")}
+    shared_ids = set(checks1.keys()) & set(checks2.keys())
+    shared_pts_earned1 = sum(checks1[i].get("points_earned", 0) or 0 for i in shared_ids)
+    shared_pts_earned2 = sum(checks2[i].get("points_earned", 0) or 0 for i in shared_ids)
+    shared_pts_avail = sum(checks2[i].get("points_available", 0) or checks1[i].get("points_available", 0) or 0 for i in shared_ids)
+    like_for_like_delta = round((shared_pts_earned2 - shared_pts_earned1), 1) if shared_pts_avail > 0 else score_delta
+
     return {
         "audit_before": {
             "id": a1.id,
@@ -1675,6 +1717,9 @@ def compare_audits_endpoint(
             "pages_crawled": res2.get("page_count", 0),
         },
         "score_delta": score_delta,
+        "comparability": comparability,
+        "comparability_reasons": reasons,
+        "like_for_like_delta": like_for_like_delta,
         "improved": score_delta > 0,
         "regressed": score_delta < 0,
         "categories_diff": categories_diff,
@@ -5866,7 +5911,9 @@ def assert_release_gate(audit: dict[str, Any]) -> dict[str, Any]:
     narrative = [v for v in ((payload.get("narrative") or {}).get("data") or {}).values()]
     gate = run_gate(payload, narrative) if not payload.get("error") else {"passed": True, "failures": []}
     if not gate["passed"]:
-        logger.warning("Verification gate notice: " + "; ".join(gate["failures"][:5]))
+        msg = f"Report release verification gate failed ({len(gate['failures'])} violation(s)): " + "; ".join(gate["failures"][:3])
+        logger.error(msg)
+        raise HTTPException(status_code=422, detail=msg)
     return payload
 
 
