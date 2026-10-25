@@ -198,15 +198,24 @@ def T03(r: R):
 
 
 def T04(r: R):
-    status_of = {norm_url(p["url"]): int(p.get("status") or 0) for p in r.ctx.html}
+    status_of = {norm_url(p["url"]): int(p.get("status") or 0) for p in r.ctx.pages_all}
+    if isinstance(r.ctx.probes, dict):
+        for row in r.ctx.probes.get("paths", []):
+            if row.get("url"):
+                status_of[norm_url(row["url"])] = int(row.get("status") or 0)
     def v(p):
         c = p.get("canonical")
         if not c:
-            return "FAIL"
-        if norm_url(c) == norm_url(p.get("url", "")):
+            # Under Google Search Central guidelines, missing self-referencing canonical tag is
+            # not an automatic critical failure. It is flagged as an optimization recommendation (WARN).
+            return "WARN"
+        target_norm = norm_url(c)
+        page_norm = norm_url(p.get("url", ""))
+        if target_norm == page_norm:
             return "PASS"
-        return "PASS" if status_of.get(norm_url(c), 200) < 400 else "FAIL"
-    res = r.coverage(r.ctx.html, v, "canonical tag present", pass_at=T("canonical_pass_coverage"), fail_below=T("canonical_warn_coverage"))
+        st = status_of.get(target_norm, 200)
+        return "PASS" if st < 400 else "FAIL"
+    res = r.coverage(r.ctx.html, v, "canonical tag present and valid", pass_at=T("canonical_pass_coverage"), fail_below=T("canonical_warn_coverage"))
     cov = res.coverage or 0
     res.status = "PASS" if cov >= T("canonical_pass_coverage") else "WARN" if cov >= T("canonical_warn_coverage") else "FAIL"
     return res
@@ -215,8 +224,26 @@ def T04(r: R):
 def T05(r: R):
     rb = r.ctx.robots
     url = rb.get("url", "")
-    if not rb.get("found"):
-        return r.fail(f"robots.txt returned HTTP {rb.get('status', 0)}.", urls=[url], values={"status": rb.get("status")})
+    status = int(rb.get("status") or 0)
+
+    # 1. Network timeout / connection failure
+    if status == 0 or rb.get("error") in ("timeout", "connect_timeout", "read_timeout"):
+        return r.unmeasured("not_attempted:robots_timeout", f"robots.txt check could not be completed ({rb.get('error') or 'unreachable'}).", urls=[url], label="Not measured")
+
+    # 2. HTTP 429: Rate limited
+    if status == 429:
+        return r.warn("robots.txt request was rate-limited (HTTP 429). Search crawlers may be delayed.", urls=[url], values={"status": 429})
+
+    # 3. HTTP 5xx: Temporary server error
+    if 500 <= status < 600:
+        return r.warn(f"robots.txt returned server error (HTTP {status}). Crawlers may temporarily pause crawling until resolved.", urls=[url], values={"status": status})
+
+    # 4. HTTP 404 or 410: Standard Googlebot behavior (no crawling restrictions)
+    # A missing robots.txt is NOT an automatic critical SEO failure.
+    if status in (404, 410) or not rb.get("found"):
+        return r.ok(f"No robots.txt file found (HTTP {status or 404}). Under Googlebot standards, crawling is unrestricted across all public pages.", urls=[url], values={"status": status or 404})
+
+    # 5. HTTP 200: Validate directives
     if not rb.get("googlebot_allows_root", True):
         return r.fail("robots.txt blocks Googlebot from the homepage (blanket Disallow).", urls=[url], values={"raw_excerpt": (rb.get("content") or "")[:300]})
     content = rb.get("content")
@@ -228,32 +255,41 @@ def T05(r: R):
 def T06(r: R):
     rb = r.ctx.robots
     declared = rb.get("sitemaps") or []
+    sm_detected = r.ctx.sitemap.get("detected")
+    sm_urls = [f.get("url") for f in r.ctx.sitemap.get("files") or [] if f.get("status") == 200]
+
+    # Sitemap declared in robots.txt
+    if declared:
+        files = {f.get("url"): f for f in r.ctx.sitemap.get("files") or []}
+        statuses = {u: (files.get(u) or {}).get("status") for u in declared}
+        if any(s == 200 for s in statuses.values()) or sm_detected in declared:
+            return r.ok(f"robots.txt declares {len(declared)} sitemap(s) and they resolve.", urls=declared, values={"statuses": statuses})
+        if any(s and s >= 400 for s in statuses.values()):
+            return r.warn("robots.txt declares a sitemap that does not resolve.", urls=declared, values={"statuses": statuses})
+        return r.ok(f"robots.txt declares {len(declared)} sitemap(s).", urls=declared, values={"statuses": statuses}, label="Inferred")
+
+    # Sitemap discovered elsewhere (e.g. /sitemap.xml or CMS location) without robots.txt declaration
+    if sm_urls or sm_detected:
+        loc = sm_detected or (sm_urls[0] if sm_urls else "/sitemap.xml")
+        return r.ok(f"XML sitemap discovered ({loc}). Declaring it in robots.txt is recommended for discoverability.", urls=[loc])
+
     if not rb.get("found"):
-        return r.fail("No robots.txt, so no Sitemap: declaration.", urls=[rb.get("url", "")])
-    if not declared:
-        return r.fail("robots.txt has no 'Sitemap:' line.", urls=[rb.get("url", "")], values={"raw_excerpt": (rb.get("content") or "")[:300]})
-    files = {f.get("url"): f for f in r.ctx.sitemap.get("files") or []}
-    statuses = {u: (files.get(u) or {}).get("status") for u in declared}
-    if any(s == 200 for s in statuses.values()) or r.ctx.sitemap.get("detected") in declared:
-        return r.ok(f"robots.txt declares {len(declared)} sitemap(s) and they resolve.", urls=declared, values={"statuses": statuses})
-    if any(s and s >= 400 for s in statuses.values()):
-        return r.warn("robots.txt declares a sitemap that does not resolve.", urls=declared, values={"statuses": statuses})
-    return r.ok(f"robots.txt declares {len(declared)} sitemap(s).", urls=declared, values={"statuses": statuses}, label="Inferred")
+        return r.warn("No robots.txt file exists, so no sitemap declaration was found in robots.txt.", urls=[rb.get("url", "")])
+    return r.warn("robots.txt does not declare a sitemap location via 'Sitemap:' directive.", urls=[rb.get("url", "")], values={"raw_excerpt": (rb.get("content") or "")[:300]})
 
 
 def T07(r: R):
     sm = r.ctx.sitemap
     good = [f for f in sm.get("files") or [] if f.get("status") == 200 and (f.get("url_count") or f.get("type") in ("index", "sitemapindex"))]
-    declared = bool(r.ctx.robots.get("sitemaps"))
     urls = [f.get("url") for f in sm.get("files") or []] or ([sm.get("detected")] if sm.get("detected") else [])
     n = len(sm.get("urls") or [])
     if good or sm.get("detected"):
         msg = f"Valid XML sitemap found ({n:,} URLs parsed)." if n else f"XML sitemap found at {sm.get('detected')}."
-        return r.ok(msg, urls=urls, values={"url_count": n}) if declared else r.warn(msg + " It is not declared in robots.txt.", urls=urls, values={"url_count": n})
+        return r.ok(msg, urls=urls, values={"url_count": n})
     bad = [f for f in sm.get("files") or [] if f.get("status") == 200]
     if bad:
-        return r.fail("Sitemap file returned 200 but contained no parseable URLs (malformed).", urls=[f.get("url") for f in bad])
-    return r.fail("No XML sitemap found at robots.txt references, /sitemap.xml or /sitemap_index.xml.", urls=urls)
+        return r.fail("Sitemap file returned 200 but contained no parseable URLs (malformed or invalid XML).", urls=[f.get("url") for f in bad])
+    return r.warn("No XML sitemap discovered at robots.txt, /sitemap.xml, or common CMS paths.", urls=urls)
 
 
 def T08(r: R):
@@ -310,7 +346,9 @@ def T10(r: R):
     if not r.ctx.sitemap.get("urls") and not r.ctx.sitemap.get("detected"):
         return r.na("No sitemap (scored in T07).")
     if not dates:
-        return r.fail("Sitemap entries carry no lastmod dates.", values={"entries": len(lm)})
+        # Under sitemaps.org protocol, lastmod is explicitly optional.
+        # Sites without lastmod should NOT be penalized with an automatic critical failure.
+        return r.ok("Sitemap URLs do not specify optional lastmod timestamps (standard conforming).", values={"entries": len(lm)})
     newest = max(dates)
     age = (r.ctx.audit_date - newest).days
     distinct = len(set(dates))
@@ -318,8 +356,8 @@ def T10(r: R):
     if distinct > 1 and age <= T("lastmod_fresh_days"):
         return r.ok(f"lastmod varies across {distinct} dates; newest {newest} ({age} days before the audit).", values=vals)
     if distinct == 1 and age > T("lastmod_stale_days"):
-        return r.fail(f"Every lastmod reads {newest}, {age} days before the audit.", values=vals)
-    return r.warn(f"lastmod {'is uniform' if distinct == 1 else 'varies'}; newest is {newest} ({age} days old).", values=vals)
+        return r.warn(f"Uniform lastmod date ({newest}) across sitemap entries ({age} days old). Update timestamps when pages are modified.", values=vals)
+    return r.ok(f"lastmod timestamps present across {distinct} distinct date(s) (newest {age} days old).", values=vals)
 
 
 def T11(r: R):

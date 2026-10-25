@@ -229,8 +229,20 @@ class Checks(unittest.TestCase):
     def test_missing_canonical_single_host(self):
         pages = [page("/", doc(canonical=False)), page("/water-pumps-1", doc(canonical=False, url=BASE + "/water-pumps-1"))]
         p = run(audit(pages), probes=probes())
-        self.assertEqual(chk(p, "T04")["status"], "FAIL")
+        # Under Google Search Central guidelines, missing self-referencing canonical on a single host is a recommendation (WARN/medium), not FAIL.
+        self.assertEqual(chk(p, "T04")["status"], "WARN")
         self.assertEqual(chk(p, "T03")["status"], "PASS")
+        self.assertEqual(next(i for i in p["issues"] if i["check_id"] == "T04")["severity"], "medium")
+
+    def test_broken_canonical_target_fails(self):
+        # A canonical tag pointing to a broken 404 target is a genuine misconfiguration (FAIL).
+        broken_url = BASE + "/broken-canonical-target"
+        pages = [
+            page("/", doc(head=f'<link rel="canonical" href="{broken_url}">', canonical=False)),
+            page("/broken-canonical-target", "<h1>Not Found</h1>", status=404)
+        ]
+        p = run(audit(pages), probes=probes())
+        self.assertEqual(chk(p, "T04")["status"], "FAIL")
         self.assertEqual(next(i for i in p["issues"] if i["check_id"] == "T04")["severity"], "high")
 
     def test_dual_host_exposure(self):
