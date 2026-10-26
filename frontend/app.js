@@ -2534,6 +2534,19 @@ class SEOAdminApp {
                 <h3>Report Center • Exports &amp; Downloads</h3>
                 <p style="color:var(--text-muted);">Download publication-grade PDFs, full CSV tables, and the complete zipped report bundle.</p>
                 <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-top:20px;">
+                    <div class="card" style="text-align:center; border:2px solid #0284C7; background:#F0F9FF;">
+                        <span class="pill pill-info" style="margin-bottom:6px; font-weight:700; background:#E0F2FE; color:#0369A1;">COMPLETE AUDIT</span>
+                        <h4>Complete Technical SEO Audit</h4>
+                        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Evidence-based technical audit report with unique &amp; instance issue counts, supporting evidence, and AI Search Readiness.</p>
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <button class="btn btn-primary" style="background:#0284C7; border-color:#0284C7;" onclick="app.downloadSpecialPdf('technical')">Download Technical Audit PDF</button>
+                            <div style="display:flex; justify-content:center; gap:6px;">
+                                <button class="btn btn-secondary btn-xs" onclick="app.exportSpecializedReport('TECHNICAL','csv')">CSV</button>
+                                <button class="btn btn-secondary btn-xs" onclick="app.exportSpecializedReport('TECHNICAL','excel')">Excel</button>
+                                <button class="btn btn-secondary btn-xs" onclick="app.exportSpecializedReport('TECHNICAL','json')">JSON</button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="card" style="text-align:center; border:2px solid var(--primary); background:#EFF6FF;">
                         <span class="pill pill-primary" style="margin-bottom:6px; font-weight:700;">CLIENT READY</span>
                         <h4>Client Summary PDF (2-3 Pages)</h4>
@@ -2589,6 +2602,31 @@ class SEOAdminApp {
     /* -------------------------------------------------------------
        EXPORT DOWNLOADS
     -------------------------------------------------------------- */
+    async exportSpecializedReport(reportType, format) {
+        if (!this.state.currentAudit) return alert("No audit loaded.");
+        try {
+            const headers = { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" };
+            if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
+            const resp = await fetch(`${API_BASE}/reports/export/${format}`, {
+                method: "POST",
+                credentials: "include",
+                headers,
+                body: JSON.stringify({ audit: this.state.currentAudit, report_type: reportType })
+            });
+            if (!resp.ok) {
+                const errText = await resp.text().catch(() => "");
+                throw new Error(errText || "Export failed");
+            }
+            const blob = await resp.blob();
+            const ext = format === "excel" ? "xls" : format;
+            const rawTarget = this.state.currentAudit.target || "audit";
+            const host = rawTarget.replace(/^https?:\/\//i, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+            this.triggerDownload(blob, `${reportType.toLowerCase()}_report_${host}.${ext}`);
+        } catch (e) {
+            alert(`Report export failed: ${e.message}`);
+        }
+    }
+
     async downloadSpecialPdf(reportType) {
         if (!this.state.currentAudit) return alert("No audit loaded.");
         try {
@@ -6273,12 +6311,137 @@ class SEOAdminApp {
             psiBadge.title = data.pagespeed.detail || "PageSpeed Ready";
         }
 
+        const bingBadge = $("gperfBingStatusBadge");
+        if (bingBadge && data.bing_webmaster) {
+            const st = data.bing_webmaster.status;
+            if (st === "CONNECTED") {
+                bingBadge.style.background = "#DCFCE7";
+                bingBadge.style.color = "#15803D";
+                bingBadge.textContent = "✓ Connected";
+                bingBadge.title = data.bing_webmaster.detail || "Connected";
+            } else {
+                bingBadge.style.background = "#F1F5F9";
+                bingBadge.style.color = "#64748B";
+                bingBadge.textContent = "Not Configured";
+                bingBadge.title = data.bing_webmaster.detail || "Set BING_API_KEY in settings";
+            }
+        }
+
+        const ahrefsBadge = $("gperfAhrefsStatusBadge");
+        if (ahrefsBadge && data.ahrefs) {
+            const st = data.ahrefs.status;
+            if (st === "CONNECTED") {
+                ahrefsBadge.style.background = "#DCFCE7";
+                ahrefsBadge.style.color = "#15803D";
+                ahrefsBadge.textContent = "✓ Connected";
+                ahrefsBadge.title = data.ahrefs.detail || "Connected";
+            } else {
+                ahrefsBadge.style.background = "#F1F5F9";
+                ahrefsBadge.style.color = "#64748B";
+                ahrefsBadge.textContent = "Not Configured";
+                ahrefsBadge.title = data.ahrefs.detail || "Set AHREFS_API_KEY in settings";
+            }
+        }
+
         if (lastChecked && data.last_checked_at) {
             try {
                 const dt = new Date(data.last_checked_at);
                 lastChecked.textContent = `Status verified at ${dt.toLocaleTimeString()}`;
             } catch (_) {}
         }
+    }
+
+    /* -------------------------------------------------------------
+       PHASE 8: GLOBAL API CONNECTIONS MANAGEMENT
+    -------------------------------------------------------------- */
+    async openApiConnectionsModal() {
+        const modal = $("apiConnectionsModal");
+        if (!modal) return;
+        modal.classList.remove("hidden");
+        modal.style.display = "flex";
+
+        try {
+            const status = await jsonFetch(`${API_BASE}/integrations/status`);
+            if (status.pagespeed) {
+                const b = $("connPsiBadge");
+                if (b) {
+                    b.className = status.pagespeed.has_api_key ? "pill pill-success" : "pill";
+                    b.textContent = status.pagespeed.has_api_key ? "Dedicated Key" : "Public Quota";
+                }
+            }
+            if (status.bing_webmaster) {
+                const b = $("connBingBadge");
+                if (b) {
+                    b.className = status.bing_webmaster.configured ? "pill pill-success" : "pill";
+                    b.textContent = status.bing_webmaster.configured ? "✓ Connected" : "Not Configured";
+                }
+            }
+            if (status.ahrefs) {
+                const b = $("connAhrefsBadge");
+                if (b) {
+                    b.className = status.ahrefs.configured ? "pill pill-success" : "pill";
+                    b.textContent = status.ahrefs.configured ? "✓ Connected" : "Not Configured";
+                }
+            }
+            if (status.openpagerank) {
+                const b = $("connOprBadge");
+                if (b) {
+                    b.className = status.openpagerank.configured ? "pill pill-success" : "pill";
+                    b.textContent = status.openpagerank.configured ? "✓ Connected" : "Not Configured";
+                }
+            }
+        } catch (e) {
+            console.warn("Could not load integrations status:", e);
+        }
+    }
+
+    closeApiConnectionsModal() {
+        const modal = $("apiConnectionsModal");
+        if (modal) {
+            modal.classList.add("hidden");
+            modal.style.display = "none";
+        }
+    }
+
+    async saveApiConnectionsSettings() {
+        const btn = $("btnSaveApiConnections");
+        const psi = ($("connPsiKeyInput")?.value || "").trim();
+        const bing = ($("connBingKeyInput")?.value || "").trim();
+        const ahrefs = ($("connAhrefsKeyInput")?.value || "").trim();
+        const opr = ($("connOprKeyInput")?.value || "").trim();
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Saving...";
+        }
+
+        try {
+            const payload = {};
+            if (psi) payload.pagespeed_api_key = psi;
+            if (bing) payload.bing_api_key = bing;
+            if (ahrefs) payload.ahrefs_api_key = ahrefs;
+            if (opr) payload.openpagerank_api_key = opr;
+
+            const res = await jsonFetch(`${API_BASE}/integrations/settings`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            this.showNotification("API connection settings saved successfully.", "success");
+            this.closeApiConnectionsModal();
+            if (this.gperfState.websiteId) {
+                await this.checkGoogleConnections(this.gperfState.websiteId);
+            }
+        } catch (err) {
+            this.showNotification("Failed to update API connections: " + (err.message || err), "danger");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = "Save API Keys";
+            }
+        }
+    }
     }
 
     async fetchGooglePerformanceReport() {

@@ -297,6 +297,40 @@ class TestPhase7MultiReportGeneration(unittest.TestCase):
         json_str = generate_report_json(rep, "EXECUTIVE")
         self.assertIn('"report_type": "EXECUTIVE"', json_str)
 
+    def test_api_report_pdf_technical(self):
+        """Regression test ensuring report_pdf with report_type='technical' returns valid Technical Audit PDF."""
+        from backend.main import report_pdf
+
+        payload = {
+            "audit": self.audit_data,
+            "report_type": "technical"
+        }
+        response = report_pdf(payload=payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.media_type, "application/pdf")
+        self.assertTrue(response.body.startswith(b"%PDF"))
+        self.assertIn("esupport-seo-technical-audit-", response.headers.get("Content-Disposition", ""))
+
+    def test_api_reports_export_endpoint(self):
+        """Regression test ensuring export_report_endpoint works for technical report."""
+        from backend.main import export_report_endpoint
+
+        for fmt in ("pdf", "csv", "excel", "json"):
+            payload = {
+                "audit": self.audit_data,
+                "report_type": "TECHNICAL"
+            }
+            response = export_report_endpoint(format=fmt, payload=payload, db=None)
+            self.assertEqual(response.status_code, 200, f"Format {fmt} failed with {response.status_code}")
+            if fmt == "pdf":
+                self.assertTrue(response.body.startswith(b"%PDF"))
+            elif fmt == "csv":
+                self.assertIn("esupport.live", response.body.decode("utf-8"))
+            elif fmt == "excel":
+                self.assertIn("Workbook", response.body.decode("utf-8"))
+            elif fmt == "json":
+                self.assertIn("TECHNICAL", response.body.decode("utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

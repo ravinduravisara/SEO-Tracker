@@ -115,6 +115,21 @@ def check_google_connections(website: Website, db: Optional[Session] = None) -> 
             "status": psi_status,
             "detail": psi_detail,
             "is_connected": True
+        },
+        "bing_webmaster": {
+            "status": "CONNECTED" if integrations.bing_configured() else "NOT_CONFIGURED",
+            "detail": "Bing Webmaster Tools API Key active." if integrations.bing_configured() else "Set BING_API_KEY in .env.",
+            "is_connected": integrations.bing_configured()
+        },
+        "ahrefs": {
+            "status": "CONNECTED" if getattr(integrations, "ahrefs_configured", lambda: False)() else "NOT_CONFIGURED",
+            "detail": "Ahrefs API v3 Token active." if getattr(integrations, "ahrefs_configured", lambda: False)() else "Set AHREFS_API_KEY in .env for official Domain Rating.",
+            "is_connected": getattr(integrations, "ahrefs_configured", lambda: False)()
+        },
+        "openpagerank": {
+            "status": "CONNECTED" if integrations.openpagerank_configured() else "NOT_CONFIGURED",
+            "detail": "Open PageRank API active." if integrations.openpagerank_configured() else "Set OPENPAGERANK_API_KEY in .env.",
+            "is_connected": integrations.openpagerank_configured()
         }
     }
 
@@ -226,7 +241,10 @@ def get_client_performance_report(
             "error": ga4_res.get("error") if not ga4_res.get("ok") else None
         },
         "core_web_vitals_field": field_summary,
-        "lighthouse_lab": lab_summary
+        "lighthouse_lab": lab_summary,
+        "bing_webmaster": integrations.bing_webmaster(url),
+        "ahrefs_domain_rating": integrations.ahrefs_domain_rating(url),
+        "openpagerank": integrations.openpagerank(url),
     }
 
 

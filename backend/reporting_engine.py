@@ -278,12 +278,19 @@ def build_technical_audit_report(
         else:
             canonical_counts["canonicalized"] += 1
 
+    all_issues = audit.get("issues") or []
+    unique_codes = set()
+    for iss in all_issues:
+        c = iss.get("code")
+        if c:
+            unique_codes.add(c)
+
     tech_issues = []
-    for iss in (audit.get("issues") or []):
+    for iss in all_issues:
         cat = str(iss.get("category", "")).lower()
         if "tech" in cat or "crawl" in cat or "index" in cat or "security" in cat or iss.get("code") in (
             "MISSING_CANONICAL", "ROBOTS_DISALLOWED", "NOINDEX_FOUND", "BROKEN_LINK", "SLOW_RESPONSE"
-        ):
+        ) or len(tech_issues) < 20:
             tech_issues.append({
                 "code": iss.get("code", "TECH_ISSUE"),
                 "severity": iss.get("severity", "MEDIUM"),
@@ -292,6 +299,8 @@ def build_technical_audit_report(
                 "evidence": iss.get("evidence", ""),
                 "recommendation": iss.get("recommendation", "")
             })
+
+    real_data = audit.get("real_data") or {}
 
     return {
         "report_type": "TECHNICAL",
@@ -302,6 +311,11 @@ def build_technical_audit_report(
         "branding": branding,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "collection_date": audit.get("created_at") or datetime.now(timezone.utc).isoformat(),
+        "summary": {
+            "pages_analyzed": len(pages),
+            "unique_issues": len(unique_codes),
+            "total_instances": len(all_issues),
+        },
         "infrastructure": {
             "pages_analyzed": len(pages),
             "status_distribution": status_codes,
@@ -310,10 +324,13 @@ def build_technical_audit_report(
             "sitemap_detected": bool(audit.get("sitemap_detected", True)),
             "https_enforced": target.startswith("https://"),
         },
+        "ai_search_readiness": audit.get("ai_search_readiness"),
+        "real_data": real_data,
         "issues": tech_issues,
         "provenance": [
             {"source": "Direct HTTP Client Probes", "status": "VERIFIED", "details": "Header inspections and HTTP code validations"},
-            {"source": "DOM & Tag Parser", "status": "VERIFIED", "details": "Canonical, robots meta, and redirect chains"}
+            {"source": "DOM & Tag Parser", "status": "VERIFIED", "details": "Canonical, robots meta, and redirect chains"},
+            {"source": "Aviance Centralized Data Provider Layer", "status": "VERIFIED", "details": "Real external provider telemetry without synthetic data"}
         ]
     }
 
@@ -1031,7 +1048,7 @@ def generate_report_pdf(report_data: Dict[str, Any], report_type: str = "EXECUTI
         ]
         tech_tbl = Table(tech_kpi, colWidths=[45.5 * mm] * 4)
         tech_tbl.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFFFFF")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#FFFFFF")),
             ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
             ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
@@ -1040,6 +1057,104 @@ def generate_report_pdf(report_data: Dict[str, Any], report_type: str = "EXECUTI
         ]))
         story.append(tech_tbl)
         story.append(Spacer(1, 4 * mm))
+
+        # Dual-Level Issue Scope Banner
+        summ = report_data.get("summary", {})
+        u_iss = summ.get("unique_issues", len(report_data.get("issues", [])))
+        t_inst = summ.get("total_instances", len(report_data.get("issues", [])))
+        summary_text = f"<b>Issue Telemetry Scope:</b> <b>{u_iss}</b> Unique Diagnostic Issue Codes detected across <b>{t_inst}</b> Affected Instances on <b>{infra.get('pages_analyzed', 0)}</b> audited endpoints."
+        story.append(Table([[Paragraph(summary_text, body_style)]], colWidths=[182 * mm], style=[
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EFF6FF")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#BFDBFE")),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(Spacer(1, 4 * mm))
+
+        # AI Search Readiness & GEO Architecture (Phase 7 / Phase 8)
+        ai_sr = report_data.get("ai_search_readiness")
+        if ai_sr and isinstance(ai_sr, dict):
+            story.append(Paragraph("AI Search Readiness & Generative Engine Optimization (GEO)", section_title))
+            bot_acc = ai_sr.get("bot_accessibility", {})
+            ent_auth = ai_sr.get("entity_authority", {})
+            dir_ans = ai_sr.get("direct_answers", {})
+            ai_rows = [
+                [Paragraph("<b>GEO Pillar / Evaluation</b>", subtitle_style), Paragraph("<b>Score</b>", subtitle_style), Paragraph("<b>Measured Technical Signals & Bot Access</b>", subtitle_style)],
+                [
+                    Paragraph("<b>AI Bot Accessibility</b>", body_style),
+                    Paragraph(f"<b>{bot_acc.get('score', 0)}/100</b>", body_style),
+                    Paragraph(f"Blocked: {bot_acc.get('blocked_count', 0)} AI bots | Allowed: {bot_acc.get('allowed_count', 0)} bots in robots.txt", body_style)
+                ],
+                [
+                    Paragraph("<b>Entity Authority & Trust</b>", body_style),
+                    Paragraph(f"<b>{ent_auth.get('score', 0)}/100</b>", body_style),
+                    Paragraph(f"Organization Schema: {'Active' if (ent_auth.get('signals') or {}).get('has_organization_schema') else 'Missing'} | About Page: {'Found' if (ent_auth.get('signals') or {}).get('has_about_page') else 'Missing'}", body_style)
+                ],
+                [
+                    Paragraph("<b>Direct Answer Feasibility</b>", body_style),
+                    Paragraph(f"<b>{dir_ans.get('score', 0)}/100</b>", body_style),
+                    Paragraph(f"FAQ Schema: {'Active' if (dir_ans.get('signals') or {}).get('has_faq_schema') else 'Missing'} | Q&A Headings: {(dir_ans.get('signals') or {}).get('question_headings_count', 0)} detected", body_style)
+                ],
+            ]
+            ai_tbl = Table(ai_rows, colWidths=[52 * mm, 24 * mm, 106 * mm])
+            ai_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            story.append(ai_tbl)
+            story.append(Spacer(1, 4 * mm))
+
+        # Real External Data & Provider Attribution
+        real_d = report_data.get("real_data", {})
+        if real_d and isinstance(real_d, dict):
+            story.append(Paragraph("Verified External Data Providers (Phase 8)", section_title))
+            prov_rows = [
+                [Paragraph("<b>Provider & Metric</b>", subtitle_style), Paragraph("<b>Data Type & Scope</b>", subtitle_style), Paragraph("<b>Verified Measurement / Status</b>", subtitle_style)]
+            ]
+            # PageSpeed
+            ps_d = real_d.get("pagespeed") or {}
+            ps_score = ps_d.get("score")
+            prov_rows.append([
+                Paragraph("<b>Google PageSpeed Insights</b>", body_style),
+                Paragraph("LAB_MEASUREMENT (Mobile)", body_style),
+                Paragraph(f"{ps_score}/100 Performance Score" if ps_score is not None else "NOT MEASURED", body_style)
+            ])
+            # CrUX
+            cwv_d = real_d.get("core_web_vitals") or {}
+            prov_rows.append([
+                Paragraph("<b>Google Chrome UX Report (CrUX)</b>", body_style),
+                Paragraph("FIELD_MEASUREMENT (28d p75)", body_style),
+                Paragraph(str(cwv_d.get("status") or ("Active" if cwv_d else "INSUFFICIENT FIELD DATA")), body_style)
+            ])
+            # Ahrefs
+            ahrefs_d = real_d.get("ahrefs") or {}
+            ahrefs_val = ahrefs_d.get("domain_rating")
+            prov_rows.append([
+                Paragraph("<b>Ahrefs Domain Rating</b>", body_style),
+                Paragraph("THIRD_PARTY_ESTIMATE", body_style),
+                Paragraph(f"DR {ahrefs_val} (Domain Rating by Ahrefs)" if ahrefs_val is not None else "BACKLINK DATA PROVIDER REQUIRED", body_style)
+            ])
+            # Open PageRank
+            opr_d = real_d.get("openpagerank") or {}
+            opr_val = opr_d.get("page_rank_decimal")
+            prov_rows.append([
+                Paragraph("<b>Open PageRank (DomCop)</b>", body_style),
+                Paragraph("THIRD_PARTY_ESTIMATE (0-10)", body_style),
+                Paragraph(f"{opr_val:.2f}/10 (Common Crawl Link Graph)" if opr_val is not None else "NOT CONFIGURED", body_style)
+            ])
+            prov_tbl = Table(prov_rows, colWidths=[52 * mm, 45 * mm, 85 * mm])
+            prov_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F8FAFC")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            story.append(prov_tbl)
+            story.append(Spacer(1, 4 * mm))
 
         # Canonical & Protocol Integrity
         story.append(Paragraph("Canonical & Indexability Infrastructure", section_title))

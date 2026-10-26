@@ -3387,9 +3387,11 @@ def preview_report(token: str, db: Session = Depends(get_db), current_admin: Adm
 # PHASE 10: PROFESSIONAL REPORT GENERATION APIs
 # -----------------------------------------------------------------------------
 
-def _get_agency_branding_db(db: Session) -> dict[str, Any]:
-    row = db.query(AgencyBranding).first()
+def _get_agency_branding_db(db: Optional[Session]) -> dict[str, Any]:
     defaults = reporting_engine.get_default_branding()
+    if db is None:
+        return defaults
+    row = db.query(AgencyBranding).first()
     if not row:
         row = AgencyBranding(
             agency_name=defaults["agency_name"],
@@ -5668,11 +5670,18 @@ def crawl(req: AuditRequest, progress_cb=None, cancel_event=None) -> dict[str, A
     result["render"] = render
     run_spec_engine(result, probes=probes, sitemap_full={"files":sitemap.get("files",[]),"urls":sitemap.get("urls",[]),"lastmod":sitemap.get("lastmod",{}),"detected":sitemap.get("detected","")},
                     robots_full=robots, sitemap_sample=sitemap_sample, render=render, profile=req.vertical_profile, run_ai=req.run_ai, emit=emit)
+    try:
+        from .seo_engine.ai_readiness import evaluate_ai_search_readiness
+        result["ai_search_readiness"] = evaluate_ai_search_readiness(start, pages, robots, sitemap)
+    except Exception as exc:
+        logger.warning("AI Search Readiness evaluation error: %s", exc)
+        result["ai_search_readiness"] = None
+
     result["is_cached"] = False
     result["audit_performed_at"] = datetime.now(timezone.utc).isoformat()
     result["cache_age_seconds"] = 0
     result["cache_expires_in_seconds"] = int(AUDIT_CACHE_HOURS * 3600)
-    result["report_formats"]=["client","full","developer","recommendations","executive","keywords","social","indexing","json","csv","bundle"]
+    result["report_formats"]=["client","technical","technical_audit","full","developer","recommendations","executive","keywords","social","indexing","json","csv","bundle"]
     emit({"phase":"completed","pages":len(pages),"queued":len(queue),"in_flight":0,"current_url":"","status":0,"issues":len(result.get("issues",[])),"links_checked":len(link_results),"links_total":len(targets),"resources_checked":len(resource_results),"resources_total":min(len({r.get('url') for r in resources if r.get('url')}),req.resource_check_limit),"message":"Audit complete. Real fetched data and report-ready results assembled."})
     return result
 
@@ -5866,6 +5875,8 @@ def report_filename(host: str, report_type: str) -> str:
         "keywords": f"aviance-seo-keywords-topics-{safe}.pdf",
         "social": f"aviance-seo-social-hashtags-{safe}.pdf",
         "indexing": f"aviance-seo-indexing-crawl-{safe}.pdf",
+        "technical": f"esupport-seo-technical-audit-{safe}.pdf",
+        "technical_audit": f"esupport-seo-technical-audit-{safe}.pdf",
     }
     return names.get(report_type, names["client"] if report_type == "client" else names["full"])
 
@@ -6467,11 +6478,16 @@ def build_client_summary_pdf(audit: dict[str, Any]) -> bytes:
 
 
 def build_special_report_pdf(audit: dict[str, Any], report_type: str) -> bytes:
-    if report_type in ("full", "comprehensive"):
+    clean_type = (report_type or "full").lower().strip()
+    if clean_type in ("full", "comprehensive"):
         from .comprehensive_report import build_comprehensive_pdf
         return build_comprehensive_pdf(audit)
-    if report_type == "client":
+    if clean_type == "client":
         return build_client_summary_pdf(audit)
+    if clean_type in ("technical", "technical_audit"):
+        from . import reporting_engine
+        rep_data = reporting_engine.generate_report_data("TECHNICAL", audit)
+        return reporting_engine.generate_report_pdf(rep_data, "TECHNICAL")
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), rightMargin=12*mm, leftMargin=12*mm, topMargin=14*mm, bottomMargin=14*mm,
                             title=f"Aviance {report_type.title()} Report", author="Aviance SEO Pro Max")
@@ -7576,6 +7592,7 @@ class IntegrationSettingsRequest(BaseModel):
     pagespeed_api_key: str | None = None
     openpagerank_api_key: str | None = None
     bing_api_key: str | None = None
+    ahrefs_api_key: str | None = None
 
 
 @app.post("/api/integrations/settings")
@@ -7583,7 +7600,8 @@ def update_integrations_settings(req: IntegrationSettingsRequest, current_admin:
     new_status = integrations.update_credentials(
         pagespeed_api_key=req.pagespeed_api_key,
         openpagerank_api_key=req.openpagerank_api_key,
-        bing_api_key=req.bing_api_key
+        bing_api_key=req.bing_api_key,
+        ahrefs_api_key=req.ahrefs_api_key,
     )
     env_path = ROOT / ".env"
     if env_path.exists():
@@ -7598,12 +7616,42 @@ def update_integrations_settings(req: IntegrationSettingsRequest, current_admin:
                     content = re.sub(r"^BING_API_KEY=.*$", f"BING_API_KEY={req.bing_api_key.strip()}", content, flags=re.MULTILINE)
                 else:
                     content += f"\nBING_API_KEY={req.bing_api_key.strip()}\n"
+            if req.ahrefs_api_key is not None:
+                if "AHREFS_API_KEY=" in content:
+                    content = re.sub(r"^AHREFS_API_KEY=.*$", f"AHREFS_API_KEY={req.ahrefs_api_key.strip()}", content, flags=re.MULTILINE)
+                else:
+                    content += f"\nAHREFS_API_KEY={req.ahrefs_api_key.strip()}\n"
             env_path.write_text(content, encoding="utf-8")
         except Exception as exc:
             logger.warning("Could not write updated integration keys to .env: %s", exc)
 
     invalidate_dashboard_cache()
     return {"status": "success", "integrations": new_status}
+
+
+@app.post("/api/integrations/ahrefs")
+def integrations_ahrefs(req: IntegrationTarget, current_admin: AdminUser = Depends(require_permission("audits.run"))):
+    return integrations.ahrefs_domain_rating(_integration_target(req.url))
+
+
+@app.post("/api/integrations/bing")
+def integrations_bing(req: IntegrationTarget, current_admin: AdminUser = Depends(require_permission("audits.run"))):
+    return integrations.bing_webmaster(_integration_target(req.url))
+
+
+@app.post("/api/integrations/telemetry/domain")
+def domain_telemetry_endpoint(req: IntegrationTarget, current_admin: AdminUser = Depends(require_permission("audits.view"))):
+    from .seo_engine import data_providers
+    return data_providers.collect_domain_telemetry(_integration_target(req.url), days=getattr(req, "days", 28))
+
+
+@app.get("/api/integrations/telemetry/website/{website_id}")
+def website_telemetry_endpoint(website_id: int, days: int = Query(28, ge=1, le=480), db: Session = Depends(get_db), current_admin: AdminUser = Depends(require_permission("audits.view"))):
+    from .seo_engine import data_providers
+    website = db.query(Website).filter(Website.id == website_id).first()
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found.")
+    return data_providers.collect_domain_telemetry(website.url, website=website, days=days)
 
 
 # --- PUBLIC SEO SCANNER & LEAD SYSTEM ---
@@ -8365,7 +8413,13 @@ def report_pdf(payload: dict[str, Any], current_admin: Optional[AdminUser] = Dep
         audit = audit["audit_result"]
     if not isinstance(audit, dict) or not audit.get("target"):
         raise HTTPException(status_code=400, detail="A completed audit JSON payload is required")
-    report_type = report_type if report_type in {"full","developer","recommendations","recommendations_all","executive","keywords","social","indexing","client"} else "client" if report_type == "client" else "full"
+    clean_type = str(report_type).lower().strip()
+    valid_types = {
+        "full", "developer", "recommendations", "recommendations_all",
+        "executive", "keywords", "social", "indexing", "client",
+        "technical", "technical_audit"
+    }
+    report_type = clean_type if clean_type in valid_types else ("client" if clean_type == "client" else "full")
     assert_release_gate(audit)
     try:
         pdf = build_special_report_pdf(audit, report_type)
@@ -8384,23 +8438,25 @@ def download_public_report_pdf(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=410, detail="This report has been disabled.")
 
     audit_data = {}
+    snapshot = {}
     if report.audit and report.audit.result_json:
         try:
             audit_data = json.loads(report.audit.result_json) if isinstance(report.audit.result_json, str) else report.audit.result_json
         except Exception:
             pass
-    if not audit_data and report.snapshot_json:
+    if report.snapshot_json:
         try:
             snapshot = json.loads(report.snapshot_json) if isinstance(report.snapshot_json, str) else report.snapshot_json
-            audit_data = {
-                "target": snapshot.get("target_url"),
-                "score": snapshot.get("score"),
-                "scores": {"overall": snapshot.get("score")},
-                "stats": snapshot.get("stats", {}),
-                "seo_engine": {"score": {"overall": snapshot.get("score")}, "categories": snapshot.get("categories", [])},
-                "issues": snapshot.get("top_issues", []),
-                "recommendations": {"developer_plan": snapshot.get("recommendations", [])}
-            }
+            if not audit_data:
+                audit_data = {
+                    "target": snapshot.get("target_url"),
+                    "score": snapshot.get("score"),
+                    "scores": {"overall": snapshot.get("score")},
+                    "stats": snapshot.get("stats", {}),
+                    "seo_engine": {"score": {"overall": snapshot.get("score")}, "categories": snapshot.get("categories", [])},
+                    "issues": snapshot.get("top_issues", []),
+                    "recommendations": {"developer_plan": snapshot.get("recommendations", [])}
+                }
         except Exception:
             pass
 
@@ -8408,13 +8464,22 @@ def download_public_report_pdf(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Audit data not available for this report.")
 
     try:
-        pdf_bytes = build_client_summary_pdf(audit_data)
+        rep_type = str(snapshot.get("report_type") or getattr(report, "report_type", "") or "CLIENT").upper()
         host = urlparse(str(audit_data.get("target") or "website")).hostname or "site"
         safe = re.sub(r"[^a-zA-Z0-9_-]+", "-", host)
+        if rep_type in ("TECHNICAL", "TECHNICAL_AUDIT"):
+            from . import reporting_engine
+            rep_data = reporting_engine.generate_report_data("TECHNICAL", audit_data)
+            pdf_bytes = reporting_engine.generate_report_pdf(rep_data, "TECHNICAL")
+            fn = f"esupport-seo-technical-audit-{safe}.pdf"
+        else:
+            pdf_bytes = build_client_summary_pdf(audit_data)
+            fn = f"esupport-seo-client-report-{safe}.pdf"
+
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="esupport-seo-client-report-{safe}.pdf"'}
+            headers={"Content-Disposition": f'attachment; filename="{fn}"'}
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {exc}")

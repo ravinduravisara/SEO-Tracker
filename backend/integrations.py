@@ -50,6 +50,15 @@ OPR_ENDPOINT = "https://openpagerank.com/api/v1.0/getPageRank"
 BING_API_KEY = os.getenv("BING_API_KEY", "").strip()
 BING_BASE = "https://ssl.bing.com/webmaster/api.svc/json"
 
+AHREFS_API_KEY = os.getenv("AHREFS_API_KEY", "").strip()
+AHREFS_BASE = "https://api.ahrefs.com/v3"
+
+CRUX_API_KEY = os.getenv("CRUX_API_KEY", "").strip()
+CRUX_ENDPOINT = "https://chromeuxreport.googleapis.com/v1/records:queryRecord"
+
+GOOGLE_ADS_DEVELOPER_TOKEN = os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN", "").strip()
+GOOGLE_ADS_CUSTOMER_ID = os.getenv("GOOGLE_ADS_CUSTOMER_ID", "").strip()
+
 PSI_ENDPOINT = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
 GSC_BASE = "https://www.googleapis.com/webmasters/v3"
 GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly"
@@ -106,8 +115,26 @@ def bing_configured() -> bool:
     return bool(BING_API_KEY)
 
 
-def update_credentials(*, pagespeed_api_key: str | None = None, openpagerank_api_key: str | None = None, bing_api_key: str | None = None) -> dict[str, Any]:
-    global PAGESPEED_API_KEY, OPENPAGERANK_API_KEY, BING_API_KEY
+def ahrefs_configured() -> bool:
+    return bool(AHREFS_API_KEY)
+
+
+def crux_configured() -> bool:
+    return bool(CRUX_API_KEY or PAGESPEED_API_KEY)
+
+
+def keyword_planner_configured() -> bool:
+    return bool(GOOGLE_ADS_DEVELOPER_TOKEN and GOOGLE_ADS_CUSTOMER_ID)
+
+
+def update_credentials(
+    *,
+    pagespeed_api_key: str | None = None,
+    openpagerank_api_key: str | None = None,
+    bing_api_key: str | None = None,
+    ahrefs_api_key: str | None = None,
+) -> dict[str, Any]:
+    global PAGESPEED_API_KEY, OPENPAGERANK_API_KEY, BING_API_KEY, AHREFS_API_KEY
     if pagespeed_api_key is not None:
         PAGESPEED_API_KEY = pagespeed_api_key.strip()
         os.environ["PAGESPEED_API_KEY"] = PAGESPEED_API_KEY
@@ -117,6 +144,9 @@ def update_credentials(*, pagespeed_api_key: str | None = None, openpagerank_api
     if bing_api_key is not None:
         BING_API_KEY = bing_api_key.strip()
         os.environ["BING_API_KEY"] = BING_API_KEY
+    if ahrefs_api_key is not None:
+        AHREFS_API_KEY = ahrefs_api_key.strip()
+        os.environ["AHREFS_API_KEY"] = AHREFS_API_KEY
     return status()
 
 
@@ -139,17 +169,23 @@ def status() -> dict[str, Any]:
         "pagespeed": {"configured": True, "has_api_key": bool(PAGESPEED_API_KEY),
                       "mode": ps_mode,
                       "note": ps_note},
+        "crux": {"configured": crux_configured(),
+                 "note": "Genuine 28-day rolling real-user Core Web Vitals (CrUX p75) from Google Chrome users."},
         "search_console": {"configured": gsc_configured(), "service_account_email": gsc_email,
                            "note": "Add the service-account email as a user on each Search Console property."},
         "google_analytics_4": {"configured": ga4_configured(), "property_id": GA4_PROPERTY_ID,
                                "note": "Google Analytics 4 Data API via service account or per-website property ID."},
         "bing_webmaster": {"configured": bing_configured(),
                            "note": "Free. Real Bing crawl stats and query telemetry. Set BING_API_KEY in .env."},
+        "ahrefs": {"configured": ahrefs_configured(),
+                   "note": "Free Domain Rating API v3. Set AHREFS_API_KEY in .env."},
         "openpagerank": {"configured": openpagerank_configured(),
                          "note": "Free. Domain link authority (0-10) from the Common Crawl link graph. Get a key at openpagerank.com."},
+        "google_keyword_planner": {"configured": keyword_planner_configured(),
+                                   "note": "Requires approved Google Ads API developer token. Displayed as NOT CONNECTED if unapproved."},
         "dataforseo": {"configured": dataforseo_configured(), "location_code": DATAFORSEO_LOCATION_CODE,
                        "language_code": DATAFORSEO_LANGUAGE_CODE,
-                       "note": "Paid API: every uncached call costs credits. Backlinks needs a Backlinks API subscription."},
+                       "note": "Paid API: every uncached call costs credits. Disabled unless explicitly configured."},
         "ollama": {"configured": ollama_configured(), "model": OLLAMA_MODEL,
                    "has_api_key": bool(OLLAMA_API_KEY),
                    "note": f"Ollama model '{OLLAMA_MODEL}' connected."},
@@ -641,6 +677,93 @@ def openpagerank(target_url: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Ahrefs Free Domain Rating (API v3)
+# ---------------------------------------------------------------------------
+def ahrefs_domain_rating(target_url: str) -> dict[str, Any]:
+    """
+    Retrieve Domain Rating (DR) and Ahrefs Rank from official Ahrefs API v3.
+    Mandatory attribution: 'Domain Rating by Ahrefs'.
+    Free endpoint does not return full backlink lists.
+    """
+    domain = bare_domain(target_url)
+    if not ahrefs_configured():
+        return {
+            "ok": False,
+            "configured": False,
+            "target": domain,
+            "error": "AHREFS_API_KEY not configured. Set AHREFS_API_KEY in .env for official Ahrefs Domain Rating.",
+            "attribution": "Domain Rating by Ahrefs",
+            "backlink_provider_required": True
+        }
+
+    def run() -> dict[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {AHREFS_API_KEY}",
+            "Accept": "application/json"
+        }
+        url = f"{AHREFS_BASE}/site-explorer/domain-rating"
+        r = requests.get(url, params={"target": domain}, headers=headers, timeout=20)
+        if r.status_code == 200:
+            data = r.json()
+            dr_obj = data.get("domain_rating") or {}
+            dr_val = dr_obj.get("domain_rating")
+            ar_val = dr_obj.get("ahrefs_top")
+            return {
+                "ok": True,
+                "configured": True,
+                "target": domain,
+                "domain_rating": round(float(dr_val), 1) if dr_val is not None else None,
+                "ahrefs_rank": int(ar_val) if ar_val is not None else None,
+                "attribution": "Domain Rating by Ahrefs",
+                "source": "Ahrefs API v3 (Site Explorer Domain Rating)",
+                "backlink_provider_required": True,
+                "note": "Free Domain Rating endpoint does not include full backlink lists. Backlink data provider required for granular link graphs."
+            }
+        elif r.status_code in (401, 403):
+            return {
+                "ok": False,
+                "configured": True,
+                "target": domain,
+                "status": "UNAUTHORIZED",
+                "error": f"Ahrefs API authorization failed (HTTP {r.status_code}). Check AHREFS_API_KEY.",
+                "attribution": "Domain Rating by Ahrefs",
+                "backlink_provider_required": True
+            }
+        elif r.status_code == 429:
+            return {
+                "ok": False,
+                "configured": True,
+                "target": domain,
+                "status": "RATE_LIMITED",
+                "error": "Ahrefs API rate limit reached. Cached data will be used if available.",
+                "attribution": "Domain Rating by Ahrefs",
+                "backlink_provider_required": True
+            }
+        else:
+            return {
+                "ok": False,
+                "configured": True,
+                "target": domain,
+                "status": "UNAVAILABLE",
+                "error": f"Ahrefs API returned HTTP {r.status_code}: {r.text[:200]}",
+                "attribution": "Domain Rating by Ahrefs",
+                "backlink_provider_required": True
+            }
+
+    try:
+        return _cached("ahrefs_dr", [domain], run)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "configured": True,
+            "target": domain,
+            "error": str(exc),
+            "attribution": "Domain Rating by Ahrefs",
+            "backlink_provider_required": True
+        }
+
+
+# ---------------------------------------------------------------------------
 # Bing Webmaster Tools (free)
 # ---------------------------------------------------------------------------
 def bing_webmaster(target_url: str) -> dict[str, Any]:
@@ -658,35 +781,52 @@ def bing_webmaster(target_url: str) -> dict[str, Any]:
 
     def run() -> dict[str, Any]:
         try:
-            r = requests.get(
+            crawl_res = requests.get(
                 f"{BING_BASE}/GetCrawlStats",
                 params={"siteUrl": site_url, "apikey": BING_API_KEY},
                 timeout=30
             )
-            if r.status_code == 200:
-                data = r.json()
+            query_res = requests.get(
+                f"{BING_BASE}/GetQueryStats",
+                params={"siteUrl": site_url, "apikey": BING_API_KEY},
+                timeout=30
+            )
+            crawl_ok = (crawl_res.status_code == 200)
+            query_ok = (query_res.status_code == 200)
+            if crawl_ok or query_ok:
+                crawl_data = crawl_res.json().get("d", []) if crawl_ok else []
+                query_data = query_res.json().get("d", []) if query_ok else []
                 return {
                     "ok": True,
                     "configured": True,
                     "site_url": site_url,
-                    "crawl_stats": data.get("d", []),
-                    "source": "Bing Webmaster Tools JSON API",
+                    "crawl_stats": crawl_data,
+                    "query_stats": query_data,
+                    "source": "BING SEARCH PERFORMANCE (Bing Webmaster Tools JSON API)",
+                }
+            elif crawl_res.status_code in (401, 403) or query_res.status_code in (401, 403):
+                return {
+                    "ok": False,
+                    "configured": True,
+                    "status": "UNAUTHORIZED",
+                    "error": "Bing API authorization failed. Verify BING_API_KEY.",
+                    "source": "BING SEARCH PERFORMANCE (Bing Webmaster Tools JSON API)",
                 }
             else:
                 return {
                     "ok": False,
                     "configured": True,
-                    "status": "Unavailable",
-                    "error": f"Bing API returned status HTTP {r.status_code}",
-                    "source": "Bing Webmaster Tools JSON API",
+                    "status": "UNAVAILABLE",
+                    "error": f"Bing API returned status HTTP {crawl_res.status_code}",
+                    "source": "BING SEARCH PERFORMANCE (Bing Webmaster Tools JSON API)",
                 }
         except Exception as exc:
             return {
                 "ok": False,
                 "configured": True,
-                "status": "Unavailable",
+                "status": "UNAVAILABLE",
                 "error": str(exc),
-                "source": "Bing Webmaster Tools JSON API",
+                "source": "BING SEARCH PERFORMANCE (Bing Webmaster Tools JSON API)",
             }
 
     try:
