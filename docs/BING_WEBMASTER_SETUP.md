@@ -62,3 +62,4 @@ Deprecated SOAP and XML-RPC interfaces are completely avoided.
 | `HTTP 401 / 403` | `UNAUTHORIZED` | `⚠️ Unauthorized` | Verify API key and verify site ownership in Bing portal. |
 | Empty `d` list | `NO DATA` | `No Telemetry` | Site has not accumulated recent Bing search impressions. |
 | Network / Timeout | `UNAVAILABLE` | `⚠️ Unavailable` | Cached data will be displayed if within 24h TTL. |
+

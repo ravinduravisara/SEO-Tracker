@@ -6442,7 +6442,6 @@ class SEOAdminApp {
             }
         }
     }
-    }
 
     async fetchGooglePerformanceReport() {
         const wid = this.gperfState.websiteId;

@@ -94,3 +94,4 @@ To verify all provider connections, run the automated integration test suite:
 ./.venv/bin/python -m unittest tests/test_phase8_free_seo_apis.py
 ```
 Or check connection statuses directly through the web UI under **Google & Performance > ⚙️ API Connections**.
+

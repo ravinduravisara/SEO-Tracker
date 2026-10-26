@@ -95,3 +95,4 @@ In the SEO Tracker application:
 - **Client Isolation**: Client accounts are strictly sandboxed. The application enforces database-level authorization checks on all `/api/google/*` routes to prevent cross-client data leakage.
 - **Credential Protection**: Private keys and service account tokens are never returned to frontend JavaScript and are never exposed in audit logs.
 - **Accurate Metric Labeling**: Search Console average position is clearly labeled as aggregated query impressions over time, not an exact live rank. GA4 sessions are kept distinct from Search Console clicks.
+

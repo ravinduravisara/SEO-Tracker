@@ -115,3 +115,4 @@ OK (100% Pass Rate)
 - `tests/test_phase8_free_seo_apis.py`: 12/12 passing (PageSpeed mobile & desktop, CrUX field scope, GSC authorized vs unauthorized, GA4 traffic, Bing crawl & queries, Ahrefs DR with mandatory attribution, Open PageRank scale, Keyword Planner access guard).
 - `tests/test_phase7_professional_audit.py`: 15/15 passing (multi-report generation, regression tests for `POST /api/report/pdf` technical report).
 - Full regression across all existing phases: 218 passing tests with 0 failures and 0 errors.
+

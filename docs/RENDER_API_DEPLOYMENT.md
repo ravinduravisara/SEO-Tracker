@@ -100,3 +100,4 @@ If any deployment issue arises:
 2. Locate the previous successful deploy.
 3. Click **Rollback to this deploy**.
 4. The database remains completely safe because no destructive migrations were executed.
+
