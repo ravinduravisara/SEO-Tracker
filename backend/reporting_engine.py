@@ -162,21 +162,29 @@ def normalize_branding(branding: Optional[Dict[str, Any]] = None) -> Dict[str, A
 
 
 def get_grade_band(score: Optional[float]) -> Dict[str, str]:
-    """Determines grade band and color code for an SEO score."""
+    """Determines letter grade, band, color code, and status for an SEO score."""
     if score is None:
-        return {"grade": "Unscorable", "color": "#94A3B8", "status": "NOT SCORED"}
+        return {"grade": "Unscorable", "letter_grade": "N/A", "display_grade": "Unscorable", "color": "#94A3B8", "status": "NOT SCORED"}
     s = float(score)
+    if s >= 95:
+        return {"grade": "Exceptional", "letter_grade": "A+", "display_grade": "A+ (Exceptional)", "color": "#059669", "status": "EXCEPTIONAL"}
     if s >= 90:
-        return {"grade": "Excellent", "color": "#10B981", "status": "EXCELLENT"}
+        return {"grade": "Excellent", "letter_grade": "A", "display_grade": "A (Excellent)", "color": "#10B981", "status": "EXCELLENT"}
+    if s >= 85:
+        return {"grade": "Very Good", "letter_grade": "A-", "display_grade": "A- (Very Good)", "color": "#14B8A6", "status": "VERY GOOD"}
     if s >= 80:
-        return {"grade": "Very Good", "color": "#06B6D4", "status": "VERY GOOD"}
+        return {"grade": "Good", "letter_grade": "B+", "display_grade": "B+ (Good)", "color": "#06B6D4", "status": "GOOD"}
+    if s >= 75:
+        return {"grade": "Above Average", "letter_grade": "B", "display_grade": "B (Above Average)", "color": "#2563EB", "status": "ABOVE AVERAGE"}
     if s >= 70:
-        return {"grade": "Good", "color": "#2563EB", "status": "GOOD"}
+        return {"grade": "Moderate", "letter_grade": "B-", "display_grade": "B- (Moderate)", "color": "#3B82F6", "status": "MODERATE"}
+    if s >= 65:
+        return {"grade": "Fair", "letter_grade": "C+", "display_grade": "C+ (Fair)", "color": "#F59E0B", "status": "FAIR"}
     if s >= 60:
-        return {"grade": "Needs Improvement", "color": "#F59E0B", "status": "NEEDS IMPROVEMENT"}
-    if s >= 40:
-        return {"grade": "Poor", "color": "#F97316", "status": "POOR"}
-    return {"grade": "Critical", "color": "#EF4444", "status": "CRITICAL"}
+        return {"grade": "Needs Improvement", "letter_grade": "C", "display_grade": "C (Needs Improvement)", "color": "#D97706", "status": "NEEDS IMPROVEMENT"}
+    if s >= 50:
+        return {"grade": "Poor", "letter_grade": "D", "display_grade": "D (Poor)", "color": "#F97316", "status": "POOR"}
+    return {"grade": "Critical", "letter_grade": "F", "display_grade": "F (Critical)", "color": "#EF4444", "status": "CRITICAL"}
 
 
 # -----------------------------------------------------------------------------
@@ -216,12 +224,27 @@ def build_executive_report(
         if len(top_wins) >= 5:
             break
 
+    scores_dict = audit.get("scores") or {}
+    tech_score = scores_dict.get("technical_health_score")
+    if tech_score is None:
+        tech_score = audit.get("technical_health_score")
+    if tech_score is None:
+        tech_score = score
+    letter = scores_dict.get("letter_grade") or audit.get("letter_grade") or band_info.get("letter_grade", "B")
+    coverage_pct = scores_dict.get("measurement_coverage_pct") or (audit.get("measurement_coverage") or {}).get("coverage_percentage") or 100.0
+    ruleset_ver = audit.get("seo_engine", {}).get("ruleset_version") or scores_dict.get("ruleset_version", "2.0.0")
+
     return {
         "report_type": "EXECUTIVE",
         "title": "Executive SEO Performance Report",
         "target": target,
         "score": score,
+        "letter_grade": letter,
+        "technical_health_score": tech_score,
+        "measurement_coverage_pct": coverage_pct,
+        "ruleset_version": ruleset_ver,
         "grade": band_info["grade"],
+        "display_grade": band_info.get("display_grade", f"Grade {letter} ({band_info['grade']})"),
         "grade_color": band_info["color"],
         "status": band_info["status"],
         "client_name": client_info.get("name", ""),
@@ -301,11 +324,26 @@ def build_technical_audit_report(
             })
 
     real_data = audit.get("real_data") or {}
+    scores_dict = audit.get("scores") or {}
+    tech_score = scores_dict.get("technical_health_score")
+    if tech_score is None:
+        tech_score = audit.get("technical_health_score")
+    if tech_score is None:
+        tech_score = audit.get("score") or scores_dict.get("overall") or 0
+    overall_score = audit.get("score") or scores_dict.get("overall") or 0
+    letter = scores_dict.get("letter_grade") or audit.get("letter_grade") or get_grade_band(overall_score).get("letter_grade", "B")
+    coverage_pct = scores_dict.get("measurement_coverage_pct") or (audit.get("measurement_coverage") or {}).get("coverage_percentage") or 100.0
+    ruleset_ver = audit.get("seo_engine", {}).get("ruleset_version") or scores_dict.get("ruleset_version", "2.0.0")
 
     return {
         "report_type": "TECHNICAL",
         "title": "Technical SEO Audit & Infrastructure Inspection",
         "target": target,
+        "score": overall_score,
+        "technical_health_score": tech_score,
+        "letter_grade": letter,
+        "measurement_coverage_pct": coverage_pct,
+        "ruleset_version": ruleset_ver,
         "client_name": client_info.get("name", ""),
         "company": client_info.get("company", ""),
         "branding": branding,
@@ -988,15 +1026,19 @@ def generate_report_pdf(report_data: Dict[str, Any], report_type: str = "EXECUTI
     if clean_type == "EXECUTIVE":
         score_val = report_data.get("score", 0)
         grade_val = report_data.get("grade", "Good")
+        letter_val = report_data.get("letter_grade", "")
+        tech_score = report_data.get("technical_health_score", score_val)
+        cov_val = report_data.get("measurement_coverage_pct", 100)
         col_hex = report_data.get("grade_color", primary_color)
         summ = report_data.get("summary", {})
+        disp_grade = f"Grade {letter_val} ({grade_val})" if letter_val else grade_val
 
         kpi_data = [
             [
-                Paragraph(f"<b>Overall Score</b><br/><font size='18' color='{col_hex}'><b>{score_val}/100</b></font><br/>{grade_val}", body_style),
-                Paragraph(f"<b>Pages Crawled</b><br/><font size='18'><b>{summ.get('pages_crawled', 0)}</b></font><br/>Pages Analyzed", body_style),
+                Paragraph(f"<b>Overall Score</b><br/><font size='18' color='{col_hex}'><b>{score_val}/100</b></font><br/>{disp_grade}", body_style),
+                Paragraph(f"<b>Technical Health</b><br/><font size='18' color='#06B6D4'><b>{tech_score}/100</b></font><br/>Infrastructure Quality", body_style),
+                Paragraph(f"<b>Audit Coverage</b><br/><font size='18' color='#10B981'><b>{cov_val}%</b></font><br/>Verified Criteria", body_style),
                 Paragraph(f"<b>Critical Issues</b><br/><font size='18' color='#DC2626'><b>{summ.get('critical_issues', 0)}</b></font><br/>Immediate Action", body_style),
-                Paragraph(f"<b>High Issues</b><br/><font size='18' color='#EA580C'><b>{summ.get('high_issues', 0)}</b></font><br/>Important Fixes", body_style),
             ]
         ]
         kpi_tbl = Table(kpi_data, colWidths=[45.5 * mm] * 4)
@@ -1037,12 +1079,16 @@ def generate_report_pdf(report_data: Dict[str, Any], report_type: str = "EXECUTI
         infra = report_data.get("infrastructure", {})
         status_dist = infra.get("status_distribution", {})
         canon_dist = infra.get("canonical_distribution", {})
+        tech_score = report_data.get("technical_health_score") or report_data.get("score", 0)
+        overall_score = report_data.get("score", 0)
+        letter_val = report_data.get("letter_grade", "")
+        cov_val = report_data.get("measurement_coverage_pct", 100)
 
         tech_kpi = [
             [
-                Paragraph(f"<b>Pages Analyzed</b><br/><font size='18'><b>{infra.get('pages_analyzed', 0)}</b></font><br/>Crawl Depth Scanned", body_style),
+                Paragraph(f"<b>Technical Health</b><br/><font size='18' color='#06B6D4'><b>{tech_score}/100</b></font><br/>Infrastructure Score", body_style),
+                Paragraph(f"<b>Overall Score</b><br/><font size='18' color='{primary_color}'><b>{overall_score}/100</b></font><br/>Grade {letter_val}", body_style),
                 Paragraph(f"<b>HTTP 200 OK</b><br/><font size='18' color='#10B981'><b>{status_dist.get('200', 0)}</b></font><br/>Healthy Responses", body_style),
-                Paragraph(f"<b>Redirects (3xx)</b><br/><font size='18' color='#F59E0B'><b>{status_dist.get('3xx', 0)}</b></font><br/>Hops / Destinations", body_style),
                 Paragraph(f"<b>Errors (4xx/5xx)</b><br/><font size='18' color='#DC2626'><b>{status_dist.get('4xx', 0) + status_dist.get('5xx', 0)}</b></font><br/>Client / Server Errors", body_style),
             ]
         ]
@@ -1062,7 +1108,8 @@ def generate_report_pdf(report_data: Dict[str, Any], report_type: str = "EXECUTI
         summ = report_data.get("summary", {})
         u_iss = summ.get("unique_issues", len(report_data.get("issues", [])))
         t_inst = summ.get("total_instances", len(report_data.get("issues", [])))
-        summary_text = f"<b>Issue Telemetry Scope:</b> <b>{u_iss}</b> Unique Diagnostic Issue Codes detected across <b>{t_inst}</b> Affected Instances on <b>{infra.get('pages_analyzed', 0)}</b> audited endpoints."
+        ruleset_ver = report_data.get("ruleset_version", "2.0.0")
+        summary_text = f"<b>Ruleset:</b> v{ruleset_ver} | <b>Coverage:</b> {cov_val}% | <b>Issue Scope:</b> <b>{u_iss}</b> Unique Diagnostic Codes across <b>{t_inst}</b> Affected Instances on <b>{infra.get('pages_analyzed', 0)}</b> audited endpoints."
         story.append(Table([[Paragraph(summary_text, body_style)]], colWidths=[182 * mm], style=[
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#EFF6FF")),
             ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#BFDBFE")),

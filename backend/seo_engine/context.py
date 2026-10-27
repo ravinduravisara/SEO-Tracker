@@ -218,7 +218,13 @@ def build_context(audit: dict[str, Any], probes: Optional[dict], sitemap_full: O
         market_names = [n for n, c in COUNTRY_NAMES.items() if c == market_code and len(n) > 3]
     has_address = any((p.get("ev") or {}).get("address_text") or (p.get("ev") or {}).get("schema_address") for p in html)
     has_local_schema = any(any(t in LOCAL_TYPES for t in node_types(n)) for n in schema_nodes_of(html))
-    is_local = bool(has_address or has_local_schema or tld in COUNTRY_BY_TLD)
+    # Non-physical digital/online businesses (agencies, SaaS, marketplaces, publishers) without physical retail storefronts
+    # should not be forced into physical brick-and-mortar storefront checks (opening hours, walk-in map embed, local postal NAP).
+    is_pure_digital = (profile in ("agency_services", "software_saas", "digital_asset_marketplace", "publisher_blog")) and not any(
+        any(t in ("store", "restaurant", "dentist", "hotel", "lodgingbusiness", "autorepair", "beautysalon", "plumber", "electrician") for t in node_types(n))
+        for n in schema_nodes_of(html)
+    )
+    is_local = bool((has_address or has_local_schema or (tld in COUNTRY_BY_TLD and not is_pure_digital)) and not is_pure_digital)
 
     inbound: Counter = Counter()
     for p in html:
@@ -241,29 +247,67 @@ def build_context(audit: dict[str, Any], probes: Optional[dict], sitemap_full: O
 
 
 def detect_profile(audit: dict[str, Any]) -> tuple[str, str]:
-    """Vertical slot: b2b_product, travel_tourism, ecommerce_retail, or digital_asset_marketplace."""
+    """Vertical slot: agency_services, software_saas, ecommerce, travel_tourism,
+    digital_asset_marketplace, local_services, publisher_blog, or b2b_product."""
     pages = [p for p in audit.get("pages") or [] if isinstance(p, dict) and not p.get("error")]
-    travel = shop = digital = 0
+    travel = shop = digital = agency = saas = publisher = local_trade = 0
     for p in pages:
         path = urlparse(p.get("url", "")).path.lower()
         ev = p.get("ev") or {}
         types = " ".join(str(t).lower() for t in p.get("schema_types") or [])
-        heads = " ".join([p.get("title") or ""] + list(p.get("h1") or [])).lower()
+        heads = " ".join([p.get("title") or ""] + [p.get("description") or ""] + list(p.get("h1") or []) + list(p.get("h2") or [])[:6]).lower()
+        links = " ".join(l if isinstance(l, str) else l.get("href", "") for l in (p.get("internal_links") or p.get("links") or [])).lower()
+
+        # Agency & professional services signals
+        if re.search(r"/(services?|portfolio|case-studies|our-work|solutions|seo|web-development|marketing|consulting)(/|-|$)", path) or re.search(r"/(services?|portfolio|case-studies|our-work)(/|-|$)", links):
+            agency += 2
+        agency_matches = len(re.findall(r"\b(digital marketing|seo agency|seo services|web design|web development|software development|creative agency|marketing solutions|consulting services)\b", heads))
+        if agency_matches:
+            agency += min(4, agency_matches * 2)
+
+        # SaaS & Software signals
+        if re.search(r"/(pricing|integrations|features|platform|api|docs|documentation|trial|signup|login)(/|-|$)", path) or "softwareapplication" in types:
+            saas += 2
+        if re.search(r"\b(saas|cloud platform|software platform|api access|free trial|workflow automation|enterprise software)\b", heads):
+            saas += 2
+
+        # Travel & tourism signals
         if re.search(r"/(tours?|packages?|safari|excursions?|itinerar|day-trips?|holidays?)(/|-|$)", path) or "touristtrip" in types or "travelagency" in types:
             travel += 2
         if re.search(r"\b(tours?|safari|holiday packages?|travel|itinerary|excursion)\b", heads):
             travel += 1
+
+        # eCommerce signals
         cs = p.get("commerce_signals") or {}
         if cs.get("add_to_cart") or cs.get("platform") in ("shopify", "woocommerce", "magento") or ("product" in types and cs.get("has_price_schema")) or re.search(r"/(cart|checkout|shop|product-category|products)(/|$)", path):
             shop += 2
         if ev.get("cart"):
             shop += 1
+
+        # Digital asset marketplace signals
         if re.search(r"\b(after effects|mogrt|premiere pro|templates|motion graphics|video editing assets|royalty-free music)\b", heads + " " + path):
             digital += 2
+
+        # Publisher / Blog signals
+        if re.search(r"/(blog|news|articles?|editorial|category|author)/", path) or "newsarticle" in types or "blogposting" in types:
+            publisher += 1
+
+        # Local trade signals
+        if any(t in ("dentist", "restaurant", "hotel", "autorepair", "plumber", "electrician", "medicalbusiness") for t in types.split()):
+            local_trade += 3
+
     if digital >= 4 and digital >= shop:
         return "digital_asset_marketplace", f"digital asset signals={digital} (templates, MOGRTs, motion graphics)"
-    if shop >= 3 and shop >= travel:
+    if shop >= 3 and shop >= travel and shop >= agency:
         return "ecommerce", f"shop signals={shop} (cart / platform / priced Product markup)"
-    if travel >= 3:
+    if travel >= 3 and travel >= agency:
         return "travel_tourism", f"travel signals={travel} (tour/package URLs, travel headings, TouristTrip markup)"
-    return "b2b_product", f"default profile (travel signals={travel}, shop signals={shop})"
+    if agency >= 3 and agency >= saas:
+        return "agency_services", f"agency signals={agency} (service pages, portfolio/case studies, agency offerings)"
+    if saas >= 3:
+        return "software_saas", f"saas signals={saas} (features, pricing tiers, platform solutions)"
+    if local_trade >= 2:
+        return "local_services", f"local trade signals={local_trade} (local storefront/trade schema)"
+    if publisher >= 4:
+        return "publisher_blog", f"publisher signals={publisher} (articles, editorial archives, news schema)"
+    return "b2b_product", f"default profile (agency={agency}, saas={saas}, travel={travel}, shop={shop})"

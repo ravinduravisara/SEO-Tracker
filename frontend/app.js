@@ -2229,9 +2229,13 @@ class SEOAdminApp {
             <div class="grid" style="grid-template-columns: 260px 1fr; align-items:start; gap:24px; margin-bottom:24px;">
                 <div style="text-align:center;">
                     <div style="font-size:64px; font-weight:900; color:${color}; line-height:1;">${sc.overall ?? "–"}<small style="font-size:24px; color:var(--text-muted);">/100</small></div>
-                    <div style="font-weight:800; font-size:18px; margin-top:6px; color:${color};">${esc(sc.grade || "")}</div>
-                    <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Maturity level ${esc(sc.maturity_level)} — ${esc(sc.maturity_label || "")}</div>
-                    <div style="font-size:11px; color:var(--text-muted); margin-top:8px;">round_half_up(${fmt(sc.weighted_sum)} / 100) • ruleset ${esc(eng.ruleset_version)}</div>
+                    <div style="font-weight:800; font-size:20px; margin-top:6px; color:${color};">${esc(sc.letter_grade ? `${sc.letter_grade} • ${sc.grade || ''}` : (sc.grade || ""))}</div>
+                    <div style="display:flex; justify-content:center; gap:8px; margin-top:10px; font-size:12px; flex-wrap:wrap;">
+                        <span class="badge" style="background:#EEF2FF; color:#4338CA; font-weight:600; padding:4px 10px; border-radius:6px;">Technical Health: ${sc.technical_health_score ?? sc.overall ?? "–"}%</span>
+                        <span class="badge" style="background:#F1F5F9; color:#475569; font-weight:600; padding:4px 10px; border-radius:6px;">Coverage: ${sc.measurement_coverage_pct ?? 100}%</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">Maturity level ${esc(sc.maturity_level)} — ${esc(sc.maturity_label || "")}</div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">round_half_up(${fmt(sc.weighted_sum)} / 100) • ruleset ${esc(eng.ruleset_version || "2.0.0")}</div>
                     ${pot ? `<div style="margin-top:14px; padding:10px; border:1px dashed var(--border); border-radius:10px; font-size:12px;">
                         <b>Potential: ${esc(pot.overall)}/100 (${esc(pot.grade)})</b>, +${esc(pot.improvement_absolute)}<br>
                         <span style="color:var(--text-muted);">${esc(pot.disclaimer)}</span></div>` : ""}
@@ -3405,13 +3409,15 @@ class SEOAdminApp {
         // 1. Health Score
         const health = data.seo_health || {};
         const scoreVal = health.score !== null && health.score !== undefined ? Math.round(health.score) : "--";
+        const techVal = health.technical_health_score !== null && health.technical_health_score !== undefined ? Math.round(health.technical_health_score) : scoreVal;
+        const letterGrade = health.letter_grade || health.grade || "N/A";
         if ($("doHealthScore")) $("doHealthScore").textContent = scoreVal !== "--" ? `${scoreVal}/100` : "--";
         if ($("doHealthGrade")) {
-            $("doHealthGrade").textContent = health.grade || "N/A";
+            $("doHealthGrade").textContent = `${letterGrade}${health.grade && health.grade !== letterGrade ? ` (${health.grade})` : ''}`;
             $("doHealthGrade").className = `badge ${scoreVal >= 80 ? 'badge-success' : scoreVal >= 60 ? 'badge-warning' : 'badge-danger'}`;
         }
         if ($("doMaturityLevel")) {
-            $("doMaturityLevel").textContent = health.maturity_label ? `Maturity: ${health.maturity_label}` : "Deterministic SEO Engine";
+            $("doMaturityLevel").textContent = `Technical Health: ${techVal}% • Coverage: ${health.measurement_coverage_pct ?? 100}%`;
         }
         if ($("doHealthDate")) {
             const dt = health.observation_date ? new Date(health.observation_date).toLocaleDateString() : "--";

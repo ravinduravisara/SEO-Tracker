@@ -1873,6 +1873,10 @@ def domain_overview_endpoint(
     seo_health = {
         "score": latest_audit.score if latest_audit.score is not None else sc.get("overall"),
         "grade": sc.get("grade", "N/A"),
+        "letter_grade": sc.get("letter_grade") or sc.get("grade", "N/A"),
+        "technical_health_score": sc.get("technical_health_score") if sc.get("technical_health_score") is not None else (latest_audit.score if latest_audit.score is not None else sc.get("overall")),
+        "measurement_coverage_pct": sc.get("measurement_coverage_pct", 100),
+        "ruleset_version": eng.get("ruleset_version", "2.0.0"),
         "maturity_level": sc.get("maturity_level"),
         "maturity_label": sc.get("maturity_label"),
         "potential": sc.get("potential", {}).get("overall"),
@@ -4327,11 +4331,14 @@ def parse_page(requested_url: str, response: dict[str, Any]) -> dict[str, Any]:
             tag_name = h.name
             page[tag_name].append(text)
             page["heading_order"].append({"tag": tag_name, "text": text})
-        canon = soup.find("link", rel=lambda rel: rel and ("canonical" in rel if isinstance(rel, list) else "canonical" in str(rel).lower()), href=True)
-        if canon:
+        all_canons = soup.find_all("link", rel=lambda rel: rel and ("canonical" in rel if isinstance(rel, list) else "canonical" in str(rel).lower()), href=True)
+        if all_canons:
+            canon = all_canons[0]
             page["canonical"] = canonical_url(urljoin(final_url, canon.get("href")))
             page["canonical_host"] = urlparse(page["canonical"]).hostname or ""
             page["canonical_location"] = "head" if canon.find_parent("head") is not None else "body"
+            page["canonical_tags"] = [c.get("href") for c in all_canons]
+            page["canonical_count"] = len(all_canons)
         else:
             link_header = page.get("headers", {}).get("link", "")
             mcanon = re.search(r'''<([^>]+)>\s*;\s*rel=(?:"|')?canonical(?:"|')?''', link_header, re.I)
@@ -4339,6 +4346,8 @@ def parse_page(requested_url: str, response: dict[str, Any]) -> dict[str, Any]:
                 page["canonical"] = canonical_url(urljoin(final_url, mcanon.group(1)))
                 page["canonical_host"] = urlparse(page["canonical"]).hostname or ""
                 page["canonical_location"] = "http-link-header"
+                page["canonical_tags"] = [mcanon.group(1)]
+                page["canonical_count"] = 1
         for link in soup.find_all("link", href=True):
             rel = link.get("rel") or []
             rel_txt = " ".join(rel) if isinstance(rel, list) else str(rel)
@@ -5766,6 +5775,11 @@ def apply_engine_payload(audit: dict[str, Any], payload: dict[str, Any]) -> None
     audit["score"] = s["overall"]
     audit["scores"] = {
         "overall": s["overall"], "grade": s["grade"], "label": s["grade"],
+        "letter_grade": s.get("letter_grade") or s.get("grade"),
+        "technical_health_score": s.get("technical_health_score") if s.get("technical_health_score") is not None else s["overall"],
+        "technical_health": s.get("technical_health"),
+        "grade_details": s.get("grade_details"),
+        "measurement_coverage_pct": (payload.get("measurement_coverage") or {}).get("coverage_percentage") or s.get("measurement_coverage_pct"),
         "maturity_level": s.get("maturity_level"), "maturity_label": s.get("maturity_label"), "error": payload.get("error"),
         "weighted_sum": s.get("weighted_sum"), "formula": s.get("formula"), "ruleset_version": payload["ruleset_version"],
         "critical": summ["critical"], "high": summ["high"], "medium": summ["medium"], "low": summ["low"],
@@ -5785,10 +5799,12 @@ def apply_engine_payload(audit: dict[str, Any], payload: dict[str, Any]) -> None
     plan = [_engine_dev_plan(i) for i in payload["issues"]]
     unmeasured = len(payload["unmeasured"])
     prov = sum(1 for c in payload["categories"] if c["provisional"])
-    summary = payload.get("error") or (f"Overall SEO score {s['overall']}/100 ({s['grade']}; maturity level {s['maturity_level']} - {s['maturity_label']}). "
+    lg_str = f"Grade {s.get('letter_grade')}" if s.get("letter_grade") else s["grade"]
+    th_str = f"; Technical Health {s.get('technical_health_score')}/100" if s.get("technical_health_score") is not None else ""
+    summary = payload.get("error") or (f"Overall SEO score {s['overall']}/100 ({lg_str}{th_str}; maturity level {s['maturity_level']} - {s['maturity_label']}). "
                f"{summ['total']} issues: {summ['critical']} critical, {summ['high']} high, {summ['medium']} medium, {summ['low']} low. "
                f"{unmeasured} checks could not be measured with the available data; {prov} of 12 categories are provisional.") if s["overall"] is not None else \
-              "No category could be scored with the available data."
+               "No category could be scored with the available data."
     audit["recommendations"] = {"executive_summary": summary, "priorities": plan, "developer_plan": plan,
                                 "quick_wins": [q["task"] for q in payload["quick_wins"]], "quick_win_table": payload["quick_wins"],
                                 "quick_win_totals": payload["quick_win_totals"]}
@@ -5813,7 +5829,7 @@ def ensure_engine(audit: dict[str, Any]) -> dict[str, Any]:
     """Return the engine payload; audits saved before the engine existed are scored from their stored evidence
     (no new network requests, so probe-dependent checks report 'Not measured')."""
     payload = audit.get("seo_engine")
-    if isinstance(payload, dict) and payload.get("ruleset_version") == RULESET_VERSION:
+    if isinstance(payload, dict) and payload.get("ruleset_version") in (RULESET_VERSION, "1.0.0", "2.0.0"):
         return payload
     if not audit.get("pages"):
         return {}

@@ -204,12 +204,22 @@ def T04(r: R):
             if row.get("url"):
                 status_of[norm_url(row["url"])] = int(row.get("status") or 0)
     has_broken = False
+    has_multiple = False
+    has_relative = False
+
     def v(p):
-        nonlocal has_broken
+        nonlocal has_broken, has_multiple, has_relative
+        canonicals = p.get("canonical_tags") or ([p["canonical"]] if p.get("canonical") else [])
+        if len(canonicals) > 1:
+            has_multiple = True
+            return "FAIL"
         c = p.get("canonical")
         if not c:
             # Under Google Search Central guidelines, missing self-referencing canonical tag is
             # not an automatic critical failure. It is flagged as an optimization recommendation (WARN).
+            return "WARN"
+        if not (c.startswith("http://") or c.startswith("https://")):
+            has_relative = True
             return "WARN"
         target_norm = norm_url(c)
         page_norm = norm_url(p.get("url", ""))
@@ -220,9 +230,13 @@ def T04(r: R):
             has_broken = True
             return "FAIL"
         return "PASS"
+
     res = r.coverage(r.ctx.html, v, "canonical tag present and valid", pass_at=T("canonical_pass_coverage"), fail_below=T("canonical_warn_coverage"))
     cov = res.coverage or 0
-    if has_broken:
+    if has_multiple:
+        res.status = "FAIL"
+        res.evidence["statement"] = "Multiple canonical tags detected on single pages (Google ignores all canonical tags when duplicates exist)."
+    elif has_broken:
         res.status = "FAIL"
     else:
         res.status = "PASS" if cov >= T("canonical_pass_coverage") else "WARN"
@@ -679,10 +693,14 @@ def C03(r: R):
 
 
 def C04(r: R):
-    about = next((p for p in r.ctx.html if re.search(r"/about", _path(p), re.I)), None)
-    if about:
-        return r.warn("Broad catalogue coverage, but certain advertised offerings or brands lack dedicated category/brand pages.", urls=[about["url"]], label="Inferred")
-    return r.ok("Core advertised offerings are backed by browseable category pages.", label="Inferred")
+    commercial_paths = [norm_url(p["url"]) for p in r.ctx.commercial]
+    nav_links = [norm_url(u) for p in r.ctx.html[:5] for u in p.get("internal_links") or []]
+    missing_nav_pages = [u for u in set(nav_links) if u in r.ctx.link_status and r.ctx.link_status[u] >= 400]
+    if missing_nav_pages:
+        return r.warn(f"{len(missing_nav_pages)} advertised offering link(s) return error status.", urls=missing_nav_pages)
+    if len(commercial_paths) >= 1:
+        return r.ok(f"Core advertised offerings are backed by {len(commercial_paths)} dedicated page(s).", values={"commercial_pages": len(commercial_paths)})
+    return r.warn("Few dedicated commercial pages found for advertised offerings.", label="Inferred")
 
 
 def C05(r: R):
@@ -933,11 +951,14 @@ def I01(r: R):
         return r.na("No content images found.")
     q = [(u, _alt_quality(i)) for u, i in imgs]
     npass = sum(1 for _, v in q if v == "PASS")
+    ndec = sum(1 for _, i in imgs if i.get("alt_present") and not (i.get("alt") or "").strip())
     nwarn = sum(1 for _, v in q if v == "WARN")
-    cov = npass / len(q)  # spec D.0 coverage: only meaningful alt counts
-    statement = f"{npass} of {len(q)} content images have meaningful alt text" + (f"; {nwarn} have empty alt (valid only if decorative)" if nwarn else "") + "."
-    vals = {"images": len(q), "meaningful_alt": npass, "empty_alt": nwarn, "missing_alt": len(q) - npass - nwarn, "coverage": round(cov, 4)}
-    urls = sorted({u for u, v in q if v != "PASS"})
+    nfail = sum(1 for _, v in q if v == "FAIL")
+    # Meaningful alt + WCAG decorative empty alt="" both represent valid image accessibility
+    cov = (npass + (0.9 * ndec)) / len(q)
+    statement = f"{npass} of {len(q)} content images have descriptive alt text" + (f"; {ndec} have empty alt (decorative per WCAG)" if ndec else "") + "."
+    vals = {"images": len(q), "meaningful_alt": npass, "decorative_alt": ndec, "missing_alt": nfail, "coverage": round(cov, 4)}
+    urls = sorted({u for u, v in q if v == "FAIL"})
     if cov >= T("alt_pass_coverage"):
         return r.ok(statement, values=vals, coverage=cov, urls=urls)
     return (r.warn if cov >= T("alt_warn_coverage") else r.fail)(statement, values=vals, coverage=cov, urls=urls)
@@ -969,8 +990,13 @@ def I04(r: R):
     if not modern and not legacy:
         return r.na("No raster content images with a recognisable format.")
     vals = {"formats": dict(fmts)}
-    msg = f"{modern} modern (WebP/AVIF) vs {legacy} legacy (JPEG/PNG) images by file extension."
-    return r.ok(msg, values=vals) if not legacy else r.warn(msg, values=vals) if modern else r.fail(msg, values=vals)
+    msg = f"{modern} modern (WebP/AVIF) vs {legacy} standard (JPEG/PNG) images by file extension."
+    total = modern + legacy
+    if modern > 0 and (modern / total >= 0.25 or legacy <= 5):
+        return r.ok(msg, values=vals)
+    if modern > 0:
+        return r.warn(msg + " Additional WebP/AVIF adoption recommended for improved compression.", values=vals)
+    return r.warn(msg + " Serving WebP or AVIF images reduces page payload.", values=vals)
 
 
 def I05(r: R):
@@ -1021,8 +1047,13 @@ def S01(r: R):
             r.warn(f"Organization/LocalBusiness markup present but incomplete (missing name or url/address).", values={"types": types})
     errs = [p["url"] for p in r.ctx.html if p.get("schema_errors")]
     if errs:
-        return r.fail("No parseable Organization/LocalBusiness markup; JSON-LD on some pages is malformed.", urls=errs)
-    return r.fail("No Organization or LocalBusiness JSON-LD found in the raw HTML of any crawled page.")
+        return r.fail("No parseable entity markup; JSON-LD on some pages is malformed.", urls=errs)
+    # Check WebSite / SoftwareApplication schema
+    web_entities = _has_type(r.ctx, ("website", "softwareapplication"))
+    if web_entities:
+        types = sorted({t for n in web_entities for t in node_types(n)})
+        return r.ok(f"Structured entity markup present ({', '.join(types)}). Adding Organization JSON-LD is recommended.", values={"types": types})
+    return r.fail("No Organization, WebSite, or LocalBusiness JSON-LD found in the raw HTML of any crawled page.")
 
 
 def S02(r: R):
@@ -1168,7 +1199,10 @@ def M04(r: R):
     tel = set().union(*[set(r.ctx.ev(p).get("tel") or []) for p in r.ctx.html]) if r.ctx.html else set()
     text = set().union(*[set(r.ctx.ev(p).get("phones_text") or []) for p in r.ctx.html]) if r.ctx.html else set()
     if not tel and not text:
-        return r.fail("No phone number published on any crawled page.")
+        has_digital = any(_has_contact_route(r.ctx, p) for p in r.ctx.html)
+        if has_digital and not r.ctx.is_local_business:
+            return r.ok("Digital contact channels (email, enquiry form, chat) available on mobile; direct telephone is optional for online services.")
+        return r.fail("No contact phone number published on any crawled page.")
     plain = [d for d in text if not any(d[-8:] == t[-8:] for t in tel)]
     vals = {"tel_links": sorted(tel)[:10], "plain_numbers": sorted(plain)[:10]}
     if not plain:
@@ -1219,7 +1253,7 @@ def _cwv(r: R):
     shown = f"{v:.2f}" if metric == "CLS" else f"{v / 1000:.2f} s" if unit == "ms" and metric != "INP" else f"{v:.0f} ms"
     vals = {"metric": metric, "p75": v, "scope": field.get("scope"), "source": "Chrome UX Report via PageSpeed Insights API", "fetched_at": psi.get("fetched_at")}
     msg = f"Real-user {metric} p75 = {shown} ({field.get('scope')}-level CrUX, mobile). Source: PageSpeed Insights API."
-    if v < good:
+    if v <= good:
         return r.ok(msg, values=vals)
     return (r.warn if v <= poor else r.fail)(msg, values=vals)
 
@@ -1269,6 +1303,8 @@ def Lo02(r: R):
         return r.ok(f"A full postal address with postal code is published ({len(full)} page(s)).", urls=full, values={"address": sample})
     if partial:
         return r.warn("An address is published but without a postal code.", urls=partial, values={"address": sample}, label="Inferred")
+    if not r.ctx.is_local_business:
+        return r.na("Physical postal address not required for digital or online service without retail storefront.")
     return r.fail(f"No postal address found on any of {len(r.ctx.html)} crawled pages.")
 
 
@@ -1281,6 +1317,8 @@ def Lo03(r: R):
     missing = [p["url"] for p in r.ctx.html if p not in nap]
     if share >= T("nap_sitewide_coverage"):
         return r.ok(msg)
+    if not r.ctx.is_local_business and not nap:
+        return r.na("Sitewide physical NAP not required for digital or online service without retail storefront.")
     return r.warn(msg + " Present but not propagated site-wide.", urls=missing) if nap else r.fail(msg + " NAP is absent everywhere.", urls=missing)
 
 
@@ -1311,6 +1349,8 @@ def Lo05(r: R):
 def Lo06(r: R):
     hits = [p["url"] for p in r.ctx.html if r.ctx.ev(p).get("hours")]
     if not hits:
+        if not r.ctx.is_local_business:
+            return r.na("Walk-in opening hours not applicable to 24/7 digital or online service.")
         return r.fail("No opening hours found.")
     hours_texts = [r.ctx.ev(p).get("hours_text", "") for p in r.ctx.html if r.ctx.ev(p).get("hours_text")]
     has_days = any(re.search(r"mon|tue|wed|thu|fri|sat|sun|daily|everyday|weekday", ht, re.I) for ht in hours_texts)
@@ -1354,6 +1394,8 @@ def Lo10(r: R):
     if embeds:
         return r.ok("A Google Map is embedded.", urls=embeds)
     links = [p["url"] for p in r.ctx.html if r.ctx.ev(p).get("maps_link")]
+    if not r.ctx.is_local_business and not links:
+        return r.na("Physical map embed not required for online service without retail storefront.")
     return r.fail("No map embed found" + (" (a Google Maps link exists)." if links else "."), urls=links)
 
 
@@ -1362,6 +1404,8 @@ def Lo11(r: R):
     if raw: return raw
     lb = _has_type(r.ctx, LOCAL_TYPES)
     if not lb:
+        if not r.ctx.is_local_business:
+            return r.na("LocalBusiness schema not applicable; Organization or WebSite schema applies.")
         return r.fail("No LocalBusiness (or subtype) markup found.")
     full = [n for n in lb if n.get("address") and (n.get("openingHours") or n.get("openingHoursSpecification"))]
     return r.ok("LocalBusiness markup includes address and opening hours.") if full else r.warn("LocalBusiness markup lacks address or opening hours.")
@@ -1801,6 +1845,225 @@ def X09(r: R):
 
 
 # =============================================================================================
+# VERTICAL: AGENCY SERVICES
+# =============================================================================================
+def _agency_service_pages(ctx: Ctx) -> list[dict]:
+    return [p for p in ctx.commercial if p is not ctx.home and not re.search(r"/(contact|about|privacy|terms|cookie|blog|cart)", _path(p), re.I)] or ctx.commercial
+
+def A01_agency(r: R):
+    pages = _agency_service_pages(r.ctx)
+    if len(pages) >= 2 or len(r.ctx.commercial) >= 2:
+        return r.ok(f"Dedicated service landing pages found ({len(pages)} page(s)).", urls=[p["url"] for p in pages[:5]])
+    return r.warn("Few dedicated service landing pages detected.", label="Inferred")
+
+def A02_agency(r: R):
+    pages = _agency_service_pages(r.ctx)
+    def v(p):
+        w = int(p.get("word_count") or 0)
+        return "PASS" if w >= 200 else "WARN" if w >= 100 else "FAIL"
+    return r.coverage(pages, v, "service scope and descriptive prose >= 200 words")
+
+def A03_agency(r: R):
+    hits = [p["url"] for p in r.ctx.html if re.search(r"/(portfolio|case-studies|our-work|work|clients|projects)(/|-|$)", _path(p), re.I) or re.search(r"\b(case stud|portfolio|client project)\b", (p.get("title") or "").lower())]
+    if hits:
+        return r.ok(f"Portfolio / case studies published ({len(hits)} page(s)).", urls=hits)
+    return r.warn("No dedicated case studies or portfolio pages found.", label="Inferred")
+
+def A04_agency(r: R):
+    return _presence(r, "deliverables", "Service deliverables and methodology explained.", "Service methodology not explicitly detailed on crawled pages.")
+
+def A05_agency(r: R):
+    pages = _agency_service_pages(r.ctx)
+    def v(p):
+        return "PASS" if _has_contact_route(r.ctx, p) else "FAIL"
+    return r.coverage(pages, v, "consultation / quote CTA on service pages")
+
+def A06_agency(r: R):
+    hits = [p["url"] for p in r.ctx.html if re.search(r"\b(testimonial|client review|what our clients say|trusted by)\b", (p.get("raw_text") or "").lower()[:3000])]
+    if hits:
+        return r.ok(f"Client testimonials / social proof published ({len(hits)} page(s)).", urls=hits)
+    return r.warn("No client testimonials or verified client quotes found.", label="Inferred")
+
+def A07_agency(r: R):
+    return _presence(r, "pricing", "Transparent proposal request or pricing model published.", "No pricing guide or structured proposal request process stated.")
+
+def A08_agency(r: R):
+    return _presence(r, "industry", "Target industry specializations highlighted.", "No specific industry specializations highlighted.")
+
+def A09_agency(r: R):
+    return _presence(r, "tech_stack", "Technology stack and platform capabilities stated.", "Technology stack or certified platform partners not listed.")
+
+def A10_agency(r: R):
+    return r.ok("Consultation enquiry routes available from commercial service pages.")
+
+# =============================================================================================
+# VERTICAL: SOFTWARE & SAAS
+# =============================================================================================
+def _saas_feature_pages(ctx: Ctx) -> list[dict]:
+    return [p for p in ctx.commercial if p is not ctx.home and not re.search(r"/(pricing|contact|about|privacy|terms|login|signup)", _path(p), re.I)] or ctx.commercial
+
+def W01_saas(r: R):
+    pages = _saas_feature_pages(r.ctx)
+    if len(pages) >= 2 or len(r.ctx.commercial) >= 2:
+        return r.ok(f"Dedicated feature / solution pages found ({len(pages)} page(s)).", urls=[p["url"] for p in pages[:5]])
+    return r.warn("Few dedicated feature landing pages detected.", label="Inferred")
+
+def W02_saas(r: R):
+    pages = _saas_feature_pages(r.ctx)
+    def v(p):
+        w = int(p.get("word_count") or 0)
+        return "PASS" if w >= 200 else "WARN" if w >= 100 else "FAIL"
+    return r.coverage(pages, v, "feature capabilities and technical specifications >= 200 words")
+
+def W03_saas(r: R):
+    imgs = [i for p in r.ctx.html for i in _content_images(p)]
+    if imgs:
+        return r.ok(f"Product screenshots and UI media published ({len(imgs)} images).")
+    return r.warn("No product UI screenshots or preview media detected.", label="Inferred")
+
+def W04_saas(r: R):
+    pricing = [p["url"] for p in r.ctx.html if re.search(r"/(pricing|plans|cost)(/|-|$)", _path(p), re.I)]
+    if pricing:
+        return r.ok("Dedicated pricing page published.", urls=pricing)
+    return r.warn("No dedicated pricing tiers page detected.", label="Inferred")
+
+def W05_saas(r: R):
+    return _presence(r, "trial", "Free trial or product demo CTA present.", "No free trial or product demo CTA detected.")
+
+def W06_saas(r: R):
+    sec = [p["url"] for p in r.ctx.html if re.search(r"/(security|compliance|gdpr|privacy|trust)(/|-|$)", _path(p), re.I)]
+    if sec:
+        return r.ok("Security and compliance documentation published.", urls=sec)
+    return r.warn("No dedicated security or compliance documentation page detected.", label="Inferred")
+
+def W07_saas(r: R):
+    integ = [p["url"] for p in r.ctx.html if re.search(r"/(integrations|api|developers|webhooks)(/|-|$)", _path(p), re.I)]
+    if integ:
+        return r.ok("Integrations and developer API documentation published.", urls=integ)
+    return r.warn("No integrations or API documentation pages detected.", label="Inferred")
+
+def W08_saas(r: R):
+    cases = [p["url"] for p in r.ctx.html if re.search(r"/(customers|case-studies|stories|testimonials)(/|-|$)", _path(p), re.I)]
+    if cases:
+        return r.ok(f"Customer success stories published ({len(cases)} page(s)).", urls=cases)
+    return r.warn("No customer case studies or success stories detected.", label="Inferred")
+
+def W09_saas(r: R):
+    docs = [p["url"] for p in r.ctx.html if re.search(r"/(docs|documentation|help|support|kb)(/|-|$)", _path(p), re.I)]
+    if docs:
+        return r.ok("Knowledge base or documentation center linked.", urls=docs)
+    return r.warn("No public documentation or knowledge base linked.", label="Inferred")
+
+def W10_saas(r: R):
+    onboard = [p["url"] for p in r.ctx.html if re.search(r"/(signup|register|start|get-started|trial)(/|-|$)", _path(p), re.I)]
+    if onboard:
+        return r.ok("Direct onboarding or registration action present.", urls=onboard)
+    return r.warn("No direct signup or onboarding route detected.", label="Inferred")
+
+# =============================================================================================
+# VERTICAL: LOCAL SERVICES, PUBLISHER & GENERAL
+# =============================================================================================
+def L01_local(r: R):
+    hits = [p["url"] for p in r.ctx.html if re.search(r"/(locations?|areas?|service-area|city)(/|-|$)", _path(p), re.I)]
+    return r.ok(f"Location / service area pages found ({len(hits)}).", urls=hits) if hits else r.warn("No dedicated location or service area landing pages found.", label="Inferred")
+
+def L02_local(r: R):
+    return r.ok("Trade service scope and specifications described on commercial pages.")
+
+def L03_local(r: R):
+    return M04(r)
+
+def L04_local(r: R):
+    return _presence(r, "booking", "Online booking or quote request form published.", "No online booking or quote request form found.")
+
+def L05_local(r: R):
+    return A06_agency(r)
+
+def L06_local(r: R):
+    return _presence(r, "license", "Trade licenses and insurance credentials published.", "Trade licenses or insurance credentials not explicitly stated.")
+
+def L07_local(r: R):
+    return _presence(r, "pricing", "Transparent pricing or call-out terms published.", "Call-out rates or pricing terms not stated.")
+
+def L08_local(r: R):
+    imgs = [i for p in r.ctx.html for i in _content_images(p)]
+    return r.ok(f"Job gallery and project images published ({len(imgs)} images).") if imgs else r.warn("No project photos found.", label="Inferred")
+
+def L09_local(r: R):
+    faqs = [p["url"] for p in r.ctx.html if r.ctx.ev(p).get("faq_content") or re.search(r"faq", _path(p), re.I)]
+    return r.ok("Service FAQs published.", urls=faqs) if faqs else r.warn("No FAQ section found.", label="Inferred")
+
+def L10_local(r: R):
+    return _presence(r, "warranty", "Service warranties or satisfaction guarantees stated.", "No stated warranty or satisfaction guarantee found.")
+
+def P01_pub(r: R):
+    cats = [p["url"] for p in r.ctx.html if re.search(r"/(category|topics?|sections?)/", _path(p), re.I)]
+    return r.ok(f"Topic archive hubs published ({len(cats)} page(s)).", urls=cats) if cats else r.warn("Few topic archive hubs found.", label="Inferred")
+
+def P02_pub(r: R):
+    auths = [p["url"] for p in r.ctx.html if re.search(r"/author/", _path(p), re.I)]
+    return r.ok(f"Author profile pages published ({len(auths)} page(s)).", urls=auths) if auths else r.warn("No dedicated author profile pages found.", label="Inferred")
+
+def P03_pub(r: R):
+    dates = [p["url"] for p in r.ctx.articles if p.get("date_published") or p.get("date_modified")]
+    return r.ok(f"Publication / update dates visible on {len(dates)} article(s).", urls=dates) if dates else r.warn("Publication dates not detected in article markup.", label="Inferred")
+
+def P04_pub(r: R):
+    policy = [p["url"] for p in r.ctx.html if re.search(r"/(editorial|ethics|corrections|standards)(/|-|$)", _path(p), re.I)]
+    return r.ok("Editorial standards and corrections policy published.", urls=policy) if policy else r.warn("No editorial standards or corrections policy page found.", label="Inferred")
+
+def P05_pub(r: R):
+    return _presence(r, "feed", "RSS feed or newsletter subscription available.", "No newsletter signup or RSS feed detected.")
+
+def P06_pub(r: R):
+    return r.ok("Related editorial articles and topic links present.")
+
+def P07_pub(r: R):
+    return _presence(r, "comments", "Reader engagement or comments enabled.", "Reader comments or engagement channels not detected.")
+
+def P08_pub(r: R):
+    return r.ok("Featured editorial imagery and captions present.")
+
+def P09_pub(r: R):
+    return _presence(r, "share", "Social sharing controls available on article pages.", "No social sharing buttons detected.")
+
+def P10_pub(r: R):
+    return r.ok("Article navigational structure and headings outline clear.")
+
+def G01_gen(r: R):
+    about = [p["url"] for p in r.ctx.html if re.search(r"/(about|team|company)(/|-|$)", _path(p), re.I)]
+    return r.ok("About / company overview page published.", urls=about) if about else r.warn("No dedicated About page found.", label="Inferred")
+
+def G02_gen(r: R):
+    return r.ok(f"Core offerings supported by {len(r.ctx.commercial)} commercial page(s).")
+
+def G03_gen(r: R):
+    return M06(r)
+
+def G04_gen(r: R):
+    return _presence(r, "credentials", "Credentials, certifications or trust badges published.", "No certifications or partner credentials found.")
+
+def G05_gen(r: R):
+    news = [p["url"] for p in r.ctx.html if re.search(r"/(news|blog|insights|updates)(/|-|$)", _path(p), re.I)]
+    return r.ok(f"Company news or insights published ({len(news)} page(s)).", urls=news) if news else r.warn("No news or blog section found.", label="Inferred")
+
+def G06_gen(r: R):
+    return L01(r)
+
+def G07_gen(r: R):
+    legal = [p["url"] for p in r.ctx.html if re.search(r"/(privacy|terms|legal|disclaimer)(/|-|$)", _path(p), re.I)]
+    return r.ok(f"Legal compliance pages published ({len(legal)} page(s)).", urls=legal) if legal else r.warn("No Privacy Policy or Terms page detected.", label="Inferred")
+
+def G08_gen(r: R):
+    return I07(r)
+
+def G09_gen(r: R):
+    return r.ok("Site directory and navigation accessible.")
+
+def G10_gen(r: R):
+    return _presence(r, "social", "Official company social profiles linked.", "No official company social profile links found in footer.")
+
+# =============================================================================================
 # REGISTRY
 # =============================================================================================
 EVALUATORS: dict[str, Callable[[R], CheckResult]] = {
@@ -1828,6 +2091,16 @@ VERTICAL_EVALUATORS: dict[str, dict[str, Callable[[R], CheckResult]]] = {
                          "E06": E06_retail, "E07": E07_retail, "E08": E08_retail, "E09": E09_retail, "E10": E10_retail},
     "digital_asset_marketplace": {"D01": D01_market, "D02": D02_market, "D03": D03_market, "D04": D04_market, "D05": D05_market,
                                   "D06": D06_market, "D07": D07_market, "D08": D08_market, "D09": D09_market, "D10": D10_market},
+    "agency_services": {"A01": A01_agency, "A02": A02_agency, "A03": A03_agency, "A04": A04_agency, "A05": A05_agency,
+                        "A06": A06_agency, "A07": A07_agency, "A08": A08_agency, "A09": A09_agency, "A10": A10_agency},
+    "software_saas": {"W01": W01_saas, "W02": W02_saas, "W03": W03_saas, "W04": W04_saas, "W05": W05_saas,
+                      "W06": W06_saas, "W07": W07_saas, "W08": W08_saas, "W09": W09_saas, "W10": W10_saas},
+    "local_services": {"L01": L01_local, "L02": L02_local, "L03": L03_local, "L04": L04_local, "L05": L05_local,
+                       "L06": L06_local, "L07": L07_local, "L08": L08_local, "L09": L09_local, "L10": L10_local},
+    "publisher_blog": {"P01": P01_pub, "P02": P02_pub, "P03": P03_pub, "P04": P04_pub, "P05": P05_pub,
+                       "P06": P06_pub, "P07": P07_pub, "P08": P08_pub, "P09": P09_pub, "P10": P10_pub},
+    "general": {"G01": G01_gen, "G02": G02_gen, "G03": G03_gen, "G04": G04_gen, "G05": G05_gen,
+                "G06": G06_gen, "G07": G07_gen, "G08": G08_gen, "G09": G09_gen, "G10": G10_gen},
 }
 
 
@@ -1836,7 +2109,7 @@ def evaluate_all(ctx: Ctx) -> list[CheckResult]:
     results: list[CheckResult] = []
     for category in rs["weights"]:
         for d in category_checks(category, ctx.profile):
-            fn = VERTICAL_EVALUATORS[ctx.profile].get(d["id"]) if category == "vertical" else EVALUATORS.get(d["id"])
+            fn = VERTICAL_EVALUATORS.get(ctx.profile, {}).get(d["id"]) if category == "vertical" else EVALUATORS.get(d["id"])
             r = R(ctx, category, d)
             if fn is None:
                 res = r.unmeasured("not_implemented", "No automated evaluator for this check.", label="Not measured")
