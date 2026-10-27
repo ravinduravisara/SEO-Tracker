@@ -88,3 +88,4 @@ A validation suite comparing 50 standardized test pages and live crawl graphs ag
 2. **Transparent Formulas:** All mathematical weights, confidence caps, and deduction rules are published in `docs/SCORING_METHODOLOGY_V2.md`.
 3. **Evidence-Based Actionability:** Every reported defect includes the raw HTML or HTTP response snippet, the exact affected URL, and a verified developer remediation step.
 4. **Zero Hallucination:** If Google Search Console, Google Analytics 4, or PageSpeed Insights are not connected, the platform clearly indicates `Integration required` rather than guessing.
+
